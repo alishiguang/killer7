@@ -1,0 +1,198 @@
+/*
+  Localizable.strings
+  LuciBox
+
+  English Localizations
+*/
+
+// MARK: - App Info
+"app.name" = "LuciBox";
+"app.description" = "A powerful macOS system toolkit";
+
+// MARK: - Tab Titles
+"tab.process" = "Process Manager";
+"tab.file" = "File Manager";
+"tab.clipboard" = "Clipboard";
+"tab.monitor" = "System Monitor";
+
+// MARK: - Process Manager
+"process.title" = "Process Manager";
+"process.refresh" = "Refresh";
+"process.search.placeholder" = "Search by name, PID or port";
+"process.pid" = "PID";
+"process.name" = "Process Name";
+"process.port" = "Listening Port";
+"process.kill.confirm" = "Are you sure you want to terminate process %@ (PID: %@)?";
+"process.kill.title" = "Confirm Process Termination";
+"process.path.title" = "Full Path";
+"process.context.copyPath" = "Copy Full Path";
+"process.context.viewPath" = "View Full Path";
+"process.context.kill" = "Terminate Process %@ (%@)";
+
+// MARK: - File Manager
+"file.title" = "File Manager";
+"file.newFolder" = "New Folder";
+"file.search.placeholder" = "Search files";
+"file.column.name" = "Name";
+"file.column.size" = "Size";
+"file.column.modified" = "Modified";
+"file.column.action" = "Actions";
+"file.open" = "Open";
+"file.openFolder" = "Enter Folder";
+"file.rename" = "Rename";
+"file.delete" = "Delete";
+"file.reveal" = "Show in Finder";
+"file.delete.confirm" = "Are you sure you want to delete %@? The file will be moved to Trash.";
+"file.delete.title" = "Confirm Deletion";
+"file.newFolder.title" = "New Folder";
+"file.newFolder.placeholder" = "Folder name";
+"file.rename.title" = "Rename";
+
+// MARK: - Clipboard Manager
+"clipboard.title" = "Clipboard";
+"clipboard.current" = "Current Clipboard";
+"clipboard.history" = "History";
+"clipboard.search.placeholder" = "Search history";
+"clipboard.clear" = "Clear";
+"clipboard.clearHistory" = "Clear History";
+"clipboard.empty" = "No history yet";
+"clipboard.copy" = "Copy";
+"clipboard.delete" = "Delete";
+"clipboard.type.text" = "Text";
+"clipboard.type.image" = "Image";
+"clipboard.type.url" = "URL";
+"clipboard.empty" = "(Empty)";
+
+// MARK: - System Monitor
+"monitor.title" = "System Monitor";
+"monitor.cpu" = "CPU Usage";
+"monitor.memory" = "Memory Usage";
+"monitor.disk" = "Disk Usage";
+"monitor.network" = "Network Speed";
+"monitor.upload" = "Upload";
+"monitor.download" = "Download";
+
+// MARK: - Menu Bar
+"menubar.title" = "LuciBox";
+"menubar.open" = "Open LuciBox";
+"menubar.quit" = "Quit";
+
+// MARK: - Settings
+"settings.title" = "Settings";
+"settings.appearance" = "Appearance";
+"settings.theme.mode" = "Theme Mode";
+"settings.theme.system" = "Follow System";
+"settings.theme.light" = "Light Mode";
+"settings.theme.dark" = "Dark Mode";
+"settings.theme.custom" = "Custom Theme";
+"settings.performance" = "Performance";
+"settings.refresh.interval" = "Auto Refresh Interval";
+"settings.about" = "About";
+"settings.version" = "Version";
+"settings.bundleId" = "Bundle ID";
+"settings.copyright" = "Copyright";
+"settings.enableMenuBar" = "Enable Menu Bar Mode";
+"settings.menuBar.hint" = "When enabled, app icon appears in menu bar";
+"settings.autoLaunch" = "Launch at Login";
+"settings.autoLaunch.hint" = "When enabled, app starts automatically when you log in";
+"settings.startup" = "Startup";
+"settings.globalShortcut" = "Global Shortcut";
+"settings.globalShortcut.hint" = "Press Cmd+L to activate app quickly";
+"settings.processLimit" = "Process List Limit";
+"settings.noLimit" = "No Limit";
+"settings.networkMonitor" = "Network Monitor";
+"settings.performance.hint" = "Lower refresh rate and limits reduce CPU usage";
+
+// MARK: - Common
+"common.cancel" = "Cancel";
+"common.confirm" = "Confirm";
+"common.delete" = "Delete";
+"common.create" = "Create";
+"common.close" = "Close";
+"common.copy" = "Copy";
+"common.save" = "Save";
+
+// MARK: - Themes
+"theme.default" = "Default";
+"theme.ocean" = "Ocean";
+"theme.forest" = "Forest";
+"theme.sunset" = "Sunset";
+"theme.custom" = "Custom";
+
+// MARK: - View Menu
+"view.menu" = "View";
+"view.menuBar.mode" = "Menu Bar Mode";
+
+// MARK: - killer7 branding
+"app.brand" = "KILLER7";
+"app.tagline" = "MACOS SYSTEM TOOLBOX";
+"app.subtitle" = "LuciBox · Rust rewrite";
+
+"nav.section.tools" = "Tools";
+"nav.section.system" = "System";
+"nav.process" = "Processes";
+"nav.file" = "Files";
+"nav.clipboard" = "Clipboard";
+"nav.monitor" = "Monitor";
+"nav.settings" = "Settings";
+"nav.plugins" = "Plugins";
+
+"common.search" = "Search";
+"common.all" = "All";
+"common.none" = "None";
+"common.yes" = "Yes";
+"common.no" = "No";
+"common.open" = "Open";
+"common.more" = "More";
+"common.loading" = "Loading";
+"common.empty" = "No data";
+"common.back" = "Back";
+"common.done" = "Done";
+
+"process.empty" = "No matching processes";
+"process.count" = "%@ processes";
+"process.kill.done" = "Terminated %@";
+"process.kill.failed" = "Failed to terminate; administrator rights may be required";
+
+"file.newFile" = "New File";
+"file.copyPath" = "Copy Path";
+"file.enterFolder" = "Enter Folder";
+"file.newFolder.hint" = "Right-click empty space to create a file or folder";
+"file.rename.hint" = "Enter a new name";
+"file.created" = "Created %@";
+"file.deleted" = "Moved to Trash";
+"file.renamed" = "Renamed to %@";
+"file.failed" = "Operation failed";
+
+"clipboard.copied" = "Copied to clipboard";
+"clipboard.history.count" = "%@ items";
+"clipboard.type.text" = "Text";
+
+"monitor.cpu.history" = "CPU samples";
+"monitor.memory.history" = "Memory samples";
+"monitor.last" = "Last %@ seconds";
+
+"settings.accent" = "Accent";
+"settings.accent.signal" = "Signal Red";
+"settings.accent.haze" = "Haze Blue";
+"settings.accent.moss" = "Moss Green";
+"settings.accent.amber" = "Amber";
+"settings.locale" = "Language";
+"settings.theme.mode" = "Theme Mode";
+"settings.theme.system" = "Follow System";
+"settings.theme.light" = "Light Mode";
+"settings.theme.dark" = "Dark Mode";
+"settings.general" = "General";
+"settings.plugin.dir" = "Plugin Directory";
+"settings.plugin.empty" = "No plugins installed";
+"settings.plugin.hint" = "Drop plugins into %@ to have them detected";
+
+"plugin.manifest" = "Manifest";
+"plugin.author" = "Author";
+"plugin.version" = "Version";
+"plugin.permissions" = "Permissions";
+"plugin.minVersion" = "Minimum App Version";
+
+"menubar.open" = "Open killer7";
+"menubar.quit" = "Quit";
+"menubar.title" = "killer7";

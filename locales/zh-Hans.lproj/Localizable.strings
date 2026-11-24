@@ -1,0 +1,198 @@
+/*
+  Localizable.strings
+  LuciBox
+
+  Simplified Chinese Localizations
+*/
+
+// MARK: - App Info
+"app.name" = "鸬鹚工具箱";
+"app.description" = "功能强大的 macOS 系统工具箱";
+
+// MARK: - Tab Titles
+"tab.process" = "进程管理";
+"tab.file" = "文件管理";
+"tab.clipboard" = "剪贴板";
+"tab.monitor" = "系统监控";
+
+// MARK: - Process Manager
+"process.title" = "进程管理";
+"process.refresh" = "刷新";
+"process.search.placeholder" = "搜索进程名称、PID 或端口号";
+"process.pid" = "PID";
+"process.name" = "进程名称";
+"process.port" = "监听端口";
+"process.kill.confirm" = "确定要结束进程 %@ (PID: %@) 吗？";
+"process.kill.title" = "确认结束进程";
+"process.path.title" = "完整路径";
+"process.context.copyPath" = "复制完整路径";
+"process.context.viewPath" = "查看完整路径";
+"process.context.kill" = "结束进程 %@ (%@)";
+
+// MARK: - File Manager
+"file.title" = "文件管理";
+"file.newFolder" = "新建文件夹";
+"file.search.placeholder" = "搜索文件";
+"file.column.name" = "名称";
+"file.column.size" = "大小";
+"file.column.modified" = "修改时间";
+"file.column.action" = "操作";
+"file.open" = "打开";
+"file.openFolder" = "进入文件夹";
+"file.rename" = "重命名";
+"file.delete" = "删除";
+"file.reveal" = "在 Finder 中显示";
+"file.delete.confirm" = "确定要删除 %@ 吗？文件将被移到废纸篓。";
+"file.delete.title" = "确认删除";
+"file.newFolder.title" = "新建文件夹";
+"file.newFolder.placeholder" = "文件夹名称";
+"file.rename.title" = "重命名";
+
+// MARK: - Clipboard Manager
+"clipboard.title" = "剪贴板管理";
+"clipboard.current" = "当前剪贴板";
+"clipboard.history" = "历史记录";
+"clipboard.search.placeholder" = "搜索历史记录";
+"clipboard.clear" = "清空";
+"clipboard.clearHistory" = "清空历史";
+"clipboard.empty" = "暂无历史记录";
+"clipboard.copy" = "复制";
+"clipboard.delete" = "删除";
+"clipboard.type.text" = "文本";
+"clipboard.type.image" = "图片";
+"clipboard.type.url" = "链接";
+"clipboard.empty" = "（空）";
+
+// MARK: - System Monitor
+"monitor.title" = "系统监控";
+"monitor.cpu" = "CPU使用率";
+"monitor.memory" = "内存使用率";
+"monitor.disk" = "磁盘使用率";
+"monitor.network" = "网络速度";
+"monitor.upload" = "上传";
+"monitor.download" = "下载";
+
+// MARK: - Menu Bar
+"menubar.title" = "鸬鹚工具箱";
+"menubar.open" = "打开鸬鹚工具箱";
+"menubar.quit" = "退出";
+
+// MARK: - Settings
+"settings.title" = "设置";
+"settings.appearance" = "外观";
+"settings.theme.mode" = "主题模式";
+"settings.theme.system" = "跟随系统";
+"settings.theme.light" = "浅色模式";
+"settings.theme.dark" = "深色模式";
+"settings.theme.custom" = "自定义主题";
+"settings.performance" = "性能";
+"settings.refresh.interval" = "自动刷新间隔";
+"settings.about" = "关于";
+"settings.version" = "版本";
+"settings.bundleId" = "Bundle ID";
+"settings.copyright" = "版权";
+"settings.enableMenuBar" = "启用菜单栏模式";
+"settings.menuBar.hint" = "启用后，应用将在菜单栏显示图标";
+"settings.autoLaunch" = "开机自启动";
+"settings.autoLaunch.hint" = "启用后，应用将在登录时自动启动";
+"settings.startup" = "启动项";
+"settings.globalShortcut" = "全局快捷键";
+"settings.globalShortcut.hint" = "启用后按 ⌘+L 可快速呼出应用";
+"settings.processLimit" = "进程列表上限";
+"settings.noLimit" = "无限制";
+"settings.networkMonitor" = "网络监控";
+"settings.performance.hint" = "降低刷新频率和限制可减少 CPU 占用";
+
+// MARK: - Common
+"common.cancel" = "取消";
+"common.confirm" = "确认";
+"common.delete" = "删除";
+"common.create" = "创建";
+"common.close" = "关闭";
+"common.copy" = "复制";
+"common.save" = "保存";
+
+// MARK: - Themes
+"theme.default" = "默认";
+"theme.ocean" = "海洋";
+"theme.forest" = "森林";
+"theme.sunset" = "日落";
+"theme.custom" = "自定义";
+
+// MARK: - View Menu
+"view.menu" = "视图";
+"view.menuBar.mode" = "菜单栏模式";
+
+// MARK: - killer7 品牌
+"app.brand" = "KILLER7";
+"app.tagline" = "MACOS 系统工具箱";
+"app.subtitle" = "鸬鹚工具箱 · Rust 重写版";
+
+"nav.section.tools" = "工具";
+"nav.section.system" = "系统";
+"nav.process" = "进程管理";
+"nav.file" = "文件管理";
+"nav.clipboard" = "剪贴板";
+"nav.monitor" = "系统监控";
+"nav.settings" = "设置";
+"nav.plugins" = "插件";
+
+"common.search" = "搜索";
+"common.all" = "全部";
+"common.none" = "无";
+"common.yes" = "是";
+"common.no" = "否";
+"common.open" = "打开";
+"common.more" = "更多";
+"common.loading" = "加载中";
+"common.empty" = "暂无数据";
+"common.back" = "返回";
+"common.done" = "完成";
+
+"process.empty" = "没有匹配的进程";
+"process.count" = "共 %@ 个进程";
+"process.kill.done" = "已结束进程 %@";
+"process.kill.failed" = "结束进程失败，可能需要管理员权限";
+
+"file.newFile" = "新建文件";
+"file.copyPath" = "复制路径";
+"file.enterFolder" = "进入文件夹";
+"file.newFolder.hint" = "右键空白处可新建文件或文件夹";
+"file.rename.hint" = "输入新的文件名";
+"file.created" = "已创建 %@";
+"file.deleted" = "已移到废纸篓";
+"file.renamed" = "已重命名为 %@";
+"file.failed" = "操作失败";
+
+"clipboard.copied" = "已复制到剪贴板";
+"clipboard.history.count" = "共 %@ 条历史";
+"clipboard.type.text" = "文本";
+
+"monitor.cpu.history" = "CPU 采样";
+"monitor.memory.history" = "内存采样";
+"monitor.last" = "最近 %@ 秒";
+
+"settings.accent" = "强调色";
+"settings.accent.signal" = "信号红";
+"settings.accent.haze" = "雾蓝";
+"settings.accent.moss" = "苔绿";
+"settings.accent.amber" = "琥珀";
+"settings.locale" = "界面语言";
+"settings.theme.mode" = "主题模式";
+"settings.theme.system" = "跟随系统";
+"settings.theme.light" = "浅色模式";
+"settings.theme.dark" = "深色模式";
+"settings.general" = "通用";
+"settings.plugin.dir" = "插件目录";
+"settings.plugin.empty" = "尚未安装插件";
+"settings.plugin.hint" = "把插件目录放进 %@ 即可被识别";
+
+"plugin.manifest" = "清单信息";
+"plugin.author" = "作者";
+"plugin.version" = "版本";
+"plugin.permissions" = "权限";
+"plugin.minVersion" = "最低应用版本";
+
+"menubar.open" = "打开 killer7";
+"menubar.quit" = "退出";
+"menubar.title" = "killer7";

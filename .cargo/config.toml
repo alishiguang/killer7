@@ -1,0 +1,5 @@
+# 项目级覆盖：全局 ~/.cargo/config.toml 把 crates-io 替换成了 tuna 的 git 索引，
+# 首次拉取需要克隆整个索引仓库，速度很慢。这里把同名 source 换成 tuna 的稀疏索引，
+# 行为与直连 crates.io 一致，但只需按需下载条目。
+[source.tuna]
+registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
