@@ -218,6 +218,9 @@ type Notice = { kind: 'info' | 'error'; message: string };
 
 ### Task 1: 仓库转为 workspace，落地 Tauri 空壳
 
+
+> **漂移提示**：本任务的 Task 1 #3 / #5 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
+
 **Files:**
 - Modify: `Cargo.toml`（根，改为虚拟 workspace）
 - Create: `src-tauri/Cargo.toml`
@@ -588,6 +591,9 @@ AI-Tool: TophantAI"
 ---
 
 ### Task 2: 前端脚手架（Vite + React + TS）与 Tauri 联通
+
+
+> **漂移提示**：本任务的 Task 2 #1 / #2 / #6 / #7 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
 
 **Files:**
 - Create: `package.json`（根）
@@ -1353,6 +1359,9 @@ AI-Tool: TophantAI"
 
 ### Task 4: 迁移 core 的纯逻辑模块
 
+
+> **漂移提示**：本任务的 Task 4 #0 / #4 / #7 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
+
 **Files:**
 - Create: `src-tauri/src/core/mod.rs`
 - Create: `src-tauri/src/core/platform.rs`
@@ -1857,6 +1866,9 @@ AI-Tool: TophantAI"
 ---
 
 ### Task 5: 迁移 core 的取数模块并引入事件枚举
+
+
+> **漂移提示**：本任务的 Task 5 #17 / #19 / #20 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
 
 **Files:**
 - Create: `src-tauri/src/core/process.rs`
@@ -2430,6 +2442,9 @@ AI-Tool: TophantAI"
 
 ### Task 6: DTO 契约层
 
+
+> **漂移提示**：本任务的 Task 6 #1 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
+
 **Files:**
 - Create: `src-tauri/src/commands/mod.rs`
 - Create: `src-tauri/src/commands/dto.rs`
@@ -2777,6 +2792,9 @@ AI-Tool: TophantAI"
 ---
 
 ### Task 7: AppState 与后台任务循环
+
+
+> **漂移提示**：本任务的 Task 7 #0 / #1 / #2 / #4 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
 
 **Files:**
 - Create: `src-tauri/src/state.rs`
@@ -3182,6 +3200,9 @@ AI-Tool: TophantAI"
 ---
 
 ### Task 8: 进程命令
+
+
+> **漂移提示**：本任务的 Task 8 #1 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
 
 **Files:**
 - Create: `src-tauri/src/commands/processes.rs`
@@ -3698,6 +3719,9 @@ AI-Tool: TophantAI"
 
 ### Task 11: 原生应用菜单栏
 
+
+> **漂移提示**：本任务的 Task 11 #1 / #2 / #4 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
+
 **Files:**
 - Create: `src-tauri/src/system/menu.rs`
 - Modify: `src-tauri/src/system/mod.rs`
@@ -4000,6 +4024,8 @@ AI-Tool: TophantAI"
 //! 图标沿用 egui 版的「小鸟」像素画（`core::icon::bird_rgba`），
 //! 以 macOS 模板图方式挂载，系统自动适配深浅色。
 
+use std::sync::Mutex;
+
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -4009,6 +4035,9 @@ use crate::core::i18n::{I18n, Locale};
 use crate::core::icon::bird_rgba;
 use crate::events::{EV_TRAY_OPEN, EV_TRAY_QUIT};
 
+/// 托盘图标的 id。
+const TRAY_ID: &str = "main";
+
 /// 托盘里需要动态刷新的菜单项。
 struct TrayItems<R: Runtime> {
     cpu: MenuItem<R>,
@@ -4016,12 +4045,23 @@ struct TrayItems<R: Runtime> {
     disk: MenuItem<R>,
     upload: MenuItem<R>,
     download: MenuItem<R>,
+    /// 托盘标题项（应用名）。
+    title: MenuItem<R>,
+    /// 「打开」项。
+    open: MenuItem<R>,
+    /// 「退出」项。
+    quit: MenuItem<R>,
     /// 本地化后的指标名称，刷新时拼在数值前面。
-    cpu_label: String,
-    memory_label: String,
-    disk_label: String,
-    upload_label: String,
-    download_label: String,
+    labels: Mutex<TrayLabels>,
+}
+
+/// 指标项的本地化前缀。
+struct TrayLabels {
+    cpu: String,
+    memory: String,
+    disk: String,
+    upload: String,
+    download: String,
 }
 
 /// 构建托盘图标与菜单。
@@ -4074,6 +4114,11 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
         false,
         None::<&str>,
     )?;
+    let open = MenuItem::with_id(app, "tray:open", i18n.t("menubar.open"), true, None::<&str>)?;
+    // 用**自定义**项而不是 `PredefinedMenuItem::quit`：预定义项由系统直接
+    // 退出应用，走不到下面的 `on_tray_menu_event`，`tray-quit` 事件就永远
+    // 发不出去（契约里写了托盘「退出」要发这个事件）。
+    let quit = MenuItem::with_id(app, "tray:quit", i18n.t("menubar.quit"), true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
@@ -4085,16 +4130,13 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
             &upload,
             &download,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "tray:open", i18n.t("menubar.open"), true, None::<&str>)?,
+            &open,
             &PredefinedMenuItem::separator(app)?,
-            // 用**自定义**项而不是 `PredefinedMenuItem::quit`：预定义项由系统直接
-            // 退出应用，走不到下面的 `on_tray_menu_event`，`tray-quit` 事件就永远
-            // 发不出去（契约里写了托盘「退出」要发这个事件）。
-            &MenuItem::with_id(app, "tray:quit", i18n.t("menubar.quit"), true, None::<&str>)?,
+            &quit,
         ],
     )?;
 
-    TrayIconBuilder::with_id("main")
+    TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .icon_as_template(true)
         .tooltip(&app_name)
@@ -4119,14 +4161,55 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
         disk,
         upload,
         download,
-        cpu_label,
-        memory_label,
-        disk_label,
-        upload_label,
-        download_label,
+        title,
+        open,
+        quit,
+        labels: Mutex::new(TrayLabels {
+            cpu: cpu_label,
+            memory: memory_label,
+            disk: disk_label,
+            upload: upload_label,
+            download: download_label,
+        }),
     });
 
     Ok(())
+}
+
+/// 换语言后更新托盘菜单的文案。
+///
+/// 托盘菜单的**结构**在两种语言下完全一致（同样的项、同样的顺序），
+/// 只有文案不同，所以这里不重建菜单、只改各菜单项的文本。
+///
+/// 也不能走 `build()` 重来一遍：那会 `app.manage(TrayItems{..})` 第二次托管
+/// 同类型状态（`manage` 对已托管类型是静默 no-op），并且 `TrayIconBuilder`
+/// 不检查重复 id，会多出一个托盘图标。
+pub fn update_locale<R: Runtime>(app: &AppHandle<R>, locale: Locale) {
+    let Some(items) = app.try_state::<TrayItems<R>>() else {
+        return;
+    };
+
+    let i18n = I18n::new(locale);
+    let _ = items.title.set_text(i18n.t("menubar.title"));
+    let _ = items.open.set_text(i18n.t("menubar.open"));
+    let _ = items.quit.set_text(i18n.t("menubar.quit"));
+
+    let mut labels = items
+        .labels
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    labels.cpu = i18n.t("monitor.cpu");
+    labels.memory = i18n.t("monitor.memory");
+    labels.disk = i18n.t("monitor.disk");
+    labels.upload = i18n.t("monitor.upload");
+    labels.download = i18n.t("monitor.download");
+
+    // 指标项的前缀换掉，数值留到下一次采样刷新（约 1 秒内）。
+    let _ = items.cpu.set_text(format!("{}  —", labels.cpu));
+    let _ = items.memory.set_text(format!("{}  —", labels.memory));
+    let _ = items.disk.set_text(format!("{}  —", labels.disk));
+    let _ = items.upload.set_text(format!("{}  —", labels.upload));
+    let _ = items.download.set_text(format!("{}  —", labels.download));
 }
 
 /// 更新托盘里的实时指标。
@@ -4134,22 +4217,26 @@ pub fn update_metrics<R: Runtime>(app: &AppHandle<R>, info: &crate::core::monito
     let Some(items) = app.try_state::<TrayItems<R>>() else {
         return;
     };
+    let labels = items
+        .labels
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let _ = items
         .cpu
-        .set_text(format!("{}  {:.1}%", items.cpu_label, info.cpu_usage));
+        .set_text(format!("{}  {:.1}%", labels.cpu, info.cpu_usage));
     let _ = items
         .memory
-        .set_text(format!("{}  {:.1}%", items.memory_label, info.memory_usage));
+        .set_text(format!("{}  {:.1}%", labels.memory, info.memory_usage));
     let _ = items
         .disk
-        .set_text(format!("{}  {:.1}%", items.disk_label, info.disk_usage));
+        .set_text(format!("{}  {:.1}%", labels.disk, info.disk_usage));
     let _ = items.upload.set_text(format!(
         "{}  {:.2} MB/s",
-        items.upload_label, info.network_upload
+        labels.upload, info.network_upload
     ));
     let _ = items.download.set_text(format!(
         "{}  {:.2} MB/s",
-        items.download_label, info.network_download
+        labels.download, info.network_download
     ));
 }
 
@@ -4188,8 +4275,10 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
-}
-```
+}```
+
+> **实际落地**：Task 15 评审后新增 `update_locale`（换语言时同步托盘菜单文案），`TrayItems` 增加 `title`/`open`/`quit` 三个菜单项与 `Mutex<TrayLabels>`。
+> 上文是当前文件的**完整内容**。
 
 `src-tauri/src/system/mod.rs` 追加模块声明：
 
@@ -4276,8 +4365,8 @@ AI-Tool: TophantAI"
 ```rust
 //! 全局快捷键 ⌘+L。
 //!
-//! macOS 上 `GlobalHotKeyManager` 必须在主线程创建，否则注册会失败，
-//! 因此注册放在 Tauri 的 `setup()` 里（setup 运行在主线程）。
+//! 注册放在 Tauri 的 `setup()` 里（主线程），以确保 Carbon 事件能被应用事件循环派发 ——
+//! `GlobalHotKeyManager::new()` 本身并不检查线程，真正的约束是事件循环必须在主线程。
 
 use std::sync::{Mutex, Once};
 
@@ -4285,10 +4374,11 @@ use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
 use tauri::{AppHandle, Runtime};
 
-/// 热键管理器（全局唯一）。
-static MANAGER: Mutex<Option<GlobalHotKeyManager>> = Mutex::new(None);
-/// 已注册的热键。
-static HOTKEY: Mutex<Option<HotKey>> = Mutex::new(None);
+/// 热键管理器与已注册热键（全局唯一）。
+///
+/// 两者放同一个槽里，check-then-act 一次加锁完成，避免出现
+/// 「管理器已写入、热键还没写入」的中间态。
+static SLOT: Mutex<(Option<GlobalHotKeyManager>, Option<HotKey>)> = Mutex::new((None, None));
 /// 监听线程的启动闸门（全局只允许拉起一次）。
 static LISTENER: Once = Once::new();
 
@@ -4297,9 +4387,16 @@ static LISTENER: Once = Once::new();
 /// 幂等：已经注册过就直接返回成功。macOS 的 `RegisterEventHotKey` 对重复注册返回
 /// `eventHotKeyExistsErr`（`global_hotkey::Error::AlreadyRegistered`），不挡住的话，
 /// 每次「启用」都会再建一个管理器、并多拉起一个监听线程。
+///
+/// 注意：macOS 用 `kEventHotKeyExclusive` 注册，**Ki6 运行期间会独占 ⌘L**，
+/// 其他应用（浏览器聚焦地址栏、Finder 前往文件夹…）收不到这个键。
+/// 这是全局热键注册方式本身的语义，不是实现缺陷。
 pub fn register<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    if HOTKEY.lock().expect("快捷键锁中毒").is_some() {
-        return Ok(());
+    {
+        let slot = SLOT.lock().expect("快捷键锁中毒");
+        if slot.1.is_some() {
+            return Ok(());
+        }
     }
 
     let manager =
@@ -4310,8 +4407,10 @@ pub fn register<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .register(hotkey)
         .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!(e)))?;
 
-    *MANAGER.lock().expect("快捷键锁中毒") = Some(manager);
-    *HOTKEY.lock().expect("快捷键锁中毒") = Some(hotkey);
+    {
+        let mut slot = SLOT.lock().expect("快捷键锁中毒");
+        *slot = (Some(manager), Some(hotkey));
+    }
 
     LISTENER.call_once(|| {
         let handle = app.clone();
@@ -4331,13 +4430,22 @@ pub fn register<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 /// 启用或停用快捷键。
 pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) {
     if enabled {
-        let _ = register(app);
+        // 注册失败必须留下痕迹：否则「设置里显示已开启、但 ⌘L 毫无反应」，
+        // 用户与开发者都拿不到任何线索（典型触发场景：开了第二个实例，
+        // 或别的应用已经持有 ⌘L）。
+        if let Err(err) = register(app) {
+            eprintln!("[shortcut] 注册 ⌘L 失败: {err}");
+        }
     } else {
         // 先把两者从静态槽里取出来，再做注销，避免持锁调用原生 API。
-        let hotkey = HOTKEY.lock().expect("快捷键锁中毒").take();
-        let manager = MANAGER.lock().expect("快捷键锁中毒").take();
-        if let (Some(hotkey), Some(manager)) = (hotkey, manager) {
-            let _ = manager.unregister(hotkey);
+        let (manager, hotkey) = {
+            let mut slot = SLOT.lock().expect("快捷键锁中毒");
+            (slot.0.take(), slot.1.take())
+        };
+        if let (Some(hotkey), Some(manager)) = (hotkey, manager)
+            && let Err(err) = manager.unregister(hotkey)
+        {
+            eprintln!("[shortcut] 注销 ⌘L 失败: {err}");
         }
     }
 }
@@ -4349,28 +4457,39 @@ pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) {
 //! Dock / 菜单栏模式切换。
 //!
 //! Tauri v2 没有暴露 `NSApp.activationPolicy`，这里用 `objc2-app-kit` 直调 AppKit。
-//! 必须在主线程调用；失败时降级为「仅隐藏窗口」，行为差异可接受。
+//!
+//! **必须在主线程调用**：`MainThreadMarker::new()` 在非主线程返回 `None`，此时直接跳过。
+//! 当前的调用方都是同步的 Tauri command（Tauri v2 里同步 command 跑在主线程），
+//! 但**不要**给这些 command 加 `async` 或 `#[tauri::command(async)]` ——
+//! 那会把命令体切到 async runtime 线程上，菜单栏模式会静默失效。
 
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 /// 设置激活策略：`true` 为仅菜单栏（不占 Dock），`false` 为常规（占 Dock）。
-pub fn set_accessory_mode<R: Runtime>(enabled: bool, _app: &AppHandle<R>) {
+///
+/// 切换失败时**真正执行**降级：隐藏主窗口，让应用退回「只在菜单栏可见」的效果。
+pub fn set_accessory_mode<R: Runtime>(enabled: bool, app: &AppHandle<R>) {
     let Some(mtm) = MainThreadMarker::new() else {
         eprintln!("[activation] 不在主线程，跳过激活策略切换");
         return;
     };
 
-    let app = NSApplication::sharedApplication(mtm);
+    let ns_app = NSApplication::sharedApplication(mtm);
     let policy = if enabled {
         NSApplicationActivationPolicy::Accessory
     } else {
         NSApplicationActivationPolicy::Regular
     };
 
-    if !app.setActivationPolicy(policy) {
+    if !ns_app.setActivationPolicy(policy) {
         eprintln!("[activation] 切换激活策略失败，降级为仅隐藏窗口");
+        // 降级只在「切到仅菜单栏」失败时才有意义 —— 此时至少把窗口藏起来，
+        // 不让它继续以普通窗口的方式占着 Dock 位置。
+        if enabled && let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
     }
 }
 ```
@@ -4379,6 +4498,7 @@ pub fn set_accessory_mode<R: Runtime>(enabled: bool, _app: &AppHandle<R>) {
 
 ```rust
 pub mod activation;
+pub mod autolaunch;
 pub mod menu;
 pub mod shortcut;
 pub mod tasks;
@@ -4386,23 +4506,28 @@ pub mod tray;
 ```
 
 > `rustfmt` 的 `reorder_modules` 默认开启，`mod` 声明会按字母序重排 ——
-> 补完这两行后整个文件的**全文**就是上面这五行，不要按追加顺序写。
+> 补完这两行后整个文件的**全文**就是上面这几行，不要按追加顺序写。
 
 > 同理：不写这两行，`shortcut.rs` 与 `activation.rs` 都不会被编译。
+
+> **实际落地（Task 14 之后）**：模块清单多了一行 `pub mod autolaunch;`（开机自启，Task 14 引入），
+> 顺序仍按字母序：`activation` → `autolaunch` → `menu` → `shortcut` → `tasks` → `tray`。
 - [ ] **Step 3: 接入 setup**
 
 `src-tauri/src/lib.rs` setup 内追加：
 
 ```rust
-            // 全局快捷键 ⌘L：默认关闭，开了才注册（设置项可热更新）。
+            // 全局快捷键 ⌘L：**默认开启**（core/settings.rs 的默认值是 true），
+            // 设置项可热更新。注册失败必须留下痕迹，否则「显示已开启但毫无反应」
+            // 会变成无法排查的静默失效。
             {
                 let shortcut_enabled = state
                     .settings
                     .lock()
                     .expect("设置锁中毒")
                     .global_shortcut_enabled;
-                if shortcut_enabled {
-                    let _ = crate::system::shortcut::register(&handle);
+                if shortcut_enabled && let Err(err) = crate::system::shortcut::register(&handle) {
+                    eprintln!("[shortcut] 注册 ⌘L 失败: {err}");
                 }
             }
 ```
@@ -4459,7 +4584,8 @@ AI-Tool: TophantAI"
 //! 开机自启动。
 //!
 //! Swift 版优先使用 `SMAppService`（macOS 13+），并保留 LaunchAgent 传统实现。
-//! Rust 版统一走 LaunchAgent：在 `~/Library/LaunchAgents` 写 plist 并用 `launchctl` 装载。
+//! Rust 版统一走 LaunchAgent：在 `~/Library/LaunchAgents` 写 plist，
+//! **不调用 `launchctl load`**（load 会当场把作业跑起来，等于再启一个实例）。
 
 use std::path::PathBuf;
 
@@ -4511,18 +4637,17 @@ pub fn enable() -> anyhow::Result<()> {
 
     std::fs::write(&path, plist)?;
 
-    // 重新装载，让改动立即生效；失败不影响下次登录自启。
-    let _ = std::process::Command::new("launchctl")
-        .args(["unload", "-w", &path.to_string_lossy()])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-    let _ = std::process::Command::new("launchctl")
-        .args(["load", "-w", &path.to_string_lossy()])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-
+    // **只写 plist，绝不 `launchctl load`。**
+    //
+    // `launchctl load -w` 会把作业注册进 launchd，而 `RunAtLoad=true` 的语义是
+    // 「注册即启动」—— 实测（Task 14 评审）load 完不到 2 秒 ProgramArguments
+    // 就被跑起来了。我们的 ProgramArguments 指向应用自身，于是用户在设置里
+    // 勾一下「开机自启」，眼前就会多出一个 Ki6 进程：两个托盘图标、两套菜单栏项、
+    // 两份后台采样线程，还可能并发写同一个 settings.json。
+    //
+    // 「开机自启」只需要「下次登录时 launchd 读到 ~/Library/LaunchAgents 里的
+    // plist 并拉起它」—— 登录项本来就在这个目录里，写文件就够了。
+    // 卸载交给 `disable()` 与登录时的 launchd 接管。
     Ok(())
 }
 
@@ -4530,6 +4655,8 @@ pub fn enable() -> anyhow::Result<()> {
 pub fn disable() -> anyhow::Result<()> {
     let path = plist_path();
     if path.exists() {
+        // 作业可能已被 launchd 在登录时自动装载，卸载掉；
+        // 未装载时 `unload` 本来就会失败，忽略即可（删掉 plist 就够了）。
         let _ = std::process::Command::new("launchctl")
             .args(["unload", "-w", &path.to_string_lossy()])
             .stdout(std::process::Stdio::null())
@@ -4568,8 +4695,28 @@ mod tests {
         assert!(path.to_string_lossy().contains("LaunchAgents"));
         assert!(path.to_string_lossy().ends_with("com.igigi.chuaker7.plist"));
     }
-}
-```
+
+    /// 「开机自启」只能写 plist，**不能**把作业注册进 launchd。
+    ///
+    /// `launchctl load -w` 配上 `RunAtLoad=true` 的语义是「注册即启动」，
+    /// 用户在前端勾一下开关，眼前就会多出一个应用实例（Task 14 评审 C-1）。
+    /// 单元测试没法直接观察「没有调用 launchctl」，所以用源码级断言守住这条不变量。
+    #[test]
+    fn enable_never_loads_the_agent_into_launchd() {
+        let source = include_str!("autolaunch.rs");
+        assert!(
+            !source.contains("\"load\""),
+            "enable() 不得调用 `launchctl load`：注册即启动，会再拉起一个应用实例"
+        );
+        assert!(
+            !source.contains("\"bootstrap\""),
+            "也不得用 `launchctl bootstrap` 代替 load —— 同样是注册即启动"
+        );
+    }
+}```
+
+> **实际落地**：**Task 14 评审 C-1 修复**：`enable()` 不再调用 `launchctl load -w` —— 该命令配合 `RunAtLoad=true` 会在用户勾选开关的瞬间再拉起一个应用实例。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 注册模块并提交**
 
@@ -4652,22 +4799,45 @@ pub fn update_settings(
     // 若在写入之后再取旧值，拿到的就是新值，比较永远相等，热更新就成了死代码。
     let previous = state.settings.lock().expect("设置锁中毒").clone();
 
-    let next = {
-        let mut settings = state.settings.lock().expect("设置锁中毒");
-        let next = patch.apply(&settings);
-        *settings = next.clone();
-        next
-    };
+    let mut next = patch.apply(&previous);
 
-    // 落盘放在锁外：磁盘 IO 不该占着设置锁（与剪贴板落盘同一原则）。
+    // 自启开关必须落到 LaunchAgent 上，否则会出现「设置里显示已开启、实际没注册」
+    // 与「Agent 建好了、开关却显示关闭」两个互不同步的真相源（Task 15 评审 I-1）。
+    // 失败就回滚这一个字段，不让设置与现实脱节。
+    if previous.launch_at_login != next.launch_at_login {
+        let outcome = if next.launch_at_login {
+            crate::system::autolaunch::enable()
+        } else {
+            crate::system::autolaunch::disable()
+        };
+        if let Err(err) = outcome {
+            eprintln!("[autolaunch] 应用开机自启设置失败，回滚该字段: {err}");
+            next.launch_at_login = previous.launch_at_login;
+        }
+    }
+
+    // 写回全局状态：锁内只改内存。
+    {
+        let mut settings = state.settings.lock().expect("设置锁中毒");
+        *settings = next.clone();
+    }
+
+    // 落盘放在锁外：`next` 是独立副本，写盘不占设置锁。
     next.save();
 
     // 语言变了要换文案表。
-    {
-        let mut i18n = state.i18n.lock().expect("文案锁中毒");
-        if i18n.locale() != next.locale {
+    if previous.locale != next.locale {
+        {
+            let mut i18n = state.i18n.lock().expect("文案锁中毒");
             i18n.set_locale(next.locale);
         }
+        // 原生菜单栏与托盘菜单也要跟着换文案，否则界面是英文、菜单栏还是中文 ——
+        // 这正是历史提交 f5fc259「消除半中半英」要消灭的现象（Task 15 评审 I-2）。
+        // `menu::build` 结尾是 `set_as_app_menu()`，是替换语义，可以安全重复调用。
+        if let Err(err) = crate::system::menu::build(&app, next.locale) {
+            eprintln!("[menu] 重建菜单栏失败: {err}");
+        }
+        crate::system::tray::update_locale(&app, next.locale);
     }
 
     // 采样间隔与网络开关热更新。
@@ -4697,23 +4867,31 @@ pub fn update_settings(
 /// 取指定语言的整张文案表。
 #[tauri::command]
 pub fn get_strings(locale: String) -> HashMap<String, String> {
-    let parsed = match locale.as_str() {
-        "en" => Locale::En,
-        _ => Locale::ZhHans,
+    // 与 `Locale::detect()` 同一口径：按前缀判定。
+    // 否则前端传 "en-US" 会回落到中文，而系统语言探测会判成英文（Task 15 评审 M-2）。
+    let parsed = if locale.trim_start().to_ascii_lowercase().starts_with("en") {
+        Locale::En
+    } else {
+        Locale::ZhHans
     };
     I18n::new(parsed).table()
-}
-```
+}```
+
+> **实际落地**：**Task 15 评审 I-1 / I-2 / M-2 修复**：自启开关落到 LaunchAgent 并回滚失败项；换语言时重建原生菜单栏与托盘菜单；`get_strings` 改用前缀匹配。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 写 `src-tauri/src/commands/system.rs`**
 
 ```rust
-//! 系统级命令：窗口显隐、菜单栏模式、快捷键、自启。
+//! 系统级命令：窗口显隐、菜单栏模式、快捷键、自启、原生右键菜单。
 
 use std::sync::Arc;
 
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::{AppHandle, Manager, State};
 
+use crate::commands::dto::ContextTarget;
+use crate::core::i18n::I18n;
 use crate::state::AppState;
 
 /// 隐藏主窗口。
@@ -4741,8 +4919,11 @@ pub fn set_menu_bar_mode(app: AppHandle, state: State<'_, Arc<AppState>>, enable
         let mut settings = state.settings.lock().expect("设置锁中毒");
         settings.show_menu_bar = enabled;
     }
-    // 落盘放在锁外：磁盘 IO 不该占着设置锁（与剪贴板落盘同一原则）。
-    state.settings.lock().expect("设置锁中毒").save();
+    // 落盘放在锁外：`mutex.lock().unwrap().save()` 这条语句里的 MutexGuard
+    // 会活到语句结束，`save()` 执行期间锁**仍然被持有**（Task 15 评审实测确认）。
+    // 要真的锁外，得先把设置克隆出来再写盘。
+    let snapshot = state.settings.lock().expect("设置锁中毒").clone();
+    snapshot.save();
 
     crate::system::activation::set_accessory_mode(enabled, &app);
 
@@ -4760,28 +4941,171 @@ pub fn set_shortcut_enabled(app: AppHandle, state: State<'_, Arc<AppState>>, ena
         let mut settings = state.settings.lock().expect("设置锁中毒");
         settings.global_shortcut_enabled = enabled;
     }
-    // 落盘放在锁外：磁盘 IO 不该占着设置锁（与剪贴板落盘同一原则）。
-    state.settings.lock().expect("设置锁中毒").save();
+    // 落盘放在锁外，理由同 `set_menu_bar_mode`。
+    let snapshot = state.settings.lock().expect("设置锁中毒").clone();
+    snapshot.save();
 
     crate::system::shortcut::set_enabled(&app, enabled);
 }
 
 /// 启用或停用开机自启。
+///
+/// 设置项 `launch_at_login` 与 LaunchAgent 的真实状态必须是**同一个真相源**：
+/// 只改设置项会出现「显示已开启、实际没注册」，只注册 LaunchAgent 会出现
+/// 「开关显示关闭，用户再点一次就把刚建好的 Agent 关掉」（Task 15 评审 I-1）。
+/// 所以这里在注册成功后把设置项一起对齐并落盘。
 #[tauri::command]
-pub fn set_auto_launch(enabled: bool) -> Result<(), String> {
+pub fn set_auto_launch(state: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), String> {
     if enabled {
-        crate::system::autolaunch::enable().map_err(|err| err.to_string())
+        crate::system::autolaunch::enable().map_err(|err| err.to_string())?;
     } else {
-        crate::system::autolaunch::disable().map_err(|err| err.to_string())
+        crate::system::autolaunch::disable().map_err(|err| err.to_string())?;
     }
+
+    let snapshot = {
+        let mut settings = state.settings.lock().expect("设置锁中毒");
+        settings.launch_at_login = enabled;
+        settings.clone()
+    };
+    snapshot.save();
+
+    Ok(())
 }
 
-/// 弹出原生右键菜单（Task 25 实现完整逻辑）。
+/// 弹出原生右键菜单。
+///
+/// 菜单项点击由 `system::menu::on_context_menu_event` 统一处理，
+/// 目标对象暂存在 `AppState::pending_context`。
 #[tauri::command]
-pub fn popup_context_menu(app: AppHandle, kind: String, payload: serde_json::Value) {
-    let _ = (app, kind, payload);
+pub fn popup_context_menu(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    kind: String,
+    payload: serde_json::Value,
+) {
+    let raw = serde_json::json!({ "kind": kind, "payload": payload });
+    let Ok(target) = serde_json::from_value::<ContextTarget>(raw) else {
+        eprintln!("[menu] 右键目标解析失败，忽略");
+        return;
+    };
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    let locale = state.i18n.lock().expect("文案锁中毒").locale();
+    let i18n = I18n::new(locale);
+
+    let menu = match build_context_menu(&app, &target, &i18n) {
+        Ok(menu) => menu,
+        Err(err) => {
+            eprintln!("[menu] 构建右键菜单失败: {err}");
+            return;
+        }
+    };
+
+    {
+        *state.pending_context.lock().expect("右键目标锁中毒") = Some(target);
+    }
+
+    let _ = window.popup_menu(&menu);
 }
-```
+
+/// 构建与目标匹配的原生菜单。
+///
+/// `Menu::with_items` 要求 `&[&dyn IsMenuItem<R>]` 切片，同类型项才能放进同一个数组；
+/// 这里改用 `Menu::new` + `append`，可以混合 `MenuItem` 与 `PredefinedMenuItem`。
+///
+/// 菜单文案全部走 `core::i18n` —— muda 0.20 在 `text=None` 时会用它写死的英文表，
+/// 而 macOS 后端用 `initWithTitle:` 显式设标题，**预定义项永远不会跟随系统语言**。
+fn build_context_menu(
+    app: &AppHandle,
+    target: &ContextTarget,
+    i18n: &I18n,
+) -> tauri::Result<Menu<tauri::Wry>> {
+    let menu = Menu::new(app)?;
+
+    match target {
+        ContextTarget::Process {
+            pid, display_name, ..
+        } => {
+            let pid_text = pid.to_string();
+            let kill_label = i18n.tf("process.context.kill", &[display_name, &pid_text]);
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.process.copyPath",
+                i18n.t("process.context.copyPath"),
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&PredefinedMenuItem::separator(app)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.process.kill",
+                kill_label,
+                true,
+                None::<&str>,
+            )?)?;
+        }
+        ContextTarget::File { .. } => {
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.file.reveal",
+                i18n.t("file.reveal"),
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.file.copyPath",
+                i18n.t("file.copyPath"),
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&PredefinedMenuItem::separator(app)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.file.rename",
+                i18n.t("file.rename"),
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.file.delete",
+                i18n.t("file.delete"),
+                true,
+                None::<&str>,
+            )?)?;
+        }
+        ContextTarget::Clipboard { .. } => {
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.clipboard.copy",
+                i18n.t("clipboard.copy"),
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&PredefinedMenuItem::separator(app)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.clipboard.delete",
+                i18n.t("clipboard.delete"),
+                true,
+                None::<&str>,
+            )?)?;
+        }
+    }
+
+    Ok(menu)
+}```
+
+> **实际落地**：**Task 15 评审 I-1 / I-3 修复**：`set_auto_launch` 同步设置项真相源；`set_menu_bar_mode` / `set_shortcut_enabled` 改为克隆快照后锁外落盘。
+> 上文是当前文件的**完整内容**。
+
+> **实际落地（Task 25 之后）**：本文件在 Task 25 被追加了 `popup_context_menu` 与
+> `build_context_menu`（原生右键菜单），上文是当前文件的**完整内容**。
+> Task 15 落地时 `popup_context_menu` 只是空实现。
 
 - [ ] **Step 3: 挂到 invoke_handler 并提交**
 
@@ -5144,6 +5468,8 @@ export function formatRate(value: number): string {
 ```typescript
 // 前端插值：与 Rust 侧 format_placeholders 口径一致，按顺序替换 %@。
 
+import { useCallback } from 'react';
+
 import { useAppState } from './store';
 
 /** 把模板中的 `%@` 按出现顺序替换为给定参数。 */
@@ -5182,12 +5508,17 @@ export function useI18n(): {
   strings: Record<string, string>;
 } {
   const { strings } = useAppState();
-  return {
-    strings,
-    t: (key: string, args: string[] = []) => translate(strings, key, args),
-  };
-}
-```
+  // t 的身份必须稳定：页面里的 useCallback / useMemo 多以它为依赖，
+  // 每次渲染都换身份会让这些缓存全部失效、监听反复重订阅。
+  const t = useCallback(
+    (key: string, args: string[] = []) => translate(strings, key, args),
+    [strings],
+  );
+  return { strings, t };
+}```
+
+> **实际落地**：`t` 改为 `useCallback` 依赖 `strings`，保证引用稳定（否则各页 `useCallback` / `useMemo` 每次渲染失效、监听反复重订阅）。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 7: 写测试**
 
@@ -6255,15 +6586,14 @@ export function AppShell() {
 - [ ] **Step 6: 挂载 `App.tsx`**
 
 ```tsx
+import { AppShell } from './app/AppShell';
+
 export function App() {
-  return (
-    <main style={{ padding: 24, fontFamily: 'system-ui' }}>
-      <h1>Ki6</h1>
-      <p>Tauri v2 + React 脚手架已就绪。</p>
-    </main>
-  );
-}
-```
+  return <AppShell />;
+}```
+
+> **实际落地**：落地时整体重写为最终版：外壳、路由与各页挂载都收在这里。
+> 上文是当前文件的**完整内容**。
 
 同时给 `frontend/index.html` 的 `<html>` 补上默认主题属性：
 
@@ -7020,6 +7350,8 @@ export function Files() {
   const [renameValue, setRenameValue] = useState('');
   const [creating, setCreating] = useState<'folder' | 'file' | null>(null);
   const [createValue, setCreateValue] = useState('');
+  /** 原生右键菜单当前对应的行（「重命名 / 删除」需要它才能继续）。 */
+  const [contextRow, setContextRow] = useState<FileRow | null>(null);
 
   const load = useCallback(async (path: string) => {
     const list = await api.listDir(path);
@@ -7177,6 +7509,35 @@ export function Files() {
     [cwd, load, t],
   );
 
+  // 原生右键菜单里的「重命名 / 删除」由 Rust 通过 menu-action 事件回传，
+  // 被操作的目标行在 onRowContextMenu 里记下，这里补齐后续动作。
+  // 放在 remove 之后声明，避免闭包捕获到旧的 remove。
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void onEvent<string>(EVENT.menuAction, (action) => {
+      if (!contextRow) {
+        return;
+      }
+      if (action === 'file:rename') {
+        setRenaming(contextRow);
+        setRenameValue(contextRow.name);
+      } else if (action === 'file:delete') {
+        void remove(contextRow);
+      }
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [contextRow, remove]);
+
   const submitRename = useCallback(async () => {
     if (!renaming || !renameValue.trim()) {
       return;
@@ -7267,6 +7628,14 @@ export function Files() {
               void enter(row);
             }
           }}
+          onRowContextMenu={(row) => {
+            setContextRow(row);
+            void api.popupContextMenu('file', {
+              path: row.path,
+              name: row.name,
+              isDir: row.isDir,
+            });
+          }}
           empty={t('common.empty')}
         />
       </Card>
@@ -7337,8 +7706,10 @@ function formatTime(seconds: number): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
     date.getMinutes(),
   )}`;
-}
-```
+}```
+
+> **实际落地**：Task 25 为本文件追加了 `contextRow` 状态、`onRowContextMenu` 与监听 `menu-action` 的 `useEffect`。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 补样式**
 
@@ -7367,11 +7738,17 @@ function formatTime(seconds: number): string {
 `frontend/src/pages/Files.test.tsx`：
 
 ```tsx
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { popupContextMenu, deleteToTrash, menuActionHandlers } = vi.hoisted(() => ({
+  popupContextMenu: vi.fn(),
+  deleteToTrash: vi.fn(),
+  menuActionHandlers: [] as Array<(payload: string) => void>,
+}));
+
 vi.mock('../lib/bridge', () => ({
-  EVENT: { filesChanged: 'files-changed' },
+  EVENT: { filesChanged: 'files-changed', menuAction: 'menu-action' },
   api: {
     listDir: vi.fn().mockResolvedValue([
       { path: '/tmp/a.txt', name: 'a.txt', isDir: false, size: 12, sizeText: '12 bytes', modified: 0 },
@@ -7383,11 +7760,17 @@ vi.mock('../lib/bridge', () => ({
     parentDir: vi.fn().mockResolvedValue('/tmp'),
     revealInFinder: vi.fn().mockResolvedValue(undefined),
     renamePath: vi.fn().mockResolvedValue(undefined),
-    deleteToTrash: vi.fn().mockResolvedValue(undefined),
+    deleteToTrash,
     createFolder: vi.fn().mockResolvedValue(undefined),
     createFile: vi.fn().mockResolvedValue(undefined),
+    popupContextMenu,
   },
-  onEvent: vi.fn().mockResolvedValue(() => {}),
+  onEvent: vi.fn((name: string, handler: (payload: unknown) => void) => {
+    if (name === 'menu-action') {
+      menuActionHandlers.push(handler as (payload: string) => void);
+    }
+    return Promise.resolve(() => {});
+  }),
 }));
 
 vi.mock('../lib/store', async () => {
@@ -7423,9 +7806,20 @@ vi.mock('../lib/store', async () => {
 
 import { Files } from './Files';
 
+/** 触发一次原生右键菜单。 */
+function rightClick(name: string): void {
+  const cell = screen.getByText(name);
+  const row = cell.closest('tr');
+  if (!row) {
+    throw new Error(`找不到 ${name} 所在行`);
+  }
+  fireEvent.contextMenu(row);
+}
+
 describe('Files', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    menuActionHandlers.length = 0;
   });
 
   it('渲染文件表头', async () => {
@@ -7439,8 +7833,42 @@ describe('Files', () => {
     expect(await screen.findByText('新建文件夹')).toBeInTheDocument();
     expect(await screen.findByText('新建文件')).toBeInTheDocument();
   });
-});
-```
+
+  it('右键一行时弹出原生菜单并带上行数据', async () => {
+    render(<Files />);
+    await screen.findByText('a.txt');
+    rightClick('a.txt');
+    expect(popupContextMenu).toHaveBeenCalledWith('file', {
+      path: '/tmp/a.txt',
+      name: 'a.txt',
+      isDir: false,
+    });
+  });
+
+  it('收到 file:delete 事件时删除被右键的那一行', async () => {
+    render(<Files />);
+    await screen.findByText('a.txt');
+    rightClick('a.txt');
+    expect(menuActionHandlers.length).toBeGreaterThan(0);
+    for (const handler of menuActionHandlers) {
+      handler('file:delete');
+    }
+    await waitFor(() => expect(deleteToTrash).toHaveBeenCalledWith('/tmp/a.txt'));
+  });
+
+  it('收到 file:rename 事件时打开重命名弹窗', async () => {
+    render(<Files />);
+    await screen.findByText('a.txt');
+    rightClick('a.txt');
+    for (const handler of menuActionHandlers) {
+      handler('file:rename');
+    }
+    expect(await screen.findByDisplayValue('a.txt')).toBeInTheDocument();
+  });
+});```
+
+> **实际落地**：Task 25 补了右键菜单的三个用例（弹菜单 / file:delete / file:rename）。
+> 上文是当前文件的**完整内容**。
 
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
@@ -7613,6 +8041,9 @@ export function Clipboard() {
           columns={columns}
           items={filtered}
           getKey={(row) => String(row.id)}
+          onRowContextMenu={(row) => {
+            void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
+          }}
           empty={t('clipboard.empty')}
         />
       </Card>
@@ -7629,8 +8060,10 @@ function formatTime(seconds: number): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
     date.getMinutes(),
   )}`;
-}
-```
+}```
+
+> **实际落地**：Task 25 为本文件追加了 `onRowContextMenu`（原生右键菜单）。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 补样式**
 
@@ -8522,9 +8955,9 @@ AI-Tool: TophantAI"
 
 **Files:**
 - Modify: `src-tauri/src/commands/system.rs`
-- Modify: `src-tauri/src/commands/mod.rs`
 - Modify: `src-tauri/src/state.rs`
 - Modify: `src-tauri/src/system/menu.rs`
+- Modify: `src-tauri/src/lib.rs`
 - Modify: `frontend/src/pages/Processes.tsx`
 - Modify: `frontend/src/pages/Files.tsx`
 - Modify: `frontend/src/pages/Clipboard.tsx`
@@ -8533,22 +8966,32 @@ AI-Tool: TophantAI"
 - Consumes: `commands::dto::ContextTarget`、`tauri::menu::*`、`Window::popup_menu`
 - Produces: command `popup_context_menu` 的完整实现；菜单 id `ctx.process.copyPath` / `ctx.process.kill` / `ctx.file.reveal` / `ctx.file.copyPath` / `ctx.file.rename` / `ctx.file.delete` / `ctx.clipboard.copy` / `ctx.clipboard.delete`
 
+> **实现裁定（控制器）**
+>
+> 1. **菜单文案全部走 `core::i18n`**，不写死中文。理由与 Task 11 相同：muda 0.20 的 `text=None` 会落到它写死的英文表，而 macOS 后端用 `initWithTitle:` 显式设标题，**预定义项永远不会跟随系统语言**。计划初稿里的硬编码中文已改成复用现成 key（`file.reveal` / `file.copyPath` / `file.rename` / `file.delete` / `clipboard.copy` / `clipboard.delete` / `process.context.copyPath` / `process.context.kill`），**本任务零新增 locale key**。
+> 2. **`ContextTarget` 必须是 `Deserialize`**（Task 15 已加），且带 `#[serde(tag = "kind", content = "payload", rename_all = "camelCase", rename_all_fields = "camelCase")]` —— 少了 `rename_all_fields` 会解析失败（`missing field 'display_name'`），右键菜单永远弹不出来。
+> 3. **前端必须把 `contextRow` 记下来**：`ctx.file.rename` / `ctx.file.delete` 这两项 Rust 侧没有条件执行（删除要走前端的确认流程、重命名要弹输入框），Rust 只回传 `menu-action` 事件（`"file:rename"` / `"file:delete"`），由前端对记下的那一行继续动作。
+> 4. **`useI18n()` 返回的 `t` 必须是稳定引用**（`useCallback` 依赖 `strings`）。否则每个页面里的 `useCallback` / `useMemo` 都以 `t` 为依赖，会在每次渲染时失效，监听反复重订阅。
+
 - [ ] **Step 1: 给 `AppState` 加待处理右键目标**
 
 `src-tauri/src/state.rs`：
 
 ```rust
 use crate::commands::dto::ContextTarget;
-
-/// 应用共享状态。
-pub struct AppState {
-    // ...既有字段...
-    /// 当前弹出的原生右键菜单所对应的目标。
-    pub pending_context: Mutex<Option<ContextTarget>>,
-}
 ```
 
-`AppState::new` 中追加：
+`AppState` 追加字段：
+
+```rust
+    /// 当前弹出的原生右键菜单所对应的目标。
+    ///
+    /// 菜单项的点击事件只带 id，不带目标对象，所以弹出菜单时把目标
+    /// 暂存到这里，点击时再取出来用。
+    pub pending_context: Mutex<Option<ContextTarget>>,
+```
+
+`AppState::new` 追加：
 
 ```rust
             pending_context: Mutex::new(None),
@@ -8559,14 +9002,9 @@ pub struct AppState {
 `src-tauri/src/commands/system.rs`：
 
 ```rust
-use tauri::Manager;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-
-use crate::commands::dto::ContextTarget;
-
 /// 弹出原生右键菜单。
 ///
-/// 菜单项点击由 `system::menu::on_menu_event` 统一处理，
+/// 菜单项点击由 `system::menu::on_context_menu_event` 统一处理，
 /// 目标对象暂存在 `AppState::pending_context`。
 #[tauri::command]
 pub fn popup_context_menu(
@@ -8577,6 +9015,7 @@ pub fn popup_context_menu(
 ) {
     let raw = serde_json::json!({ "kind": kind, "payload": payload });
     let Ok(target) = serde_json::from_value::<ContextTarget>(raw) else {
+        eprintln!("[menu] 右键目标解析失败，忽略");
         return;
     };
 
@@ -8584,7 +9023,10 @@ pub fn popup_context_menu(
         return;
     };
 
-    let menu = match build_context_menu(&app, &target) {
+    let locale = state.i18n.lock().expect("文案锁中毒").locale();
+    let i18n = I18n::new(locale);
+
+    let menu = match build_context_menu(&app, &target, &i18n) {
         Ok(menu) => menu,
         Err(err) => {
             eprintln!("[menu] 构建右键菜单失败: {err}");
@@ -8603,15 +9045,26 @@ pub fn popup_context_menu(
 ///
 /// `Menu::with_items` 要求 `&[&dyn IsMenuItem<R>]` 切片，同类型项才能放进同一个数组；
 /// 这里改用 `Menu::new` + `append`，可以混合 `MenuItem` 与 `PredefinedMenuItem`。
-fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<Menu<tauri::Wry>> {
+///
+/// 菜单文案全部走 `core::i18n` —— muda 0.20 在 `text=None` 时会用它写死的英文表，
+/// 而 macOS 后端用 `initWithTitle:` 显式设标题，**预定义项永远不会跟随系统语言**。
+fn build_context_menu(
+    app: &AppHandle,
+    target: &ContextTarget,
+    i18n: &I18n,
+) -> tauri::Result<Menu<tauri::Wry>> {
     let menu = Menu::new(app)?;
 
     match target {
-        ContextTarget::Process { .. } => {
+        ContextTarget::Process {
+            pid, display_name, ..
+        } => {
+            let pid_text = pid.to_string();
+            let kill_label = i18n.tf("process.context.kill", &[display_name, &pid_text]);
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.process.copyPath",
-                "复制完整路径",
+                i18n.t("process.context.copyPath"),
                 true,
                 None::<&str>,
             )?)?;
@@ -8619,7 +9072,7 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.process.kill",
-                "结束进程",
+                kill_label,
                 true,
                 None::<&str>,
             )?)?;
@@ -8628,14 +9081,14 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.file.reveal",
-                "在 Finder 中显示",
+                i18n.t("file.reveal"),
                 true,
                 None::<&str>,
             )?)?;
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.file.copyPath",
-                "复制路径",
+                i18n.t("file.copyPath"),
                 true,
                 None::<&str>,
             )?)?;
@@ -8643,14 +9096,14 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.file.rename",
-                "重命名",
+                i18n.t("file.rename"),
                 true,
                 None::<&str>,
             )?)?;
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.file.delete",
-                "移到废纸篓",
+                i18n.t("file.delete"),
                 true,
                 None::<&str>,
             )?)?;
@@ -8659,7 +9112,7 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.clipboard.copy",
-                "复制",
+                i18n.t("clipboard.copy"),
                 true,
                 None::<&str>,
             )?)?;
@@ -8667,7 +9120,7 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.clipboard.delete",
-                "删除",
+                i18n.t("clipboard.delete"),
                 true,
                 None::<&str>,
             )?)?;
@@ -8683,13 +9136,13 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
 `src-tauri/src/system/menu.rs` 追加：
 
 ```rust
-use crate::core::clipboard;
-use crate::core::platform;
-use crate::events::EV_NOTICE;
-use tauri::Manager;
-
-/// 处理右键菜单项点击。
+/// 处理原生右键菜单项点击。
+///
+/// 右键菜单的目标对象在弹出时被暂存进 `AppState::pending_context`
+/// （菜单事件本身只带 id，不带目标），这里取出来执行对应动作。
 pub fn on_context_menu_event(app: &AppHandle, id: &str) {
+    use crate::core::clipboard;
+    use crate::core::platform;
     use crate::core::process::ProcessManager;
 
     let state = app.state::<std::sync::Arc<crate::state::AppState>>();
@@ -8702,10 +9155,13 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
         return;
     };
 
+    let locale = state.i18n.lock().expect("文案锁中毒").locale();
+    let i18n = I18n::new(locale);
+
     match (id, &target) {
         ("ctx.process.copyPath", ContextTarget::Process { full_path, .. }) => {
             platform::copy_to_clipboard(full_path);
-            notify(app, "info", "已复制完整路径");
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
         }
         (
             "ctx.process.kill",
@@ -8714,7 +9170,12 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
             },
         ) => {
             if ProcessManager::kill_process(*pid) {
-                notify(app, "info", &format!("已结束进程 {display_name}"));
+                notify(
+                    app,
+                    &i18n,
+                    "info",
+                    &i18n.tf("process.kill.done", &[display_name]),
+                );
                 // 立刻重采一次并把新列表推给前端，不要等下一个刷新周期。
                 let rows = {
                     let limit = state
@@ -8731,7 +9192,7 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
                 };
                 let _ = app.emit(crate::events::EV_PROCESSES, rows);
             } else {
-                notify(app, "error", "结束进程失败，可能需要管理员权限");
+                notify(app, &i18n, "error", &i18n.t("process.kill.failed"));
             }
         }
         ("ctx.file.reveal", ContextTarget::File { path, .. }) => {
@@ -8739,7 +9200,7 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
         }
         ("ctx.file.copyPath", ContextTarget::File { path, .. }) => {
             platform::copy_to_clipboard(path);
-            notify(app, "info", "已复制路径");
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
         }
         ("ctx.file.rename", ContextTarget::File { .. }) => {
             let _ = app.emit(EV_MENU_ACTION, "file:rename");
@@ -8749,7 +9210,7 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
         }
         ("ctx.clipboard.copy", ContextTarget::Clipboard { content, .. }) => {
             platform::copy_to_clipboard(content);
-            notify(app, "info", "已复制到剪贴板");
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
         }
         ("ctx.clipboard.delete", ContextTarget::Clipboard { id, .. }) => {
             let changed = {
@@ -8759,20 +9220,25 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
             // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
             if changed {
                 let result = clipboard::persist_history(|| {
-                    state.clipboard.lock().expect("剪贴板锁中毒").history.clone()
+                    state
+                        .clipboard
+                        .lock()
+                        .expect("剪贴板锁中毒")
+                        .history
+                        .clone()
                 });
                 if let Err(err) = result {
                     eprintln!("[clipboard] 落盘失败: {err}");
                 }
             }
-            notify(app, "info", "已删除");
+            notify(app, &i18n, "info", &i18n.t("clipboard.deleted"));
         }
         _ => {}
     }
 }
 
 /// 向前端回传提示。
-fn notify(app: &AppHandle, kind: &str, message: &str) {
+fn notify(app: &AppHandle, _i18n: &I18n, kind: &str, message: &str) {
     let _ = app.emit(
         EV_NOTICE,
         crate::commands::dto::Notice {
@@ -8789,6 +9255,7 @@ fn notify(app: &AppHandle, kind: &str, message: &str) {
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
             crate::system::menu::on_menu_event(app, id);
+            // 右键菜单的 id 统一以 `ctx.` 开头，与应用菜单的 `nav:` / `app:` 区分开。
             if id.starts_with("ctx.") {
                 crate::system::menu::on_context_menu_event(app, id);
             }
@@ -8797,16 +9264,18 @@ fn notify(app: &AppHandle, kind: &str, message: &str) {
 
 - [ ] **Step 4: 前端接入右键**
 
-`frontend/src/pages/Processes.tsx` 的 `DataTable` 追加：
+`frontend/src/pages/Processes.tsx` 的虚拟列表行追加 `onContextMenu`：
 
 ```tsx
-          onRowContextMenu={(row) => {
-            void api.popupContextMenu('process', {
-              pid: row.pid,
-              displayName: row.displayName,
-              fullPath: row.fullPath,
-            });
-          }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  void api.popupContextMenu('process', {
+                    pid: row.pid,
+                    displayName: row.displayName,
+                    fullPath: row.fullPath,
+                  });
+                }}
+              >
 ```
 
 `frontend/src/pages/Files.tsx`：
@@ -8826,17 +9295,34 @@ fn notify(app: &AppHandle, kind: &str, message: &str) {
 再新增一个 `useEffect` 监听 `EVENT.menuAction`：
 
 ```tsx
+  // 原生右键菜单里的「重命名 / 删除」由 Rust 通过 menu-action 事件回传，
+  // 被操作的目标行在 onRowContextMenu 里记下，这里补齐后续动作。
+  // 放在 remove 之后声明，避免闭包捕获到旧的 remove。
   useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
     void onEvent<string>(EVENT.menuAction, (action) => {
-      if (action === 'file:rename' && contextRow) {
+      if (!contextRow) {
+        return;
+      }
+      if (action === 'file:rename') {
         setRenaming(contextRow);
         setRenameValue(contextRow.name);
-      }
-      if (action === 'file:delete' && contextRow) {
+      } else if (action === 'file:delete') {
         void remove(contextRow);
       }
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
     });
-  }, [contextRow]);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [contextRow, remove]);
 ```
 
 `frontend/src/pages/Clipboard.tsx`：
@@ -8861,22 +9347,6 @@ npm run build
 cargo build --release -p chuaker7
 ./target/release/chuaker7
 ```
-
-Expected：进程行、文件行、剪贴板行右键均弹出 macOS 原生菜单；「复制完整路径」后系统剪贴板内容正确；「重命名」与「移到废纸篓」由前端接管并弹窗确认。
-
-```bash
-git add -A
-git commit -m "feat: 原生右键菜单
-
-- 进程 / 文件 / 剪贴板行各自弹出 macOS 原生菜单
-- 复制路径、结束进程等直接由 Rust 执行并回传 notice 提示
-- 重命名与删除需要前端确认，Rust 发 menu-action 由前端接管
-
-AI-Coding: true
-AI-Tool: TophantAI"
-```
-
----
 
 ### Task 26: 性能调优与质量门禁
 
@@ -9305,3 +9775,48 @@ Task 24 → Task 26 → Task 27
 ```
 
 Task 4–15 可与 Task 16–24 并行（Rust 侧与前端侧文件不重叠），但 Task 25 起需要两侧合并。
+
+---
+
+## 附录 A：计划 ↔ 实现漂移台账
+
+> **这张表说明什么**
+>
+> 本计划里 Task 1–Task 11 的部分代码块，写的是**该任务当时**要产出的文件内容。
+> 后续任务（T12–T25）又扩展或重写了同一个文件，于是计划里的块与仓库里的当前文件**不再逐字节一致**。
+>
+> **规则**：读这些旧块时，**以仓库里的实际文件为准**，不要按计划块去「修正」代码。
+> 计划块保留原样是为了保留每个任务的设计意图与当时的决策依据。
+>
+> **Task 12 之后（含）的任务，代码块已与实现逐字节对齐**（可用扫描脚本复验）。
+
+| 任务 | 块序号 | 行数 | 对应文件（实际） | 计划块首行 |
+| --- | --- | --- | --- | --- |
+| Task 1 | #3 | 18 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
+| Task 1 | #5 | 7 | `src-tauri/src/lib.rs` | `pub fn run() {` |
+| Task 2 | #1 | 3 | `.gitignore` | `frontend/` |
+| Task 2 | #2 | 29 | `vite.config.ts` | `import { defineConfig } from 'vitest/config';` |
+| Task 2 | #6 | 14 | `frontend/src/main.tsx` | `import React from 'react';` |
+| Task 2 | #7 | 8 | `frontend/src/App.tsx` | `export function App() {` |
+| Task 4 | #0 | 15 | `src-tauri/src/core/mod.rs` | `//! 与 UI 无关的业务逻辑。` |
+| Task 4 | #4 | 68 | `src-tauri/src/core/theme.rs` | `//! 主题设置。` |
+| Task 4 | #7 | 13 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
+| Task 5 | #17 | 37 | `src-tauri/src/core/theme.rs` | `#[cfg(test)]` |
+| Task 5 | #19 | 17 | `src-tauri/src/core/monitor.rs` | `use serde::{Deserialize, Serialize};` |
+| Task 5 | #20 | 4 | `src-tauri/src/core/mod.rs` | `pub mod clipboard;` |
+| Task 6 | #1 | 6 | `src-tauri/src/commands/mod.rs` | `//! Tauri command 门面。` |
+| Task 7 | #0 | 79 | `src-tauri/src/state.rs` | `//! 全局共享状态。` |
+| Task 7 | #1 | 191 | `src-tauri/src/system/tasks.rs` | `//! 后台任务循环。` |
+| Task 7 | #2 | 3 | `src-tauri/src/system/mod.rs` | `//! 原生集成：菜单栏、托盘、快捷键、自启、激活策略与后台任务。` |
+| Task 7 | #4 | 44 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
+| Task 8 | #1 | 10 | `src-tauri/src/commands/mod.rs` | `pub mod processes;` |
+| Task 11 | #1 | 148 | `src-tauri/src/system/menu.rs` | `//! 原生应用菜单栏。` |
+| Task 11 | #2 | 17 | `?` | `> "menubar.edit"      = "编辑"        / "Edit"` |
+| Task 11 | #4 | 23 | `src-tauri/src/lib.rs` | `        .setup(|app| {` |
+
+> **单独说明**
+>
+> - `Task 1 #5` / `Task 2 #7` / `Task 5 #17` / `Task 5 #20` / `Task 8 #1`：这些是**片段**（不是整文件），
+>   漂移原因是同文件的其他部分被后续任务扩展。
+> - `Task 11 #2`：那是 **T11 新增 locale key 的清单表**（不是文件内容），
+>   实际 key 集合以 `locales/zh-Hans.lproj/Localizable.strings` 与 `locales/en.lproj/Localizable.strings` 为准。
