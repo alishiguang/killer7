@@ -9,6 +9,8 @@ pub mod files;
 pub mod monitor;
 pub mod plugins;
 pub mod processes;
+pub mod settings;
+pub mod system;
 
 /// 汇总所有 command。
 pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
@@ -34,5 +36,14 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         plugins::list_plugins,
         plugins::reload_plugins,
         plugins::plugins_dir,
+        settings::get_settings,
+        settings::update_settings,
+        settings::get_strings,
+        system::hide_main_window,
+        system::show_main_window,
+        system::set_menu_bar_mode,
+        system::set_shortcut_enabled,
+        system::set_auto_launch,
+        system::popup_context_menu,
     ]
 }
