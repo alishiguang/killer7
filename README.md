@@ -1,35 +1,15 @@
-# chuaker7
+# Ki6
 
-> 鸬鹚工具箱 LuciBox 的 **Rust 重写版** · 一个 macOS 系统工具箱
+> 鸬鹚工具箱 —— macOS 系统工具箱 · **Tauri v2 + React + TypeScript 重写版**
 >
-> 进程管理 · 文件管理 · 剪贴板管理 · 系统监控 · 菜单栏模式 · 全局快捷键 · 插件架构
+> 进程管理 · 文件管理 · 剪贴板管理 · 系统监控 · 原生菜单栏 · 托盘 · 全局快捷键 · 插件架构
 
-`chuaker7` 是 [LuciBox](https://github.com/hagenmagpie/LuciBox)（SwiftUI + AppKit）用
-**Rust + egui** 重新实现的功能对等版本。业务逻辑、数据来源与交互语义保持一致，
-界面语言则换成了更克制的「ink / paper」暗色系。
+Ki6 是 [LuciBox](https://github.com/hagenmagpie/LuciBox)（SwiftUI + AppKit）的 **Rust +
+Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保持一致，界面语言换成更克制的
+「ink / paper」暗色系，交互层则换成 macOS 原生能力。
 
-界面风格参考 [cindy.cn](https://cindy.cn)：近黑底色、奶油色文字、单一强调色，
-发丝级描边、等宽全大写小标题，以及宽字距的展示字体。
-
----
-
-## 界面预览
-
-### 进程管理
-
-![进程管理](docs/screenshots/processes.png)
-
-### 文件管理
-
-![文件管理](docs/screenshots/files.png)
-
-### 系统监控
-
-![系统监控](docs/screenshots/monitor.png)
-
-### 设置
-
-![设置](docs/screenshots/settings.png)
+> 界面风格参考 [cindy.cn](https://cindy.cn)：近黑底色、奶油色文字、单一强调色，
+> 发丝级描边、等宽全大写小标题，以及宽字距的展示字体。
 
 ---
 
@@ -41,32 +21,51 @@
 | **文件管理** | 目录浏览、新建文件与文件夹、重命名、删除到废纸篓、Finder 定位、复制路径、搜索、目录变更自动刷新 |
 | **剪贴板** | 查看当前剪贴板、最近 100 条历史、搜索、一键复制、单条删除、清空、本地持久化 |
 | **系统监控** | CPU / 内存 / 磁盘使用率，上传下载速度，CPU 与内存采样曲线 |
-| **菜单栏模式** | 菜单栏常驻图标，左键唤起主窗口，右键菜单显示实时指标 |
+| **原生菜单栏** | 真正的 macOS 应用菜单（关于 / 设置 / 隐藏 / 退出 + 编辑 / 视图 / 窗口），⌘1–⌘5 切换页面，⌘, 打开设置 |
+| **托盘** | 菜单栏常驻小鸟图标，左键唤起主窗口，右键菜单显示实时指标 |
 | **全局快捷键** | `⌘ + L` 快速激活应用 |
+| **Dock / 菜单栏模式** | 可切换是否占用 Dock 图标位置 |
+| **开机自启** | LaunchAgent 方式，登录后自动拉起 |
 | **主题** | 跟随系统 / 浅色 / 深色，四种强调色，实时切换 |
-| **国际化** | 简体中文 / English，文案表直接复用原版 `.strings` 文件 |
+| **国际化** | 简体中文 / English，原生菜单栏与界面文案全部跟随应用语言 |
 | **插件** | 扫描插件目录、解析 `manifest.json`、注册标签页与命令 |
 
 ---
 
 ## 快速开始
 
-```bash
-# 需要 Rust 1.88 及以上
-cargo build --release
+需要 **Node ≥ 22.12** 与 **Rust 1.88+**（本仓库在 rustc 1.90 上开发）。
 
-# 运行
+```bash
+# 1. 前端依赖
+npm install
+
+# 2. 产出 frontend/dist —— Tauri 的 generate_context! 在编译期会校验它存在
+npm run build
+
+# 3. 编译 Rust 侧（这是 cargo 工作区，产物在仓库根的 target/ 下）
+cargo build --release -p chuaker7
+
+# 4. 运行
 ./target/release/chuaker7
 ```
 
-### 打包成 .app
+### 打包成 `.app`
 
-裸二进制在 Dock 与菜单栏行为上与 `.app` 包不同，建议打包后再使用：
+裸二进制在 Dock 与菜单栏行为上与 `.app` 包不同（菜单栏标题会继承宿主应用名），
+交付请打包后再使用：
 
 ```bash
-cargo build --release
+npm run tauri build
+# 产物：target/release/bundle/macos/Ki6.app
+```
 
-APP="target/release/chuaker7.app"
+手动打包也可以：
+
+```bash
+cargo build --release -p chuaker7
+
+APP="target/release/Ki6.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp target/release/chuaker7 "$APP/Contents/MacOS/chuaker7"
 
@@ -76,10 +75,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key><string>chuaker7</string>
-    <key>CFBundleIdentifier</key><string>org.igigi.chuaker7</string>
-    <key>CFBundleName</key><string>chuaker7</string>
+    <key>CFBundleIdentifier</key><string>com.igigi.chuaker7</string>
+    <key>CFBundleName</key><string>Ki6</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.1.0</string>
+    <key>CFBundleShortVersionString</string><string>1.2.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSHighResolutionCapable</key><true/>
@@ -93,34 +92,85 @@ open "$APP"
 
 `LSUIElement` 为 `true` 时应用不占用 Dock 位置，只在菜单栏常驻。
 
+> 标识符说明：应用**展示名**是 `Ki6`，但 crate 名、bundle identifier、数据目录
+> （`~/Library/Application Support/chuaker7`）一律是 `chuaker7` —— 它们是技术标识，
+> 改了会丢用户已有的设置与剪贴板历史。
+
+---
+
+## 架构
+
+```
+Ki6/
+├── frontend/                  # React 19 + TypeScript 前端（Vite）
+│   ├── src/
+│   │   ├── main.tsx           # 入口
+│   │   ├── App.tsx            # 应用外壳
+│   │   ├── lib/               # Tauri 桥接层、store、类型
+│   │   ├── components/        # 通用组件
+│   │   ├── pages/             # 六个功能页
+│   │   ├── styles/            # 设计令牌与基础样式
+│   │   └── test/setup.ts      # vitest 环境
+│   └── index.html
+├── src-tauri/
+│   ├── src/
+│   │   ├── lib.rs             # Tauri Builder、插件、命令注册
+│   │   ├── main.rs            # 二进制入口
+│   │   ├── state.rs           # AppState（唯一权威状态源）
+│   │   ├── events.rs          # 前后端事件常量
+│   │   ├── core/              # 纯业务逻辑（不依赖 tauri crate）
+│   │   │   ├── process.rs  files.rs  clipboard.rs  monitor.rs
+│   │   │   ├── plugin.rs   settings.rs  i18n.rs  theme.rs
+│   │   │   └── platform.rs  icon.rs
+│   │   ├── commands/          # Tauri command 门面 + DTO
+│   │   └── system/            # 原生集成
+│   │       ├── menu.rs        # 应用菜单栏
+│   │       ├── tray.rs        # 托盘图标与托盘菜单
+│   │       ├── shortcut.rs    # 全局快捷键
+│   │       ├── activation.rs  # Dock / 菜单栏模式
+│   │       ├── autolaunch.rs  # 开机自启
+│   │       └── tasks.rs       # 后台采样与监听循环
+│   ├── Cargo.toml
+│   └── tauri.conf.json
+├── locales/                   # 简体中文 / English 文案表
+├── assets/fonts/              # Anton（展示体）+ Geist Mono（等宽），均为 SIL OFL
+├── docs/
+└── scripts/
+```
+
+**分层原则**：
+
+- `core/` 是**纯逻辑层**，不依赖 `tauri` crate，所有业务规则都可单测。
+- `system/` 负责线程调度与原生集成（菜单、托盘、快捷键、自启、激活策略）。
+- `commands/` 是薄门面，只做 DTO 转换与状态读写。
+- 前端**不是**权威状态源 —— Rust 侧是，前端通过 `useSyncExternalStore` 订阅事件同步。
+
 ---
 
 ## 与 Swift 原版的对应关系
 
-| Swift 原版 | Rust 重写 |
+| Swift 原版 | Rust + React 重写 |
 | --- | --- |
-| `LuciBoxApp.swift` | `src/main.rs` + `src/app.rs` |
-| `ContentView.swift` | `src/views/processes.rs` |
-| `ProcessManager.swift` | `src/process.rs` |
-| `FileManagerView.swift` | `src/files.rs` |
-| `FileManagerContentView.swift` | `src/views/files.rs` |
-| `ClipboardManager.swift` | `src/clipboard.rs` |
-| `ClipboardContentView.swift` | `src/views/clipboard.rs` |
-| `SystemMonitor.swift` | `src/monitor.rs` |
-| `SystemMonitorView.swift` | `src/views/monitor.rs` |
-| `ThemeManager.swift` | `src/theme.rs` |
-| `MenuBarManager.swift` | `src/menubar.rs` |
-| `GlobalShortcutManager.swift` | `src/shortcut.rs` |
-| `AutoLaunchManager.swift` | `src/autolaunch.rs` |
-| `PluginSystem.swift` | `src/plugin.rs` + `src/views/plugins.rs` |
-| `Info.plist` / `@AppStorage` | `src/settings.rs`（`settings.json`） |
+| `LuciBoxApp.swift` | `src-tauri/src/lib.rs` + `src-tauri/src/state.rs` |
+| `ContentView.swift` | `frontend/src/App.tsx` + `frontend/src/components/AppShell.tsx` |
+| `ProcessManager.swift` | `src-tauri/src/core/process.rs` |
+| `FileManagerView.swift` | `src-tauri/src/core/files.rs` |
+| `ClipboardManager.swift` | `src-tauri/src/core/clipboard.rs` |
+| `SystemMonitor.swift` | `src-tauri/src/core/monitor.rs` |
+| `ThemeManager.swift` | `src-tauri/src/core/theme.rs` |
+| `MenuBarManager.swift` | `src-tauri/src/system/menu.rs` + `src-tauri/src/system/tray.rs` |
+| `GlobalShortcutManager.swift` | `src-tauri/src/system/shortcut.rs` |
+| `AutoLaunchManager.swift` | `src-tauri/src/system/autolaunch.rs` |
+| `PluginSystem.swift` | `src-tauri/src/core/plugin.rs` |
+| `Info.plist` / `@AppStorage` | `src-tauri/src/core/settings.rs`（`settings.json`） |
 | `Localizable.strings` | `locales/*/Localizable.strings`（原样复用） |
 
 ### 实现差异
 
-| 方面 | Swift 版 | Rust 版 |
+| 方面 | Swift 版 | Rust + React 版 |
 | --- | --- | --- |
-| GUI | SwiftUI / AppKit | egui / eframe |
+| GUI | SwiftUI / AppKit | Tauri v2（WKWebView）+ React 19 |
+| 状态管理 | `@StateObject` / `ObservableObject` | Rust 为唯一权威状态源，前端 `useSyncExternalStore` 订阅事件 |
 | 进程列表 | `/bin/ps -eo pid,comm` | 同样调用 `ps`，解析在 Rust 侧完成 |
 | 监听端口 | `lsof` + `awk` 预处理 | `lsof` + Rust 侧解析（可显示真实绑定地址） |
 | 系统指标 | `host_processor_info` / `host_statistics64` / `getifaddrs` | `sysinfo` crate |
@@ -128,42 +178,8 @@ open "$APP"
 | 目录监听 | `DispatchSource` | `notify` crate |
 | 全局快捷键 | `NSEvent.addGlobalMonitor` | `global-hotkey` crate（系统级注册，无需辅助功能权限） |
 | 开机自启 | `SMAppService`（macOS 13+） | LaunchAgent plist + `launchctl` |
+| Dock 模式 | `NSApplication.activationPolicy` | `objc2-app-kit` 直调 AppKit |
 | 设置存储 | `UserDefaults` | `~/Library/Application Support/chuaker7/settings.json` |
-
----
-
-## 项目结构
-
-```
-chuaker7/
-├── Cargo.toml
-├── build.rs                     # 字体可选加载
-├── assets/fonts/                # Anton（展示体）+ Geist Mono（等宽），均为 SIL OFL
-├── locales/                     # 简体中文 / English 文案表
-├── docs/PLUGIN_ARCHITECTURE.md  # 插件系统设计说明
-├── docs/screenshots/            # 界面预览图
-└── src/
-    ├── main.rs                  # 入口、字体安装
-    ├── app.rs                   # 窗口布局、事件分发
-    ├── ui_kit.rs                # 设计基元（kicker / 卡片 / 曲线 / 导航项）
-    ├── theme.rs                 # ink / paper 配色与强调色
-    ├── i18n.rs                  # .strings 解析与占位符填充
-    ├── settings.rs              # 设置持久化
-    ├── events.rs                # 后台线程 → UI 的事件通道
-    ├── process.rs               # 进程管理
-    ├── files.rs                 # 文件管理
-    ├── clipboard.rs             # 剪贴板管理
-    ├── monitor.rs               # 系统监控
-    ├── plugin.rs                # 插件清单与注册
-    ├── menubar.rs               # 菜单栏托盘
-    ├── shortcut.rs              # 全局快捷键
-    ├── autolaunch.rs            # 开机自启
-    ├── icon.rs                  # 程序化生成菜单栏图标
-    ├── platform.rs              # macOS 平台调用
-    └── views/                   # 各功能页
-        ├── processes.rs  files.rs  clipboard.rs
-        ├── monitor.rs    plugins.rs  settings.rs
-```
 
 ---
 
@@ -191,21 +207,15 @@ chuaker7/
 ## 开发
 
 ```bash
-cargo fmt          # 格式化
-cargo clippy       # 静态检查
-cargo test         # 单元测试
-cargo run          # 开发模式运行
+npm run typecheck   # tsc --noEmit
+npm run test        # vitest
+cargo fmt           # 格式化
+cargo clippy -p chuaker7 --all-targets
+cargo test -p chuaker7
 ```
 
-字体是可选增强：若 `assets/fonts/` 下的字体文件缺失，`build.rs` 会关闭对应
-cfg，程序自动回退到系统字体，不影响编译与运行。
-
-用环境变量 `CHUAKER7_START_TAB` 可以指定启动时打开的标签页，取值为
-`process` / `files` / `clipboard` / `monitor` / `plugins` / `settings`：
-
-```bash
-CHUAKER7_START_TAB=monitor cargo run
-```
+前端开发服务器监听 1420 端口，`npm run tauri dev` 会拉起 Vite 与 Tauri 一起跑。
+字体是可选增强：若 `assets/fonts/` 下的字体文件缺失，构建会回退到系统字体。
 
 ---
 

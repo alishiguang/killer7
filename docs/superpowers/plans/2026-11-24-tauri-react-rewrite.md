@@ -1,8 +1,8 @@
-# chuaker7 Tauri v2 + React 重写实施计划
+# Ki6 Tauri v2 + React 重写实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 chuaker7 从 egui 立即模式重写为 Tauri v2 + React 19 + TypeScript 前端架构，保留 cindy.cn 的 ink/paper 视觉语言与全部业务功能，同时用 macOS 原生能力（应用菜单栏、原生右键菜单、托盘菜单、原生对话框）替换自绘交互层，消除首帧空白与滚动掉帧。
+**Goal:** 把 Ki6 从 egui 立即模式重写为 Tauri v2 + React 19 + TypeScript 前端架构，保留 cindy.cn 的 ink/paper 视觉语言与全部业务功能，同时用 macOS 原生能力（应用菜单栏、原生右键菜单、托盘菜单、原生对话框）替换自绘交互层，消除首帧空白与滚动掉帧。
 
 **Architecture:** Rust 侧保留全部业务逻辑（`core/`），作为唯一权威状态源；前端只持有渲染快照，搜索与排序在本地完成。Rust 通过 Tauri `invoke`（命令）与 `emit`（事件）与前端通信；原生能力一律走 Tauri 官方 API，仅「切换 NSApp 激活策略」一处使用 `objc2-app-kit` 直调 AppKit。egui 层（`app.rs`/`ui_kit.rs`/`theme.rs` 的 egui 部分/`fonts.rs`/`views/*`）整体废弃。
 
@@ -37,7 +37,10 @@
   - **任何 release 构建（`tauri build`）之前，必须确认 `frontend/dist/index.html` 是真实前端产物，而不是占位文件**——否则空白首页会被内嵌进二进制，直接违反「首帧不得出现空白」的性能红线。
   - 占位文件（若需要临时创建以让 Rust 侧先跑起来）必须位于被 gitignore 的路径下，不得提交。
 - **分支策略**：`main` 继续演进；egui 版永久存档在 `legacy-egui` 分支（指向 `b36b8dc`），**不得删除或改写该分支**。
-- **命名约定（重要）**：GitHub **仓库名是 `chuaker7/Ki6`**（远端 `https://github.com/chuaker7/Ki6.git`）；而**包名 / crate 名 / 类型名 / 数据目录 / LaunchAgent 标签 / 应用显示名（`productName`）/ 本地化 key 等一切标识符统一为 `chuaker7`**。两者**刻意不同**，任何任务都不得"顺手统一"或把 `chuaker7` 改成 `Ki6`（反之亦然）。**README 的标题与项目介绍用 `Ki6`**（Task 27 统一改写 README 时落实），但 README 正文描述"应用本体"时仍用 `chuaker7`。**唯一例外**：`core::settings` 里的一次性旧目录迁移必须硬编码旧名 `killer7`，那是给迁移用的历史路径，不得扩散到别处。
+- **命名约定（重要）**：GitHub **仓库名是 `chuaker7/Ki6`**（远端 `https://github.com/chuaker7/Ki6.git`）。
+  - **展示名（用户看得见的一切）统一为 `Ki6`**：窗口标题、菜单栏、托盘、关于框、页面品牌字、`productName`、本地化 key `app.name` / `app.brand` / `app.subtitle` / `menubar.title` / `menubar.open`、README 标题与项目介绍、GitHub 仓库描述。
+  - **标识符（技术标识）统一为 `chuaker7`**：crate 名、lib 名、npm 包名、bundle identifier（`com.igigi.chuaker7`）、LaunchAgent 标签（`com.igigi.chuaker7`）、数据目录（`~/Library/Application Support/chuaker7`）、类型名。**标识符不随展示名改动** —— 改了会丢用户已有的设置与剪贴板历史。
+  - **唯一例外**：`core::settings` 里的一次性旧目录迁移必须硬编码旧名 `killer7`，那是给迁移用的历史路径，不得扩散到别处。
 - **进程缓存不变量（重要）**：`ProcessManager::processes` 字段是 `list_processes` 命令的**唯一**数据源，而 `collect()` **不写**这个字段（只有 `load_blocking()` 才写）。因此：① `AppState::new` 必须调一次 `load_blocking(limit)`；② 后台循环 `spawn_process_loop` 与命令 `refresh_processes` 采集完之后都必须**回写** `processes.processes`。漏掉任何一处，`list_processes` 就永远返回空列表，进程页（默认标签页）每次启动后要空好几秒。
 - **共享状态形状（重要）**：`AppState` 由 `Arc<AppState>` 直接托管（`manage(Arc::new(app_state))`），**不得**写成 `Arc<Mutex<AppState>>`——`std::sync::Mutex` 不参与字段访问的 autoderef，`state.sample_interval_ms` 这类写法会直接编译失败（E0609）；而且外套一层全局锁会把设置、剪贴板、插件等互不相关的子系统串行化：进程采集要跑 `ps`（几十毫秒），期间不该把别的命令一起卡住。`AppState` 的每个可变字段各自带 `Mutex`，已经足够。命令签名统一写 `state: State<'_, Arc<AppState>>`。
 
@@ -75,7 +78,7 @@
 ## 目录结构总览
 
 ```
-chuaker7/
+Ki6/
 ├── Cargo.toml                      # workspace 根（members = ["src-tauri"]）
 ├── Cargo.lock
 ├── .cargo/config.toml              # 保留（tuna 稀疏索引），对子目录同样生效
@@ -265,7 +268,7 @@ name = "chuaker7"
 version = "1.2.0"
 edition = "2024"
 rust-version = "1.88"
-description = "chuaker7 — macOS 系统工具箱（Tauri v2 + React 重写版）"
+description = "Ki6 — macOS 系统工具箱（Tauri v2 + React 重写版）"
 authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
 license = "MIT"
 repository = "https://github.com/chuaker7/Ki6"
@@ -283,7 +286,8 @@ tauri-build = { version = "2.7", features = [] }
 tauri = { version = "2.12", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-dialog = "2.8"
 tauri-plugin-opener = "2.7"
-serde = { version = "1.0", features = ["derive"] }
+# rename_all_fields 自 serde 1.0.177 起可用 —— ContextTarget 的 camelCase 变体字段依赖它。
+serde = { version = "1.0.177", features = ["derive"] }
 serde_json = "1.0"
 dirs = "7.0"
 anyhow = "1.0"
@@ -314,7 +318,7 @@ fn main() {
 `src-tauri/src/lib.rs`：
 
 ```rust
-//! chuaker7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
+//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
@@ -330,7 +334,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
-        .expect("error while running chuaker7");
+        .expect("error while running Ki6");
 }
 ```
 
@@ -353,7 +357,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
-        .expect("error while running chuaker7");
+        .expect("error while running Ki6");
 }
 ```
 
@@ -362,7 +366,7 @@ pub fn run() {
 ```json
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "chuaker7",
+  "productName": "Ki6",
   "version": "1.2.0",
   "identifier": "com.igigi.chuaker7",
   "build": {
@@ -376,7 +380,7 @@ pub fn run() {
     "windows": [
       {
         "label": "main",
-        "title": "chuaker7",
+        "title": "Ki6",
         "width": 1080,
         "height": 720,
         "minWidth": 880,
@@ -402,7 +406,7 @@ pub fn run() {
     ],
     "category": "Utility",
     "shortDescription": "macOS 系统工具箱",
-    "longDescription": "chuaker7 —— 进程管理、文件管理、剪贴板、系统监控、插件与设置。",
+    "longDescription": "Ki6 —— 进程管理、文件管理、剪贴板、系统监控、插件与设置。",
     "macOS": { "minimumSystemVersion": "12.0" }
   },
   "plugins": {}
@@ -617,7 +621,7 @@ Expected：`v24.17.0`。
   "private": true,
   "version": "1.2.0",
   "type": "module",
-  "description": "chuaker7 —— macOS 系统工具箱（Tauri v2 + React 重写版）",
+  "description": "Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -736,7 +740,7 @@ export default defineConfig({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>chuaker7</title>
+    <title>Ki6</title>
   </head>
   <body>
     <div id="root"></div>
@@ -1808,7 +1812,7 @@ mod tests {
 `src-tauri/src/lib.rs` 改为：
 
 ```rust
-//! chuaker7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
+//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
@@ -1819,7 +1823,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
-        .expect("error while running chuaker7");
+        .expect("error while running Ki6");
 }
 ```
 
@@ -3097,7 +3101,7 @@ pub const EV_NOTICE: &str = "notice";
 - [ ] **Step 5: 接入 `lib.rs`，让应用能真正跑起来**
 
 ```rust
-//! chuaker7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
+//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
@@ -3139,7 +3143,7 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running chuaker7");
+        .expect("error while running Ki6");
 }
 ```
 
@@ -3730,7 +3734,7 @@ pub const EV_MENU_ACTION: &str = "menu-action";
 //! `menubar.*` / `edit.*` / `window.*` / `view.fullscreen` 等 key。
 //!
 //! 「关于 / 隐藏 / 退出」三项按 macOS 惯例带应用名后缀，在 Rust 侧拼成
-//! `<动词> chuaker7`；应用名本身取自 `menubar.title`（= "chuaker7"）。
+//! `<动词> Ki6`；应用名本身取自 `menubar.title`（= "Ki6"）。
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter};
@@ -3892,7 +3896,7 @@ pub fn on_menu_event(app: &AppHandle, id: &str) {
 >
 > 「关于 / 隐藏 / 退出」三项按 macOS 惯例带应用名后缀，在 Rust 侧拼成
 > `<动词> chuaker7`：关于用**已存在**的 `settings.about`（"关于" / "About"），
-> 应用名取 `menubar.title`（= "chuaker7"）。托盘菜单的「退出」继续用
+> 应用名取 `menubar.title`（= "Ki6"）。托盘菜单的「退出」继续用
 > `menubar.quit`（不带应用名，托盘里更自然）。
 
 `src-tauri/src/system/mod.rs` 追加模块声明：
@@ -3999,8 +4003,8 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use crate::core::icon::bird_rgba;
 use crate::core::i18n::{I18n, Locale};
+use crate::core::icon::bird_rgba;
 use crate::events::{EV_TRAY_OPEN, EV_TRAY_QUIT};
 
 /// 托盘里需要动态刷新的菜单项。
@@ -4024,19 +4028,15 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
     let icon = Image::new_owned(pixels, width, height);
 
     let i18n = I18n::new(locale);
+    // 应用名（展示名 "Ki6"），托盘标题项与 tooltip 共用。
+    let app_name = i18n.t("menubar.title");
     let cpu_label = i18n.t("monitor.cpu");
     let memory_label = i18n.t("monitor.memory");
     let disk_label = i18n.t("monitor.disk");
     let upload_label = i18n.t("monitor.upload");
     let download_label = i18n.t("monitor.download");
 
-    let title = MenuItem::with_id(
-        app,
-        "tray:title",
-        i18n.t("menubar.title"),
-        false,
-        None::<&str>,
-    )?;
+    let title = MenuItem::with_id(app, "tray:title", app_name.clone(), false, None::<&str>)?;
     let cpu = MenuItem::with_id(
         app,
         "tray:cpu",
@@ -4083,31 +4083,19 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
             &upload,
             &download,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(
-                app,
-                "tray:open",
-                i18n.t("menubar.open"),
-                true,
-                None::<&str>,
-            )?,
+            &MenuItem::with_id(app, "tray:open", i18n.t("menubar.open"), true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             // 用**自定义**项而不是 `PredefinedMenuItem::quit`：预定义项由系统直接
             // 退出应用，走不到下面的 `on_tray_menu_event`，`tray-quit` 事件就永远
             // 发不出去（契约里写了托盘「退出」要发这个事件）。
-            &MenuItem::with_id(
-                app,
-                "tray:quit",
-                i18n.t("menubar.quit"),
-                true,
-                None::<&str>,
-            )?,
+            &MenuItem::with_id(app, "tray:quit", i18n.t("menubar.quit"), true, None::<&str>)?,
         ],
     )?;
 
     TrayIconBuilder::with_id("main")
         .icon(icon)
         .icon_as_template(true)
-        .tooltip("chuaker7")
+        .tooltip(&app_name)
         .show_menu_on_left_click(false)
         .menu(&menu)
         // 托盘菜单的点击必须自己接：`Builder::on_menu_event` 是**全局**监听，
@@ -4148,12 +4136,14 @@ pub fn update_metrics<R: Runtime>(app: &AppHandle<R>, info: &crate::core::monito
     let _ = items
         .disk
         .set_text(format!("{}  {:.1}%", items.disk_label, info.disk_usage));
-    let _ = items
-        .upload
-        .set_text(format!("{}  {:.2} MB/s", items.upload_label, info.network_upload));
-    let _ = items
-        .download
-        .set_text(format!("{}  {:.2} MB/s", items.download_label, info.network_download));
+    let _ = items.upload.set_text(format!(
+        "{}  {:.2} MB/s",
+        items.upload_label, info.network_upload
+    ));
+    let _ = items.download.set_text(format!(
+        "{}  {:.2} MB/s",
+        items.download_label, info.network_download
+    ));
 }
 
 /// 处理托盘点击与菜单点击。
@@ -4223,6 +4213,11 @@ Builder 追加（`Builder::on_tray_icon_event` 的第一个参数是 `&AppHandle
 ```rust
             crate::system::tray::update_metrics(&app, &info);
 ```
+
+> **实测约束（控制器补）**：① `core::monitor::SystemInfo` 派生了 `Copy`，
+> 所以 `update_metrics(&app, &info)` 在 `push_sample` 之后再借用 `info` 是合法的；
+> ② 托盘菜单里数值的刷新周期是设置项 `auto_refresh_interval`，**默认 5.0 秒**
+> —— 真机复核「数值会不会刷新」时观测窗口必须 **> 5 秒**，否则会误判成「不刷新」。
 
 - [ ] **Step 3: 编译并人工验收**
 
@@ -6246,17 +6241,31 @@ export function AppShell() {
 - [ ] **Step 6: 挂载 `App.tsx`**
 
 ```tsx
-import { AppShell } from './app/AppShell';
-
 export function App() {
-  return <AppShell />;
+  return (
+    <main style={{ padding: 24, fontFamily: 'system-ui' }}>
+      <h1>Ki6</h1>
+      <p>Tauri v2 + React 脚手架已就绪。</p>
+    </main>
+  );
 }
 ```
 
 同时给 `frontend/index.html` 的 `<html>` 补上默认主题属性：
 
 ```html
-<html lang="zh-CN" data-theme="dark" data-accent="signal">
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ki6</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
 ```
 
 > `tokens.css` 里 `--accent` 只在 `[data-accent='signal|haze|moss|amber']` 下定义，`:root` **没有兜底值**。
@@ -6444,7 +6453,7 @@ vi.mock('../lib/bridge', () => ({
       'nav.settings': '设置',
       'nav.section.tools': '工具',
       'nav.section.system': '系统',
-      'app.brand': 'CHUAKER7',
+      'app.brand': 'KI6',
       'app.tagline': 'MACOS 系统工具箱',
     }),
     // 默认激活的是进程页，AppShell 会把它挂载起来，
@@ -6488,7 +6497,7 @@ vi.mock('../lib/store', async () => {
       'nav.settings': '设置',
       'nav.section.tools': '工具',
       'nav.section.system': '系统',
-      'app.brand': 'CHUAKER7',
+      'app.brand': 'KI6',
       'app.tagline': 'MACOS 系统工具箱',
     },
     activeTab: 'processes',
@@ -6511,7 +6520,7 @@ describe('AppShell', () => {
 
   it('渲染品牌与六个标签页', async () => {
     render(<AppShell />);
-    expect(await screen.findByText('CHUAKER7')).toBeInTheDocument();
+    expect(await screen.findByText('KI6')).toBeInTheDocument();
 
     // 当前激活页的标题（Kicker）与侧栏导航项同名，
     // findByText 会命中多个元素，必须限定在侧栏导航区内断言。
