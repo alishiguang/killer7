@@ -38,6 +38,7 @@
   - 占位文件（若需要临时创建以让 Rust 侧先跑起来）必须位于被 gitignore 的路径下，不得提交。
 - **分支策略**：`main` 继续演进；egui 版永久存档在 `legacy-egui` 分支（指向 `b36b8dc`），**不得删除或改写该分支**。
 - **命名约定（重要）**：GitHub **仓库名是 `chuaker7/Ki6`**（远端 `https://github.com/chuaker7/Ki6.git`）；而**包名 / crate 名 / 类型名 / 数据目录 / LaunchAgent 标签 / 应用显示名（`productName`）/ 本地化 key 等一切标识符统一为 `chuaker7`**。两者**刻意不同**，任何任务都不得"顺手统一"或把 `chuaker7` 改成 `Ki6`（反之亦然）。**README 的标题与项目介绍用 `Ki6`**（Task 27 统一改写 README 时落实），但 README 正文描述"应用本体"时仍用 `chuaker7`。**唯一例外**：`core::settings` 里的一次性旧目录迁移必须硬编码旧名 `killer7`，那是给迁移用的历史路径，不得扩散到别处。
+- **进程缓存不变量（重要）**：`ProcessManager::processes` 字段是 `list_processes` 命令的**唯一**数据源，而 `collect()` **不写**这个字段（只有 `load_blocking()` 才写）。因此：① `AppState::new` 必须调一次 `load_blocking(limit)`；② 后台循环 `spawn_process_loop` 与命令 `refresh_processes` 采集完之后都必须**回写** `processes.processes`。漏掉任何一处，`list_processes` 就永远返回空列表，进程页（默认标签页）每次启动后要空好几秒。
 - **共享状态形状（重要）**：`AppState` 由 `Arc<AppState>` 直接托管（`manage(Arc::new(app_state))`），**不得**写成 `Arc<Mutex<AppState>>`——`std::sync::Mutex` 不参与字段访问的 autoderef，`state.sample_interval_ms` 这类写法会直接编译失败（E0609）；而且外套一层全局锁会把设置、剪贴板、插件等互不相关的子系统串行化：进程采集要跑 `ps`（几十毫秒），期间不该把别的命令一起卡住。`AppState` 的每个可变字段各自带 `Mutex`，已经足够。命令签名统一写 `state: State<'_, Arc<AppState>>`。
 
 ---
@@ -65,6 +66,8 @@
 | 前端截图验收 | 本机 Google Chrome 可用：`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --screenshot=out.png --window-size=1080,720 http://localhost:1420` |
 | 已知踩坑（勿重试） | `@vitejs/plugin-react` 6.x 只支持 Vite 8 → 用 5.0.4 + Vite 7.1.5；TypeScript 7.0.2 是 Go 重写新 major → 用 5.9.3；crates.io API 不声明 MSRV，只能实测编译。 |
 | `Mutex` 与字段 autoderef | `std::sync::Mutex` **不参与字段访问的 autoderef**：`Arc<Mutex<T>>.f` / `Box<Mutex<T>>.f` / `Mutex<T>.f` 一律 E0609；`Arc<Arc<T>>.f` 与 `MutexGuard<T>.f` 正常。**方法调用**（`.lock()`）不受此限制。跨 `Mutex` 取字段只能通过 `MutexGuard`（先 `.lock()` 再取字段）。 |
+| `ps` / `lsof` 实耗 | `/bin/ps -eo pid=,comm=` 约 **30ms**；`/usr/sbin/lsof -nP -iTCP -sTCP:LISTEN` 约 **55ms**。启动时同步采一次进程列表（`load_blocking`）总代价约 90ms，可以接受。 |
+| `tauri::ipc::InvokeHandler` | 是**类型别名** `pub type InvokeHandler<R> = dyn Fn(Invoke<R>) -> bool + Send + Sync + 'static;`——缺泛型实参，且无尺寸**不能按值返回**（E0107 / E0277）。`Builder::invoke_handler` 只要 `F: Fn(Invoke<R>) -> bool + Send + Sync + 'static`，所以写 `impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static` 即可（已实测编译通过 + clippy 0 诊断）。`generate_handler![...]` 支持**多段模块路径**（`commands::processes::list_processes`），同样实测通过。 |
 | `notify` 事件枚举 | `notify 8.2` 的事件类型来自 `notify_types 2.2`：`notify::EventKind::{Create, Remove, Modify, Access, Any}`，`ModifyKind` 在 `notify::event::ModifyKind`。`_` 只能出现在**模式**位置，表达式里写 `EventKind::Remove(_)` 会报 E0001——判断事件要用 `matches!`。 |
 
 ---
@@ -129,7 +132,7 @@ chuaker7/
 | 分组 | 命令 | 参数 | 返回 |
 | --- | --- | --- | --- |
 | 进程 | `list_processes` | — | `Vec<ProcessRow>` |
-| | `refresh_processes` | — | `()` |
+| | `refresh_processes` | — | `Vec<ProcessRow>` |
 | | `kill_process` | `pid: i32` | `Result<bool, String>` |
 | 文件 | `list_dir` | `path: String` | `Vec<FileRow>` |
 | | `create_folder` | `dir: String, name: String` | `Result<(), String>` |
@@ -2667,9 +2670,15 @@ impl AppState {
         let mut plugins = PluginManager::default();
         plugins.load_plugins();
 
+        // 启动时同步采一次进程列表：窗口一打开就有数据，不必等后台循环的第一轮。
+        // 实测 `ps` 约 30ms、`lsof` 约 55ms，这个代价可以接受；
+        // 不这么做的话 `list_processes` 会拿到空列表，进程页要空好几秒。
+        let mut processes = ProcessManager::default();
+        processes.load_blocking(settings.process_list_limit);
+
         Self {
             i18n: Mutex::new(I18n::new(locale)),
-            processes: Mutex::new(ProcessManager::default()),
+            processes: Mutex::new(processes),
             files: Mutex::new(FileManager::default()),
             clipboard: Mutex::new(clipboard),
             monitor: Mutex::new(SystemMonitor::default()),
@@ -2730,11 +2739,15 @@ pub fn spawn_process_loop(app: AppHandle, state: Arc<AppState>) {
 
             let rows = {
                 let mut processes = state.processes.lock().expect("进程锁中毒");
-                processes
-                    .collect(limit)
+                let list = processes.collect(limit);
+                let rows = list
                     .iter()
                     .map(crate::commands::dto::ProcessRow::from)
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>();
+                // 回写缓存：`list_processes` 命令读的就是这个字段，
+                // 不回写的话那条命令永远返回空列表。
+                processes.processes = list;
+                rows
             };
 
             let _ = app.emit(EV_PROCESSES, rows);
@@ -2989,11 +3002,7 @@ use crate::state::AppState;
 #[tauri::command]
 pub fn list_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
     let processes = state.processes.lock().expect("进程锁中毒");
-    processes
-        .processes
-        .iter()
-        .map(ProcessRow::from)
-        .collect()
+    processes.processes.iter().map(ProcessRow::from).collect()
 }
 
 /// 触发一次进程列表刷新（同步采集后立即返回）。
@@ -3005,11 +3014,11 @@ pub fn refresh_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
         .expect("设置锁中毒")
         .process_list_limit;
     let mut processes = state.processes.lock().expect("进程锁中毒");
-    processes
-        .collect(limit)
-        .iter()
-        .map(ProcessRow::from)
-        .collect()
+    let list = processes.collect(limit);
+    let rows = list.iter().map(ProcessRow::from).collect();
+    // 回写缓存，随后的 `list_processes` 才能拿到同一份数据。
+    processes.processes = list;
+    rows
 }
 
 /// 结束指定进程。
@@ -3032,10 +3041,8 @@ pub fn kill_process(pid: i32) -> Result<bool, String> {
 ```rust
 pub mod processes;
 
-use tauri::ipc::InvokeHandler;
-
 /// 汇总所有 command。
-pub fn handler() -> InvokeHandler {
+pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         processes::list_processes,
         processes::refresh_processes,
@@ -3045,6 +3052,17 @@ pub fn handler() -> InvokeHandler {
 ```
 
 `src-tauri/src/lib.rs` 的 Builder 追加 `.invoke_handler(commands::handler())`。
+
+> **为什么不能写 `-> InvokeHandler`**：`tauri::ipc::InvokeHandler<R>` 是个**类型别名**，
+> 指向 `dyn Fn(Invoke<R>) -> bool + Send + Sync + 'static`——无尺寸（unsized），
+> 既缺泛型实参、又不能按值返回（编译器报 E0107 / E0277）。
+> `Builder::invoke_handler` 要的只是 `F: Fn(Invoke<R>) -> bool + Send + Sync + 'static`，
+> 所以返回 `impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static` 即可。
+> `tauri::Wry` 是本应用默认运行时（`tauri::Builder::default()` 即 `Builder<Wry>`），
+> 本项目只跑 macOS，不做跨平台适配，显式写死它是准确的。
+>
+> 后续 Task 9–11 继续**往这一个 `generate_handler!` 列表里追加条目**，
+> 不要另起一个 `handler()` 函数（会与本函数重复定义）。
 
 - [ ] **Step 3: 编译并提交**
 
