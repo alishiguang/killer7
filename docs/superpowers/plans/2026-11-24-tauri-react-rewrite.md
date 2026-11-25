@@ -2015,7 +2015,14 @@ pub struct HistoryEntry {
 
 ```rust
 /// 规范化历史条目的 id：缺失（为 0）或重复时按顺序重排为 `1..=n`。
-pub fn normalize_ids(history: &mut Vec<HistoryEntry>) {
+///
+/// 参数用 `&mut [HistoryEntry]` 而不是 `&mut Vec<HistoryEntry>`：后者会触发
+/// `clippy::ptr_arg`，与本任务 Step 7「clippy 0 warning」的 Expected 冲突。
+/// 调用点传 `&mut history`（`history` 是 `Vec`）靠 deref coercion 即可，无需改动。
+///
+/// 注意：只有在 id **缺失或重复**时才重排。已经是稀疏但唯一的 id 会原样保留，
+/// 因此 id **不保证连续**——命令层不要假设 id 连续。
+pub fn normalize_ids(history: &mut [HistoryEntry]) {
     let mut seen: Vec<u64> = Vec::with_capacity(history.len());
     let mut needs_rewrite = false;
 
