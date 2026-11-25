@@ -5978,9 +5978,9 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 写 `frontend/src/pages/Processes.tsx`**
 
 ```tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Card, DataTable, Kicker, Modal, SearchField, type Column } from '../components';
+import { Card, Kicker, Modal, SearchField, Segmented, VirtualList } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
 import { pushToast } from '../lib/store';
@@ -5994,6 +5994,8 @@ export function Processes() {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('pid');
   const [pendingKill, setPendingKill] = useState<ProcessRow | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(420);
 
   // 首次拉取 + 订阅后端推送。
   useEffect(() => {
@@ -6007,6 +6009,22 @@ export function Processes() {
     return () => {
       disposed = true;
     };
+  }, []);
+
+  // 列表视口高度随窗口变化，虚拟列表按实际高度计算可见行数。
+  useEffect(() => {
+    const element = listRef.current;
+    if (!element) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry && entry.contentRect.height > 0) {
+        setViewportHeight(entry.contentRect.height);
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
   const filtered = useMemo(() => {
@@ -6038,38 +6056,6 @@ export function Processes() {
     });
     return copy;
   }, [filtered, sortKey]);
-
-  const columns = useMemo<Column<ProcessRow>[]>(
-    () => [
-      {
-        key: 'pid',
-        title: t('process.pid'),
-        width: 72,
-        align: 'right',
-        render: (row) => <span className="mono">{row.pid}</span>,
-      },
-      {
-        key: 'name',
-        title: t('process.name'),
-        width: 'remainder',
-        render: (row) => <span title={row.fullPath}>{row.displayName}</span>,
-      },
-      {
-        key: 'port',
-        title: t('process.port'),
-        width: 140,
-        render: (row) =>
-          row.ports.length === 0 ? (
-            <span className="text-muted">—</span>
-          ) : (
-            <span className="mono">
-              {row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
-            </span>
-          ),
-      },
-    ],
-    [t],
-  );
 
   const onRefresh = useCallback(async () => {
     const list = await api.refreshProcesses();
@@ -6110,15 +6096,59 @@ export function Processes() {
       <Card
         title={t('process.count', [String(sorted.length)])}
         className="page__card"
-        actions={<span className="kicker">{t('common.search')}</span>}
+        actions={
+          <div className="page__tools">
+            <Segmented<SortKey>
+              value={sortKey}
+              onChange={setSortKey}
+              options={[
+                { value: 'pid', label: t('process.pid') },
+                { value: 'name', label: t('process.name') },
+                { value: 'port', label: t('process.port') },
+              ]}
+            />
+          </div>
+        }
       >
-        <DataTable
-          columns={columns}
-          items={sorted}
-          getKey={(row) => String(row.pid)}
-          onRowClick={(row) => setPendingKill(row)}
-          empty={t('process.empty')}
-        />
+        <div className="vtable" ref={listRef}>
+          <div className="vrow vrow--head">
+            <span className="vrow__pid">{t('process.pid')}</span>
+            <span className="vrow__name">{t('process.name')}</span>
+            <span className="vrow__port">{t('process.port')}</span>
+          </div>
+          <VirtualList
+            items={sorted}
+            height={viewportHeight}
+            rowHeight={26}
+            overscan={8}
+            getKey={(row) => String(row.pid)}
+            renderRow={(row) => (
+              <div
+                className="vrow"
+                onClick={() => setPendingKill(row)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  void api.popupContextMenu('process', {
+                    pid: row.pid,
+                    displayName: row.displayName,
+                    fullPath: row.fullPath,
+                  });
+                }}
+              >
+                <span className="mono vrow__pid">{row.pid}</span>
+                <span className="vrow__name" title={row.fullPath}>
+                  {row.displayName}
+                </span>
+                <span className="mono vrow__port">
+                  {row.ports.length === 0
+                    ? '—'
+                    : row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
+                </span>
+              </div>
+            )}
+            empty={t('process.empty')}
+          />
+        </div>
       </Card>
 
       <Modal
@@ -6274,6 +6304,13 @@ export { VirtualList } from './VirtualList';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// jsdom 不实现 ResizeObserver；进程页用它测量列表视口高度。
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
+
 vi.mock('../lib/bridge', () => ({
   EVENT: { processes: 'processes' },
   api: {
@@ -6283,6 +6320,7 @@ vi.mock('../lib/bridge', () => ({
     ]),
     refreshProcesses: vi.fn().mockResolvedValue([]),
     killProcess: vi.fn().mockResolvedValue(true),
+    popupContextMenu: vi.fn().mockResolvedValue(undefined),
   },
   onEvent: vi.fn().mockResolvedValue(() => {}),
 }));
