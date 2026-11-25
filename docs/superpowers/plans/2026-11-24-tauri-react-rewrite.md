@@ -5461,6 +5461,7 @@ AI-Tool: TophantAI"
 - Create: `frontend/src/app/Toast.tsx`
 - Create: `frontend/src/app/AppShell.tsx`
 - Modify: `frontend/src/App.tsx`
+- Modify: `frontend/index.html`
 - Create: `frontend/src/app/AppShell.test.tsx`
 
 **Interfaces:**
@@ -5690,6 +5691,16 @@ export function App() {
   return <AppShell />;
 }
 ```
+
+同时给 `frontend/index.html` 的 `<html>` 补上默认主题属性：
+
+```html
+<html lang="zh-CN" data-theme="dark" data-accent="signal">
+```
+
+> `tokens.css` 里 `--accent` 只在 `[data-accent='signal|haze|moss|amber']` 下定义，`:root` **没有兜底值**。
+> 若首帧不带 `data-accent`，`var(--accent)` 未定义，焦点环、选区、输入框聚焦、复选框选中与强调色按钮这 9 处消费点会同时失效。
+> 这里把默认值直接写进 HTML，保证**首帧就有正确配色**；Step 5 的启动引导随后用设置里的实际值覆盖这两个属性。
 
 - [ ] **Step 7: 补外壳样式**
 
