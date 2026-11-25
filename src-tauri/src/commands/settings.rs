@@ -27,22 +27,45 @@ pub fn update_settings(
     // 若在写入之后再取旧值，拿到的就是新值，比较永远相等，热更新就成了死代码。
     let previous = state.settings.lock().expect("设置锁中毒").clone();
 
-    let next = {
-        let mut settings = state.settings.lock().expect("设置锁中毒");
-        let next = patch.apply(&settings);
-        *settings = next.clone();
-        next
-    };
+    let mut next = patch.apply(&previous);
 
-    // 落盘放在锁外：磁盘 IO 不该占着设置锁（与剪贴板落盘同一原则）。
+    // 自启开关必须落到 LaunchAgent 上，否则会出现「设置里显示已开启、实际没注册」
+    // 与「Agent 建好了、开关却显示关闭」两个互不同步的真相源（Task 15 评审 I-1）。
+    // 失败就回滚这一个字段，不让设置与现实脱节。
+    if previous.launch_at_login != next.launch_at_login {
+        let outcome = if next.launch_at_login {
+            crate::system::autolaunch::enable()
+        } else {
+            crate::system::autolaunch::disable()
+        };
+        if let Err(err) = outcome {
+            eprintln!("[autolaunch] 应用开机自启设置失败，回滚该字段: {err}");
+            next.launch_at_login = previous.launch_at_login;
+        }
+    }
+
+    // 写回全局状态：锁内只改内存。
+    {
+        let mut settings = state.settings.lock().expect("设置锁中毒");
+        *settings = next.clone();
+    }
+
+    // 落盘放在锁外：`next` 是独立副本，写盘不占设置锁。
     next.save();
 
     // 语言变了要换文案表。
-    {
-        let mut i18n = state.i18n.lock().expect("文案锁中毒");
-        if i18n.locale() != next.locale {
+    if previous.locale != next.locale {
+        {
+            let mut i18n = state.i18n.lock().expect("文案锁中毒");
             i18n.set_locale(next.locale);
         }
+        // 原生菜单栏与托盘菜单也要跟着换文案，否则界面是英文、菜单栏还是中文 ——
+        // 这正是历史提交 f5fc259「消除半中半英」要消灭的现象（Task 15 评审 I-2）。
+        // `menu::build` 结尾是 `set_as_app_menu()`，是替换语义，可以安全重复调用。
+        if let Err(err) = crate::system::menu::build(&app, next.locale) {
+            eprintln!("[menu] 重建菜单栏失败: {err}");
+        }
+        crate::system::tray::update_locale(&app, next.locale);
     }
 
     // 采样间隔与网络开关热更新。
@@ -72,9 +95,12 @@ pub fn update_settings(
 /// 取指定语言的整张文案表。
 #[tauri::command]
 pub fn get_strings(locale: String) -> HashMap<String, String> {
-    let parsed = match locale.as_str() {
-        "en" => Locale::En,
-        _ => Locale::ZhHans,
+    // 与 `Locale::detect()` 同一口径：按前缀判定。
+    // 否则前端传 "en-US" 会回落到中文，而系统语言探测会判成英文（Task 15 评审 M-2）。
+    let parsed = if locale.trim_start().to_ascii_lowercase().starts_with("en") {
+        Locale::En
+    } else {
+        Locale::ZhHans
     };
     I18n::new(parsed).table()
 }

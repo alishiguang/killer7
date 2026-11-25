@@ -33,15 +33,17 @@ pub fn run() {
             crate::system::menu::build(&handle, locale)?;
             crate::system::tray::build(&handle, locale)?;
 
-            // 全局快捷键 ⌘L：默认关闭，开了才注册（设置项可热更新）。
+            // 全局快捷键 ⌘L：**默认开启**（core/settings.rs 的默认值是 true），
+            // 设置项可热更新。注册失败必须留下痕迹，否则「显示已开启但毫无反应」
+            // 会变成无法排查的静默失效。
             {
                 let shortcut_enabled = state
                     .settings
                     .lock()
                     .expect("设置锁中毒")
                     .global_shortcut_enabled;
-                if shortcut_enabled {
-                    let _ = crate::system::shortcut::register(&handle);
+                if shortcut_enabled && let Err(err) = crate::system::shortcut::register(&handle) {
+                    eprintln!("[shortcut] 注册 ⌘L 失败: {err}");
                 }
             }
 
@@ -58,7 +60,12 @@ pub fn run() {
             Ok(())
         })
         .on_menu_event(|app, event| {
-            crate::system::menu::on_menu_event(app, event.id().as_ref());
+            let id = event.id().as_ref();
+            crate::system::menu::on_menu_event(app, id);
+            // 右键菜单的 id 统一以 `ctx.` 开头，与应用菜单的 `nav:` / `app:` 区分开。
+            if id.starts_with("ctx.") {
+                crate::system::menu::on_context_menu_event(app, id);
+            }
         })
         .on_tray_icon_event(|app, event| {
             crate::system::tray::on_tray_event(app, &event);

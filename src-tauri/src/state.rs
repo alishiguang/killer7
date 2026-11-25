@@ -10,6 +10,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
 
+use crate::commands::dto::ContextTarget;
 use crate::core::clipboard::ClipboardManager;
 use crate::core::files::FileManager;
 use crate::core::i18n::I18n;
@@ -40,6 +41,11 @@ pub struct AppState {
     pub network_enabled: Arc<AtomicBool>,
     /// 当前目录的文件变更监听器。
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
+    /// 当前弹出的原生右键菜单所对应的目标。
+    ///
+    /// 菜单项的点击事件只带 id，不带目标对象，所以弹出菜单时把目标
+    /// 暂存到这里，点击时再取出来用。
+    pub pending_context: Mutex<Option<ContextTarget>>,
 }
 
 impl AppState {
@@ -74,6 +80,7 @@ impl AppState {
             network_enabled,
             watcher: Mutex::new(None),
             settings: Mutex::new(settings),
+            pending_context: Mutex::new(None),
         }
     }
 }

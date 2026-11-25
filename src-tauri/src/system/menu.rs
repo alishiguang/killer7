@@ -15,10 +15,12 @@
 //! `<动词> chuaker7`；应用名本身取自 `menubar.title`（= "chuaker7"）。
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
+use crate::commands::dto::ContextTarget;
 use crate::core::i18n::{I18n, Locale};
 use crate::events::EV_MENU_ACTION;
+use crate::events::EV_NOTICE;
 
 /// 构建并安装应用菜单栏。
 pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
@@ -145,4 +147,116 @@ pub fn on_menu_event(app: &AppHandle, id: &str) {
     if id.starts_with("nav:") || id == "app:settings" {
         let _ = app.emit(EV_MENU_ACTION, id);
     }
+}
+
+/// 处理原生右键菜单项点击。
+///
+/// 右键菜单的目标对象在弹出时被暂存进 `AppState::pending_context`
+/// （菜单事件本身只带 id，不带目标），这里取出来执行对应动作。
+pub fn on_context_menu_event(app: &AppHandle, id: &str) {
+    use crate::core::clipboard;
+    use crate::core::platform;
+    use crate::core::process::ProcessManager;
+
+    let state = app.state::<std::sync::Arc<crate::state::AppState>>();
+    let target = {
+        let mut pending = state.pending_context.lock().expect("右键目标锁中毒");
+        pending.take()
+    };
+
+    let Some(target) = target else {
+        return;
+    };
+
+    let locale = state.i18n.lock().expect("文案锁中毒").locale();
+    let i18n = I18n::new(locale);
+
+    match (id, &target) {
+        ("ctx.process.copyPath", ContextTarget::Process { full_path, .. }) => {
+            platform::copy_to_clipboard(full_path);
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
+        }
+        (
+            "ctx.process.kill",
+            ContextTarget::Process {
+                pid, display_name, ..
+            },
+        ) => {
+            if ProcessManager::kill_process(*pid) {
+                notify(
+                    app,
+                    &i18n,
+                    "info",
+                    &i18n.tf("process.kill.done", &[display_name]),
+                );
+                // 立刻重采一次并把新列表推给前端，不要等下一个刷新周期。
+                let rows = {
+                    let limit = state
+                        .settings
+                        .lock()
+                        .expect("设置锁中毒")
+                        .process_list_limit;
+                    let mut processes = state.processes.lock().expect("进程锁中毒");
+                    processes
+                        .collect(limit)
+                        .iter()
+                        .map(crate::commands::dto::ProcessRow::from)
+                        .collect::<Vec<_>>()
+                };
+                let _ = app.emit(crate::events::EV_PROCESSES, rows);
+            } else {
+                notify(app, &i18n, "error", &i18n.t("process.kill.failed"));
+            }
+        }
+        ("ctx.file.reveal", ContextTarget::File { path, .. }) => {
+            platform::reveal_in_finder(std::path::Path::new(path));
+        }
+        ("ctx.file.copyPath", ContextTarget::File { path, .. }) => {
+            platform::copy_to_clipboard(path);
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
+        }
+        ("ctx.file.rename", ContextTarget::File { .. }) => {
+            let _ = app.emit(EV_MENU_ACTION, "file:rename");
+        }
+        ("ctx.file.delete", ContextTarget::File { .. }) => {
+            let _ = app.emit(EV_MENU_ACTION, "file:delete");
+        }
+        ("ctx.clipboard.copy", ContextTarget::Clipboard { content, .. }) => {
+            platform::copy_to_clipboard(content);
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
+        }
+        ("ctx.clipboard.delete", ContextTarget::Clipboard { id, .. }) => {
+            let changed = {
+                let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
+                manager.delete_history_item(*id)
+            };
+            // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
+            if changed {
+                let result = clipboard::persist_history(|| {
+                    state
+                        .clipboard
+                        .lock()
+                        .expect("剪贴板锁中毒")
+                        .history
+                        .clone()
+                });
+                if let Err(err) = result {
+                    eprintln!("[clipboard] 落盘失败: {err}");
+                }
+            }
+            notify(app, &i18n, "info", &i18n.t("clipboard.deleted"));
+        }
+        _ => {}
+    }
+}
+
+/// 向前端回传提示。
+fn notify(app: &AppHandle, _i18n: &I18n, kind: &str, message: &str) {
+    let _ = app.emit(
+        EV_NOTICE,
+        crate::commands::dto::Notice {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        },
+    );
 }
