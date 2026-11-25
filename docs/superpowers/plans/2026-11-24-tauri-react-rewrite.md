@@ -37,7 +37,7 @@
   - **任何 release 构建（`tauri build`）之前，必须确认 `frontend/dist/index.html` 是真实前端产物，而不是占位文件**——否则空白首页会被内嵌进二进制，直接违反「首帧不得出现空白」的性能红线。
   - 占位文件（若需要临时创建以让 Rust 侧先跑起来）必须位于被 gitignore 的路径下，不得提交。
 - **分支策略**：`main` 继续演进；egui 版永久存档在 `legacy-egui` 分支（指向 `b36b8dc`），**不得删除或改写该分支**。
-- **命名约定（重要）**：GitHub **仓库名是 `chuaker7/Ki6`**（远端 `https://github.com/chuaker7/Ki6.git`）；而**包名 / crate 名 / 类型名 / 数据目录 / LaunchAgent 标签 / 应用显示名（`productName`）/ 本地化 key 等一切标识符统一为 `chuaker7`**。两者**刻意不同**，任何任务都不得"顺手统一"或把 `chuaker7` 改成 `Ki6`（反之亦然）。**README 的标题与项目介绍用 `Ki6`**（Task 27 统一改写 README 时落实），但 README 正文描述"应用本体"时仍用 `chuaker7`。
+- **命名约定（重要）**：GitHub **仓库名是 `chuaker7/Ki6`**（远端 `https://github.com/chuaker7/Ki6.git`）；而**包名 / crate 名 / 类型名 / 数据目录 / LaunchAgent 标签 / 应用显示名（`productName`）/ 本地化 key 等一切标识符统一为 `chuaker7`**。两者**刻意不同**，任何任务都不得"顺手统一"或把 `chuaker7` 改成 `Ki6`（反之亦然）。**README 的标题与项目介绍用 `Ki6`**（Task 27 统一改写 README 时落实），但 README 正文描述"应用本体"时仍用 `chuaker7`。**唯一例外**：`core::settings` 里的一次性旧目录迁移必须硬编码旧名 `killer7`，那是给迁移用的历史路径，不得扩散到别处。
 
 ---
 
@@ -1476,8 +1476,10 @@ mod tests {
 //!
 //! 字段以 camelCase 落盘（与前端契约一致），同时通过 `alias` 接受 egui 版
 //! 写下的 snake_case 旧字段，用户设置不会因为改版而丢失。
+//! 数据目录同样从 egui 版的 `killer7` 换成 `chuaker7`，由 `Settings::load()`
+//! 在首次启动时做一次性目录迁移。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -1503,6 +1505,34 @@ pub fn clipboard_history_path() -> PathBuf {
 /// 插件目录（对应 Swift 版的 `Application Support/LuciBox/Plugins`）。
 pub fn plugins_dir() -> PathBuf {
     data_dir().join("Plugins")
+}
+
+/// 旧版（egui 时代）数据目录：`~/Library/Application Support/killer7`。
+///
+/// 项目全局改名为 `chuaker7` 后，新旧版本的配置落在**不同目录**。
+/// `Settings` 里的 `alias` 只解决**字段名**的兼容，解决不了**文件路径**——
+/// 若不迁移，egui 版用户的设置、剪贴板历史与插件目录都会静默"消失"。
+///
+/// > 这是整个代码库里**唯一**允许出现旧名 `killer7` 的地方，且只用于一次性迁移。
+pub fn legacy_data_dir() -> PathBuf {
+    let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+    base.join("killer7")
+}
+
+/// 把旧版数据目录整体改名到新版目录。
+///
+/// 仅在旧目录存在、且新版目录尚不存在时执行——绝不覆盖已有数据。
+/// 失败（例如权限不足）时静默忽略：迁移只是锦上添花，不该挡住应用启动。
+fn migrate_data_dir(from: &Path, to: &Path) -> bool {
+    if !from.exists() || to.exists() {
+        return false;
+    }
+    if let Some(parent) = to.parent() {
+        if std::fs::create_dir_all(parent).is_err() {
+            return false;
+        }
+    }
+    std::fs::rename(from, to).is_ok()
 }
 
 /// 全局设置。
@@ -1620,7 +1650,10 @@ impl Default for Settings {
 
 impl Settings {
     /// 从磁盘读取设置，文件缺失或损坏时返回默认值。
+    ///
+    /// 读取前先做一次性旧目录迁移（egui 版 → 本重写版）。
     pub fn load() -> Self {
+        migrate_data_dir(&legacy_data_dir(), &data_dir());
         let Ok(text) = std::fs::read_to_string(settings_path()) else {
             return Self::default();
         };
@@ -1689,6 +1722,31 @@ mod tests {
         assert!(text.contains("\"showMenuBar\""));
         assert!(text.contains("\"autoRefreshInterval\""));
     }
+
+    #[test]
+    fn migrates_legacy_data_dir_only_once() {
+        let base = std::env::temp_dir().join(format!(
+            "chuaker7-migrate-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let from = base.join("killer7");
+        let to = base.join("chuaker7");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&from).expect("应能创建旧目录");
+        std::fs::write(from.join("settings.json"), "{}").expect("应能写入旧配置");
+
+        // 旧目录存在、新目录不存在 → 迁移
+        assert!(migrate_data_dir(&from, &to));
+        assert!(to.join("settings.json").exists());
+        assert!(!from.exists());
+
+        // 新目录已存在 → 不再迁移，绝不覆盖已有数据
+        assert!(!migrate_data_dir(&from, &to));
+        assert!(to.join("settings.json").exists());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }
 ```
 
@@ -1741,6 +1799,7 @@ git commit -m "feat: 迁移 core 纯逻辑模块（平台/图标/本地化/设�
 - core/ 保持不依赖 tauri，业务逻辑可脱离 WebView 单测
 - i18n 的 include_str! 路径随 crate 迁移修正为 ../../../locales/
 - Settings 改 camelCase 落盘并用 alias 兼容 egui 版 snake_case 旧配置
+- 数据目录从 egui 版的 killer7 迁到 chuaker7，Settings::load() 首次启动做一次性目录迁移
 - theme 剥离 egui Color32，只保留 ThemeMode / Accent 设置项
 
 AI-Coding: true
