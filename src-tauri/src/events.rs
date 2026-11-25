@@ -50,3 +50,5 @@ pub const EV_TRAY_OPEN: &str = "tray-open";
 pub const EV_TRAY_QUIT: &str = "tray-quit";
 /// 界面提示事件。
 pub const EV_NOTICE: &str = "notice";
+/// 原生菜单动作事件（前端据此切换标签页 / 打开设置）。
+pub const EV_MENU_ACTION: &str = "menu-action";
