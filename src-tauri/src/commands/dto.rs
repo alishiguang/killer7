@@ -122,6 +122,14 @@ pub struct Notice {
 }
 
 /// 原生右键菜单的目标对象。
+///
+/// `rename_all` 在 enum 上只改**变体名**，`rename_all_fields` 才改**变体内部字段**。
+/// 前端发的是 camelCase 的 payload（`{ pid, displayName, fullPath }`），
+/// Task 25 会用 `serde_json::from_value::<ContextTarget>` 反序列化它——
+/// 少了 `rename_all_fields` 会解析失败（`missing field 'display_name'`），
+/// 右键菜单永远弹不出来。
+///
+/// `rename_all_fields` 自 serde 1.0.177 起可用；本项目依赖下限取 1.0.177，锁定 serde 1.0.229。
 #[derive(Clone, Debug, Deserialize)]
 #[serde(
     tag = "kind",

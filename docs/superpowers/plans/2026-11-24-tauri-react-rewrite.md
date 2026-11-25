@@ -38,6 +38,7 @@
   - 占位文件（若需要临时创建以让 Rust 侧先跑起来）必须位于被 gitignore 的路径下，不得提交。
 - **分支策略**：`main` 继续演进；egui 版永久存档在 `legacy-egui` 分支（指向 `b36b8dc`），**不得删除或改写该分支**。
 - **命名约定（重要）**：GitHub **仓库名是 `chuaker7/Ki6`**（远端 `https://github.com/chuaker7/Ki6.git`）；而**包名 / crate 名 / 类型名 / 数据目录 / LaunchAgent 标签 / 应用显示名（`productName`）/ 本地化 key 等一切标识符统一为 `chuaker7`**。两者**刻意不同**，任何任务都不得"顺手统一"或把 `chuaker7` 改成 `Ki6`（反之亦然）。**README 的标题与项目介绍用 `Ki6`**（Task 27 统一改写 README 时落实），但 README 正文描述"应用本体"时仍用 `chuaker7`。**唯一例外**：`core::settings` 里的一次性旧目录迁移必须硬编码旧名 `killer7`，那是给迁移用的历史路径，不得扩散到别处。
+- **共享状态形状（重要）**：`AppState` 由 `Arc<AppState>` 直接托管（`manage(Arc::new(app_state))`），**不得**写成 `Arc<Mutex<AppState>>`——`std::sync::Mutex` 不参与字段访问的 autoderef，`state.sample_interval_ms` 这类写法会直接编译失败（E0609）；而且外套一层全局锁会把设置、剪贴板、插件等互不相关的子系统串行化：进程采集要跑 `ps`（几十毫秒），期间不该把别的命令一起卡住。`AppState` 的每个可变字段各自带 `Mutex`，已经足够。命令签名统一写 `state: State<'_, Arc<AppState>>`。
 
 ---
 
@@ -63,6 +64,8 @@
 | Node 版本 | nvm 已装 v22.23.2 / v24.14.0 / v24.17.0；默认 v22.11.0 不满足 Vite 7。 |
 | 前端截图验收 | 本机 Google Chrome 可用：`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --screenshot=out.png --window-size=1080,720 http://localhost:1420` |
 | 已知踩坑（勿重试） | `@vitejs/plugin-react` 6.x 只支持 Vite 8 → 用 5.0.4 + Vite 7.1.5；TypeScript 7.0.2 是 Go 重写新 major → 用 5.9.3；crates.io API 不声明 MSRV，只能实测编译。 |
+| `Mutex` 与字段 autoderef | `std::sync::Mutex` **不参与字段访问的 autoderef**：`Arc<Mutex<T>>.f` / `Box<Mutex<T>>.f` / `Mutex<T>.f` 一律 E0609；`Arc<Arc<T>>.f` 与 `MutexGuard<T>.f` 正常。**方法调用**（`.lock()`）不受此限制。跨 `Mutex` 取字段只能通过 `MutexGuard`（先 `.lock()` 再取字段）。 |
+| `notify` 事件枚举 | `notify 8.2` 的事件类型来自 `notify_types 2.2`：`notify::EventKind::{Create, Remove, Modify, Access, Any}`，`ModifyKind` 在 `notify::event::ModifyKind`。`_` 只能出现在**模式**位置，表达式里写 `EventKind::Remove(_)` 会报 E0001——判断事件要用 `matches!`。 |
 
 ---
 
@@ -2385,7 +2388,7 @@ pub struct Notice {
 /// 少了 `rename_all_fields` 会解析失败（`missing field 'display_name'`），
 /// 右键菜单永远弹不出来。
 ///
-/// `rename_all_fields` 需要 serde ≥ 1.0.181；本项目锁定 serde 1.0.229，满足条件。
+/// `rename_all_fields` 自 serde 1.0.177 起可用；本项目依赖下限取 1.0.177，锁定 serde 1.0.229。
 #[derive(Clone, Debug, Deserialize)]
 #[serde(
     tag = "kind",
@@ -2609,11 +2612,13 @@ AI-Tool: TophantAI"
 //!
 //! 所有 command 与后台线程共享同一个 `AppState`（通过 `tauri::State`），
 //! 内部用 `Mutex` 保护可变部分，采样间隔与网络开关用原子变量以便热改。
+//!
+//! `AppState` 本身由 `Arc` 托管（`Arc<AppState>`），**不再外套一层 `Mutex`**：
+//! 每个可变字段各自带 `Mutex`，套一层只会把所有子系统串行化——
+//! 进程采集要跑 `ps`（几十毫秒），期间不该把设置、剪贴板命令一起卡住。
 
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
-
-use notify::Watcher;
 
 use crate::core::clipboard::ClipboardManager;
 use crate::core::files::FileManager;
@@ -2686,45 +2691,61 @@ impl AppState {
 //! 所有周期性与监听型后台任务都在这里启动。线程只做取数与派发，
 //! 不直接操作界面；界面通过 Tauri 事件收到更新。
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use notify::{Event, RecursiveMode, Watcher};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 use crate::core::clipboard;
 use crate::core::monitor;
 use crate::events::{EV_CLIPBOARD, EV_FILES_CHANGED, EV_PROCESSES, EV_SYSTEM_INFO};
 use crate::state::AppState;
 
+/// 判断事件是否属于「当前目录内容变了」。
+///
+/// 契约里 `files-changed` 只在目录增删改时触发：新建、删除、重命名都要触发，
+/// 读取与元数据变化不触发——否则一次目录遍历就能引发刷新风暴。
+pub fn is_content_change(kind: &notify::EventKind) -> bool {
+    matches!(
+        kind,
+        notify::EventKind::Create(_)
+            | notify::EventKind::Remove(_)
+            | notify::EventKind::Modify(notify::event::ModifyKind::Name(_))
+    )
+}
+
 /// 启动进程列表定时刷新循环。
-pub fn spawn_process_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
-    std::thread::spawn(move || loop {
-        let (limit, interval_ms) = {
-            let guard = state.lock().expect("状态锁中毒");
-            let settings = guard.settings.lock().expect("设置锁中毒");
-            (settings.process_list_limit, guard.sample_interval_ms.load(Ordering::Relaxed))
-        };
+pub fn spawn_process_loop(app: AppHandle, state: Arc<AppState>) {
+    std::thread::spawn(move || {
+        loop {
+            let (limit, interval_ms) = {
+                let settings = state.settings.lock().expect("设置锁中毒");
+                (
+                    settings.process_list_limit,
+                    state.sample_interval_ms.load(Ordering::Relaxed),
+                )
+            };
 
-        let rows = {
-            let mut guard = state.lock().expect("状态锁中毒");
-            let mut processes = guard.processes.lock().expect("进程锁中毒");
-            processes
-                .collect(limit)
-                .iter()
-                .map(crate::commands::dto::ProcessRow::from)
-                .collect::<Vec<_>>()
-        };
+            let rows = {
+                let mut processes = state.processes.lock().expect("进程锁中毒");
+                processes
+                    .collect(limit)
+                    .iter()
+                    .map(crate::commands::dto::ProcessRow::from)
+                    .collect::<Vec<_>>()
+            };
 
-        let _ = app.emit(EV_PROCESSES, rows);
+            let _ = app.emit(EV_PROCESSES, rows);
 
-        std::thread::sleep(Duration::from_millis(interval_ms.max(500)));
+            std::thread::sleep(Duration::from_millis(interval_ms.max(500)));
+        }
     });
 }
 
 /// 启动剪贴板轮询循环。
-pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
+pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<AppState>) {
     std::thread::spawn(move || {
         let mut last = String::new();
         loop {
@@ -2739,8 +2760,7 @@ pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
             last = text.clone();
 
             {
-                let guard = state.lock().expect("状态锁中毒");
-                let mut manager = guard.clipboard.lock().expect("剪贴板锁中毒");
+                let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
                 manager.add_to_history(&text, "text");
             }
 
@@ -2752,7 +2772,7 @@ pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
 /// 启动系统指标采样循环。
 pub fn spawn_monitor_loop(
     app: AppHandle,
-    state: Arc<Mutex<AppState>>,
+    state: Arc<AppState>,
     interval_ms: Arc<AtomicU64>,
     network_enabled: Arc<AtomicBool>,
 ) {
@@ -2782,8 +2802,7 @@ pub fn spawn_monitor_loop(
             );
 
             let dto = {
-                let guard = state.lock().expect("状态锁中毒");
-                let mut mon = guard.monitor.lock().expect("监控锁中毒");
+                let mut mon = state.monitor.lock().expect("监控锁中毒");
                 mon.push_sample(info);
                 crate::commands::dto::SystemInfoDto {
                     cpu_usage: mon.system_info.cpu_usage,
@@ -2802,19 +2821,18 @@ pub fn spawn_monitor_loop(
 }
 
 /// 启动当前目录的变更监听。
-pub fn spawn_watcher(app: AppHandle, state: Arc<Mutex<AppState>>) {
+pub fn spawn_watcher(app: AppHandle, state: Arc<AppState>) {
     let path = {
-        let guard = state.lock().expect("状态锁中毒");
-        let files = guard.files.lock().expect("文件锁中毒");
+        let files = state.files.lock().expect("文件锁中毒");
         files.current_path.clone()
     };
 
     let target = path.clone();
     let watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
-        if let Ok(event) = result {
-            if event.kind == notify::EventKind::Remove(_) {
-                let _ = app.emit(EV_FILES_CHANGED, ());
-            }
+        if let Ok(event) = result
+            && is_content_change(&event.kind)
+        {
+            let _ = app.emit(EV_FILES_CHANGED, ());
         }
     });
 
@@ -2828,8 +2846,8 @@ pub fn spawn_watcher(app: AppHandle, state: Arc<Mutex<AppState>>) {
         return;
     }
 
-    let guard = state.lock().expect("状态锁中毒");
-    *guard.watcher.lock().expect("监听锁中毒") = Some(watcher);
+    let mut slot = state.watcher.lock().expect("监听锁中毒");
+    *slot = Some(watcher);
 }
 ```
 
@@ -2838,12 +2856,7 @@ pub fn spawn_watcher(app: AppHandle, state: Arc<Mutex<AppState>>) {
 ```rust
 //! 原生集成：菜单栏、托盘、快捷键、自启、激活策略与后台任务。
 
-pub mod activation;
-pub mod autolaunch;
-pub mod menu;
-pub mod shortcut;
 pub mod tasks;
-pub mod tray;
 ```
 
 > `activation.rs` / `autolaunch.rs` / `menu.rs` / `shortcut.rs` / `tray.rs` 在 Task 12–15 创建。本步骤**先只写** `pub mod tasks;`，其余在对应任务补齐（否则编译不过）。
@@ -2880,7 +2893,7 @@ pub mod events;
 pub mod state;
 pub mod system;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::Manager;
 
@@ -2894,10 +2907,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(Arc::new(Mutex::new(app_state)))
+        .manage(Arc::new(app_state))
         .setup(|app| {
             let handle = app.handle().clone();
-            let state = app.state::<Arc<Mutex<AppState>>>().inner().clone();
+            let state = app.state::<Arc<AppState>>().inner().clone();
 
             crate::system::tasks::spawn_process_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_clipboard_loop(handle.clone(), state.clone());
@@ -2916,7 +2929,9 @@ pub fn run() {
 }
 ```
 
-> `app.state::<Arc<Mutex<AppState>>>()` 需要 `tauri::Manager` trait 的 `state()` 方法；`Arc<Mutex<AppState>>` 本身实现了 `Send + Sync + 'static`，可作为 Tauri 状态。
+> `app.state::<Arc<AppState>>()` 需要 `tauri::Manager` trait 的 `state()` 方法；`Arc<AppState>` 本身实现了 `Send + Sync + 'static`，可作为 Tauri 状态。
+>
+> **不要写成 `Arc<Mutex<AppState>>`**：`std::sync::Mutex` 不参与字段访问的 autoderef，`state.sample_interval_ms` 这类写法会直接编译失败（E0609）；而且外套一层全局锁会把设置、剪贴板、插件等互不相关的子系统串成一条流水线——进程采集要跑 `ps`（几十毫秒），期间不该把别的命令一起卡住。`AppState` 的每个可变字段各自带 `Mutex`，已经足够。
 
 - [ ] **Step 6: 编译验证**
 
@@ -2927,7 +2942,7 @@ cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 
 Expected：编译通过，0 warning。
 
-> 若 `tauri::State` 无法从 `Arc<Mutex<AppState>>` 取值，改为 `manage(Mutex::new(app_state))` 并在 command 里用 `state.0.lock()`。本步骤先按上面的写法试；`cargo build` 的真实报错为准。
+> **前置条件**：`frontend/dist` 必须存在（`default = ["custom-protocol"]` 会让 `generate_context!` 无条件校验它），因此先在仓库根执行 `npm run build`，再跑 cargo 命令。
 
 - [ ] **Step 7: 提交**
 
@@ -2962,7 +2977,7 @@ AI-Tool: TophantAI"
 ```rust
 //! 进程管理命令。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::State;
 
@@ -2972,9 +2987,8 @@ use crate::state::AppState;
 
 /// 列出当前进程列表。
 #[tauri::command]
-pub fn list_processes(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<ProcessRow> {
-    let guard = state.lock().expect("状态锁中毒");
-    let processes = guard.processes.lock().expect("进程锁中毒");
+pub fn list_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
+    let processes = state.processes.lock().expect("进程锁中毒");
     processes
         .processes
         .iter()
@@ -2984,14 +2998,13 @@ pub fn list_processes(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<ProcessRow>
 
 /// 触发一次进程列表刷新（同步采集后立即返回）。
 #[tauri::command]
-pub fn refresh_processes(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<ProcessRow> {
-    let guard = state.lock().expect("状态锁中毒");
-    let limit = guard
+pub fn refresh_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
+    let limit = state
         .settings
         .lock()
         .expect("设置锁中毒")
         .process_list_limit;
-    let mut processes = guard.processes.lock().expect("进程锁中毒");
+    let mut processes = state.processes.lock().expect("进程锁中毒");
     processes
         .collect(limit)
         .iter()
@@ -3067,7 +3080,7 @@ AI-Tool: TophantAI"
 //! 文件管理命令。
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use notify::{RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, State};
@@ -3095,13 +3108,12 @@ pub fn list_dir(path: String) -> Vec<FileRow> {
 #[tauri::command]
 pub fn create_folder(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     dir: String,
     name: String,
 ) -> Result<(), String> {
     let created = {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut files = guard.files.lock().expect("文件锁中毒");
+        let mut files = state.files.lock().expect("文件锁中毒");
         files.navigate_to(PathBuf::from(dir));
         files.create_folder(&name)
     };
@@ -3118,13 +3130,12 @@ pub fn create_folder(
 #[tauri::command]
 pub fn create_file(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     dir: String,
     name: String,
 ) -> Result<(), String> {
     let created = {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut files = guard.files.lock().expect("文件锁中毒");
+        let mut files = state.files.lock().expect("文件锁中毒");
         files.navigate_to(PathBuf::from(dir));
         files.create_file(&name)
     };
@@ -3141,13 +3152,12 @@ pub fn create_file(
 #[tauri::command]
 pub fn rename_path(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     path: String,
     new_name: String,
 ) -> Result<(), String> {
     let renamed = {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut files = guard.files.lock().expect("文件锁中毒");
+        let mut files = state.files.lock().expect("文件锁中毒");
         files.rename_file(Path::new(&path), &new_name)
     };
 
@@ -3163,12 +3173,11 @@ pub fn rename_path(
 #[tauri::command]
 pub fn delete_to_trash(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     path: String,
 ) -> Result<(), String> {
     let deleted = {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut files = guard.files.lock().expect("文件锁中毒");
+        let mut files = state.files.lock().expect("文件锁中毒");
         files.delete_file(Path::new(&path))
     };
 
@@ -3220,16 +3229,16 @@ pub fn home_dir() -> String {
 #[tauri::command]
 pub fn watch_dir(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     path: String,
 ) {
     let target = PathBuf::from(path);
 
     let watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-        if let Ok(event) = result {
-            if event.kind == notify::EventKind::Remove(_) {
-                let _ = app.emit(EV_FILES_CHANGED, ());
-            }
+        if let Ok(event) = result
+            && crate::system::tasks::is_content_change(&event.kind)
+        {
+            let _ = app.emit(EV_FILES_CHANGED, ());
         }
     });
 
@@ -3240,8 +3249,7 @@ pub fn watch_dir(
         return;
     }
 
-    let guard = state.lock().expect("状态锁中毒");
-    *guard.watcher.lock().expect("监听锁中毒") = Some(watcher);
+    *state.watcher.lock().expect("监听锁中毒") = Some(watcher);
 }
 ```
 
@@ -3297,7 +3305,7 @@ AI-Tool: TophantAI"
 ```rust
 //! 剪贴板命令。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::State;
 
@@ -3313,28 +3321,25 @@ pub fn clipboard_current() -> String {
 
 /// 读取剪贴板历史。
 #[tauri::command]
-pub fn clipboard_history(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<HistoryRow> {
-    let guard = state.lock().expect("状态锁中毒");
-    let manager = guard.clipboard.lock().expect("剪贴板锁中毒");
+pub fn clipboard_history(state: State<'_, Arc<AppState>>) -> Vec<HistoryRow> {
+    let manager = state.clipboard.lock().expect("剪贴板锁中毒");
     manager.history.iter().map(HistoryRow::from).collect()
 }
 
 /// 删除一条历史（按稳定 id）。
 #[tauri::command]
 pub fn remove_history_item(
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     id: u64,
 ) {
-    let guard = state.lock().expect("状态锁中毒");
-    let mut manager = guard.clipboard.lock().expect("剪贴板锁中毒");
+    let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
     manager.delete_history_item(id);
 }
 
 /// 清空历史。
 #[tauri::command]
-pub fn clear_history(state: State<'_, Arc<Mutex<AppState>>>) {
-    let guard = state.lock().expect("状态锁中毒");
-    let mut manager = guard.clipboard.lock().expect("剪贴板锁中毒");
+pub fn clear_history(state: State<'_, Arc<AppState>>) {
+    let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
     manager.clear_history();
 }
 ```
@@ -3344,7 +3349,7 @@ pub fn clear_history(state: State<'_, Arc<Mutex<AppState>>>) {
 ```rust
 //! 系统监控命令。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::State;
 
@@ -3353,9 +3358,8 @@ use crate::state::AppState;
 
 /// 读取一次系统指标快照（含采样历史）。
 #[tauri::command]
-pub fn system_snapshot(state: State<'_, Arc<Mutex<AppState>>>) -> SystemInfoDto {
-    let guard = state.lock().expect("状态锁中毒");
-    let monitor = guard.monitor.lock().expect("监控锁中毒");
+pub fn system_snapshot(state: State<'_, Arc<AppState>>) -> SystemInfoDto {
+    let monitor = state.monitor.lock().expect("监控锁中毒");
     SystemInfoDto {
         cpu_usage: monitor.system_info.cpu_usage,
         memory_usage: monitor.system_info.memory_usage,
@@ -3373,7 +3377,7 @@ pub fn system_snapshot(state: State<'_, Arc<Mutex<AppState>>>) -> SystemInfoDto 
 ```rust
 //! 插件命令。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::State;
 
@@ -3383,9 +3387,8 @@ use crate::state::AppState;
 
 /// 列出已加载的插件。
 #[tauri::command]
-pub fn list_plugins(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<PluginRow> {
-    let guard = state.lock().expect("状态锁中毒");
-    let plugins = guard.plugins.lock().expect("插件锁中毒");
+pub fn list_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
+    let plugins = state.plugins.lock().expect("插件锁中毒");
     let dir = plugins.plugins_dir().to_string_lossy().to_string();
     plugins
         .loaded_plugins
@@ -3400,9 +3403,8 @@ pub fn list_plugins(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<PluginRow> {
 
 /// 重新扫描插件目录。
 #[tauri::command]
-pub fn reload_plugins(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<PluginRow> {
-    let guard = state.lock().expect("状态锁中毒");
-    let mut plugins = guard.plugins.lock().expect("插件锁中毒");
+pub fn reload_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
+    let mut plugins = state.plugins.lock().expect("插件锁中毒");
     plugins.load_plugins();
     let dir = plugins.plugins_dir().to_string_lossy().to_string();
     plugins
@@ -3474,7 +3476,7 @@ AI-Tool: TophantAI"
 //! 设置与文案命令。
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::{AppHandle, State};
 
@@ -3484,9 +3486,8 @@ use crate::state::AppState;
 
 /// 读取当前设置。
 #[tauri::command]
-pub fn get_settings(state: State<'_, Arc<Mutex<AppState>>>) -> Settings {
-    let guard = state.lock().expect("状态锁中毒");
-    let settings = guard.settings.lock().expect("设置锁中毒");
+pub fn get_settings(state: State<'_, Arc<AppState>>) -> Settings {
+    let settings = state.settings.lock().expect("设置锁中毒");
     settings.clone()
 }
 
@@ -3494,12 +3495,15 @@ pub fn get_settings(state: State<'_, Arc<Mutex<AppState>>>) -> Settings {
 #[tauri::command]
 pub fn update_settings(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     patch: SettingsPatch,
 ) -> Settings {
+    // 先取旧值：菜单栏模式与全局快捷键要靠「改了什么」判断是否重新作用到原生层。
+    // 若在写入之后再取旧值，拿到的就是新值，比较永远相等，热更新就成了死代码。
+    let previous = state.settings.lock().expect("设置锁中毒").clone();
+
     let next = {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut settings = guard.settings.lock().expect("设置锁中毒");
+        let mut settings = state.settings.lock().expect("设置锁中毒");
         let next = patch.apply(&settings);
         next.save();
         *settings = next.clone();
@@ -3508,8 +3512,7 @@ pub fn update_settings(
 
     // 语言变了要换文案表。
     {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut i18n = guard.i18n.lock().expect("文案锁中毒");
+        let mut i18n = state.i18n.lock().expect("文案锁中毒");
         if i18n.locale() != next.locale {
             i18n.set_locale(next.locale);
         }
@@ -3517,21 +3520,15 @@ pub fn update_settings(
 
     // 采样间隔与网络开关热更新。
     {
-        let guard = state.lock().expect("状态锁中毒");
-        guard
+        state
             .sample_interval_ms
             .store((next.auto_refresh_interval * 1000.0) as u64, std::sync::atomic::Ordering::Relaxed);
-        guard
+        state
             .network_enabled
             .store(next.enable_network_monitor, std::sync::atomic::Ordering::Relaxed);
     }
 
     // 菜单栏模式与全局快捷键的变化需要立即作用到原生层。
-    let previous = {
-        let guard = state.lock().expect("状态锁中毒");
-        guard.settings.lock().expect("设置锁中毒").clone()
-    };
-
     if previous.show_menu_bar != next.show_menu_bar {
         crate::system::activation::set_accessory_mode(next.show_menu_bar, &app);
     }
@@ -3559,7 +3556,7 @@ pub fn get_strings(locale: String) -> HashMap<String, String> {
 ```rust
 //! 系统级命令：窗口显隐、菜单栏模式、快捷键、自启。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::{AppHandle, Manager, State};
 
@@ -3587,12 +3584,11 @@ pub fn show_main_window(app: AppHandle) {
 #[tauri::command]
 pub fn set_menu_bar_mode(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     enabled: bool,
 ) {
     {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut settings = guard.settings.lock().expect("设置锁中毒");
+        let mut settings = state.settings.lock().expect("设置锁中毒");
         settings.show_menu_bar = enabled;
         settings.save();
     }
@@ -3610,12 +3606,11 @@ pub fn set_menu_bar_mode(
 #[tauri::command]
 pub fn set_shortcut_enabled(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     enabled: bool,
 ) {
     {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut settings = guard.settings.lock().expect("设置锁中毒");
+        let mut settings = state.settings.lock().expect("设置锁中毒");
         settings.global_shortcut_enabled = enabled;
         settings.save();
     }
@@ -3807,7 +3802,7 @@ Builder 追加：
 
             crate::system::menu::build(&handle)?;
 
-            let state = app.state::<Arc<Mutex<AppState>>>().inner().clone();
+            let state = app.state::<Arc<AppState>>().inner().clone();
             crate::system::tasks::spawn_process_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_clipboard_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_monitor_loop(
@@ -4150,8 +4145,7 @@ pub fn set_accessory_mode<R: Runtime>(enabled: bool, _app: &AppHandle<R>) {
 
 ```rust
             {
-                let guard = state.lock().expect("状态锁中毒");
-                let shortcut_enabled = guard
+                let shortcut_enabled = state
                     .settings
                     .lock()
                     .expect("设置锁中毒")
@@ -8077,7 +8071,7 @@ use crate::commands::dto::ContextTarget;
 #[tauri::command]
 pub fn popup_context_menu(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     kind: String,
     payload: serde_json::Value,
 ) {
@@ -8099,8 +8093,7 @@ pub fn popup_context_menu(
     };
 
     {
-        let guard = state.lock().expect("状态锁中毒");
-        *guard.pending_context.lock().expect("右键目标锁中毒") = Some(target);
+        *state.pending_context.lock().expect("右键目标锁中毒") = Some(target);
     }
 
     let _ = window.popup_menu(&menu);
@@ -8198,9 +8191,8 @@ use tauri::Manager;
 pub fn on_context_menu_event(app: &AppHandle, id: &str) {
     use crate::core::process::ProcessManager;
 
-    let guard = app.state::<std::sync::Arc<std::sync::Mutex<crate::state::AppState>>>();
+    let state = app.state::<std::sync::Arc<crate::state::AppState>>();
     let target = {
-        let state = guard.lock().expect("状态锁中毒");
         let mut pending = state.pending_context.lock().expect("右键目标锁中毒");
         pending.take()
     };
@@ -8219,7 +8211,6 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
                 notify(app, "info", &format!("已结束进程 {display_name}"));
                 // 立刻重采一次并把新列表推给前端，不要等下一个刷新周期。
                 let rows = {
-                    let state = guard.lock().expect("状态锁中毒");
                     let limit = state
                         .settings
                         .lock()
@@ -8256,7 +8247,6 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
         }
         ("ctx.clipboard.delete", ContextTarget::Clipboard { id, .. }) => {
             {
-                let state = guard.lock().expect("状态锁中毒");
                 let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
                 manager.delete_history_item(*id);
             }
