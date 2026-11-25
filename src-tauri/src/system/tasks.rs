@@ -3,6 +3,7 @@
 //! 所有周期性与监听型后台任务都在这里启动。线程只做取数与派发，
 //! 不直接操作界面；界面通过 Tauri 事件收到更新。
 
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
@@ -74,9 +75,18 @@ pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<AppState>) {
             }
             last = text.clone();
 
-            {
+            let snapshot = {
                 let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-                manager.add_to_history(&text, "text");
+                if manager.add_to_history(&text, "text") {
+                    Some(manager.history.clone())
+                } else {
+                    None
+                }
+            };
+
+            // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
+            if let Some(history) = snapshot {
+                clipboard::persist_history(&history);
             }
 
             let _ = app.emit(EV_CLIPBOARD, text);
@@ -142,25 +152,34 @@ pub fn spawn_watcher(app: AppHandle, state: Arc<AppState>) {
         files.current_path.clone()
     };
 
-    let target = path.clone();
+    watch_path(&app, &state, &path);
+}
+
+/// 把监听器挂到指定目录，成功返回 true。
+///
+/// 监听器**只有一个槽位**：换目录就是替换，旧的 `RecommendedWatcher` 被 drop 时
+/// 会自动解除对旧目录的监听。失败时**保留旧监听器**，并把原因打到 stderr ——
+/// 静默失败会让前端以为已经切到新目录，实际却还在监听旧目录。
+pub fn watch_path(app: &AppHandle, state: &Arc<AppState>, path: &Path) -> bool {
+    let emitter = app.clone();
     let watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
         if let Ok(event) = result
             && is_content_change(&event.kind)
         {
-            let _ = app.emit(EV_FILES_CHANGED, ());
+            let _ = emitter.emit(EV_FILES_CHANGED, ());
         }
     });
 
     let Ok(mut watcher) = watcher else {
         eprintln!("[watcher] 无法创建目录监听器");
-        return;
+        return false;
     };
 
-    if let Err(err) = watcher.watch(&target, RecursiveMode::NonRecursive) {
-        eprintln!("[watcher] 监听 {} 失败: {err}", target.display());
-        return;
+    if let Err(err) = watcher.watch(path, RecursiveMode::NonRecursive) {
+        eprintln!("[watcher] 监听 {} 失败: {err}", path.display());
+        return false;
     }
 
-    let mut slot = state.watcher.lock().expect("监听锁中毒");
-    *slot = Some(watcher);
+    *state.watcher.lock().expect("监听锁中毒") = Some(watcher);
+    true
 }

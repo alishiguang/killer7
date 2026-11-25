@@ -72,20 +72,17 @@ impl ClipboardManager {
 
     /// 把历史记录写回磁盘。
     pub fn save_history(&self) {
-        let path = clipboard_history_path();
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Ok(text) = serde_json::to_string_pretty(&self.history) {
-            let _ = std::fs::write(path, text);
-        }
+        persist_history(&self.history);
     }
 
     /// 向历史记录头部插入一条内容，并裁剪到上限。
-    pub fn add_to_history(&mut self, content: &str, kind: &str) {
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]，
+    /// 避免磁盘 IO 期间占着剪贴板锁。返回是否真的插入了一条。
+    pub fn add_to_history(&mut self, content: &str, kind: &str) -> bool {
         // 与 Swift 版一致：不重复记录与上一条相同的内容。
         if self.history.first().map(|item| item.content.as_str()) == Some(content) {
-            return;
+            return false;
         }
 
         self.next_id += 1;
@@ -103,21 +100,26 @@ impl ClipboardManager {
             self.history.truncate(self.max_history_count);
         }
 
-        self.save_history();
+        true
     }
 
     /// 删除某条历史（按稳定 id）。
-    pub fn delete_history_item(&mut self, id: u64) {
-        if let Some(index) = self.history.iter().position(|item| item.id == id) {
-            self.history.remove(index);
-            self.save_history();
-        }
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]。
+    /// 返回是否真的删掉了一条。
+    pub fn delete_history_item(&mut self, id: u64) -> bool {
+        let Some(index) = self.history.iter().position(|item| item.id == id) else {
+            return false;
+        };
+        self.history.remove(index);
+        true
     }
 
     /// 清空历史。
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]。
     pub fn clear_history(&mut self) {
         self.history.clear();
-        self.save_history();
     }
 
     /// 复制指定内容到系统剪贴板。
@@ -131,6 +133,20 @@ impl ClipboardManager {
 /// 读取系统剪贴板文本。
 pub fn read_current() -> Option<String> {
     crate::core::platform::read_clipboard()
+}
+
+/// 把历史记录写到磁盘。
+///
+/// 单独拆成自由函数，是为了让调用方能在**释放剪贴板锁之后**再落盘：
+/// 磁盘 IO 可能耗时几十毫秒，持锁期间会把剪贴板轮询与所有剪贴板命令一起堵住。
+pub fn persist_history(history: &[HistoryEntry]) {
+    let path = clipboard_history_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(text) = serde_json::to_string_pretty(history) {
+        let _ = std::fs::write(path, text);
+    }
 }
 
 /// 规范化历史条目的 id：缺失（为 0）或重复时按顺序重排为 `1..=n`。

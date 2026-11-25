@@ -1861,7 +1861,7 @@ AI-Tool: TophantAI"
 - Produces:
   - `core::process::{PortInfo, ProcessInfo, ProcessManager}`，`ProcessManager::collect(&mut self, limit) -> Vec<ProcessInfo>`（同步）、`ProcessManager::load_blocking(&mut self, limit)`
   - `core::files::{FileItem, FileManager, format_bytes}`，`FileManager::{load_files, navigate_to, go_up, create_folder, create_file, delete_file, rename_file}`
-  - `core::clipboard::{HistoryEntry, ClipboardManager}`，`HistoryEntry { id: u64, content: String, timestamp: i64, kind: String }`，`ClipboardManager::{load_history, save_history, add_to_history, delete_history_item(id), clear_history, copy_to_clipboard}`
+  - `core::clipboard::{HistoryEntry, ClipboardManager}`，`HistoryEntry { id: u64, content: String, timestamp: i64, kind: String }`，`ClipboardManager::{load_history, save_history, add_to_history, delete_history_item(id), clear_history, copy_to_clipboard}`；`add_to_history` / `delete_history_item` **只改内存并返回 bool**，落盘走自由函数 `clipboard::persist_history(&history)`
   - `core::monitor::{SystemInfo, SystemMonitor}`，`SystemMonitor::push_sample`，`core::monitor::sample(...) -> SystemInfo`
   - `events::AppEvent`（crate 级枚举，线程与 UI 之间传递用）
 
@@ -2042,14 +2042,20 @@ pub struct HistoryEntry {
 }
 ```
 
-`ClipboardManager` 的 `add_to_history` 改为分配 id：
+`ClipboardManager` 的 `add_to_history` 改为分配 id，**并且只改内存、不落盘**：
+
+> 落盘被拆到自由函数 [`persist_history`]，由调用方在**释放剪贴板锁之后**再执行。
+> 磁盘 IO 可能耗时几十毫秒，持锁期间会把剪贴板轮询与所有剪贴板命令一起堵住。
 
 ```rust
     /// 向历史记录头部插入一条内容，并裁剪到上限。
-    pub fn add_to_history(&mut self, content: &str, kind: &str) {
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]，
+    /// 避免磁盘 IO 期间占着剪贴板锁。返回是否真的插入了一条。
+    pub fn add_to_history(&mut self, content: &str, kind: &str) -> bool {
         // 与 Swift 版一致：不重复记录与上一条相同的内容。
         if self.history.first().map(|item| item.content.as_str()) == Some(content) {
-            return;
+            return false;
         }
 
         self.next_id += 1;
@@ -2067,7 +2073,7 @@ pub struct HistoryEntry {
             self.history.truncate(self.max_history_count);
         }
 
-        self.save_history();
+        true
     }
 ```
 
@@ -2088,19 +2094,49 @@ pub struct HistoryEntry {
     }
 ```
 
-`delete_history_item` 改为按 id 删除：
+`delete_history_item` 改为按 id 删除，`clear_history` 一并改成**只改内存、不落盘**：
 
 ```rust
     /// 删除某条历史（按稳定 id）。
-    pub fn delete_history_item(&mut self, id: u64) {
-        if let Some(index) = self.history.iter().position(|item| item.id == id) {
-            self.history.remove(index);
-            self.save_history();
-        }
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]。
+    /// 返回是否真的删掉了一条。
+    pub fn delete_history_item(&mut self, id: u64) -> bool {
+        let Some(index) = self.history.iter().position(|item| item.id == id) else {
+            return false;
+        };
+        self.history.remove(index);
+        true
+    }
+
+    /// 清空历史。
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]。
+    pub fn clear_history(&mut self) {
+        self.history.clear();
     }
 ```
 
 在文件末尾（`#[cfg(test)]` 之前）加自由函数：
+
+`persist_history` 是落盘的唯一出口——`ClipboardManager` 的方法只改内存，
+调用方在释放锁之后把历史快照交给它：
+
+```rust
+/// 把历史记录写到磁盘。
+///
+/// 单独拆成自由函数，是为了让调用方能在**释放剪贴板锁之后**再落盘：
+/// 磁盘 IO 可能耗时几十毫秒，持锁期间会把剪贴板轮询与所有剪贴板命令一起堵住。
+pub fn persist_history(history: &[HistoryEntry]) {
+    let path = clipboard_history_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(text) = serde_json::to_string_pretty(history) {
+        let _ = std::fs::write(path, text);
+    }
+}
+```
 
 > 参数用 `&mut [HistoryEntry]` 而不是 `&mut Vec<HistoryEntry>`：后者会触发 `clippy::ptr_arg`，
 > 与本任务 Step 7「clippy 0 warning」的 Expected 冲突。调用点传 `&mut history`（`history` 是 `Vec`）
@@ -2783,6 +2819,7 @@ impl AppState {
 //! 所有周期性与监听型后台任务都在这里启动。线程只做取数与派发，
 //! 不直接操作界面；界面通过 Tauri 事件收到更新。
 
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
@@ -2854,9 +2891,18 @@ pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<AppState>) {
             }
             last = text.clone();
 
-            {
+            let snapshot = {
                 let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-                manager.add_to_history(&text, "text");
+                if manager.add_to_history(&text, "text") {
+                    Some(manager.history.clone())
+                } else {
+                    None
+                }
+            };
+
+            // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
+            if let Some(history) = snapshot {
+                clipboard::persist_history(&history);
             }
 
             let _ = app.emit(EV_CLIPBOARD, text);
@@ -2922,27 +2968,36 @@ pub fn spawn_watcher(app: AppHandle, state: Arc<AppState>) {
         files.current_path.clone()
     };
 
-    let target = path.clone();
+    watch_path(&app, &state, &path);
+}
+
+/// 把监听器挂到指定目录，成功返回 true。
+///
+/// 监听器**只有一个槽位**：换目录就是替换，旧的 `RecommendedWatcher` 被 drop 时
+/// 会自动解除对旧目录的监听。失败时**保留旧监听器**，并把原因打到 stderr ——
+/// 静默失败会让前端以为已经切到新目录，实际却还在监听旧目录。
+pub fn watch_path(app: &AppHandle, state: &Arc<AppState>, path: &Path) -> bool {
+    let emitter = app.clone();
     let watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
         if let Ok(event) = result
             && is_content_change(&event.kind)
         {
-            let _ = app.emit(EV_FILES_CHANGED, ());
+            let _ = emitter.emit(EV_FILES_CHANGED, ());
         }
     });
 
     let Ok(mut watcher) = watcher else {
         eprintln!("[watcher] 无法创建目录监听器");
-        return;
+        return false;
     };
 
-    if let Err(err) = watcher.watch(&target, RecursiveMode::NonRecursive) {
-        eprintln!("[watcher] 监听 {} 失败: {err}", target.display());
-        return;
+    if let Err(err) = watcher.watch(path, RecursiveMode::NonRecursive) {
+        eprintln!("[watcher] 监听 {} 失败: {err}", path.display());
+        return false;
     }
 
-    let mut slot = state.watcher.lock().expect("监听锁中毒");
-    *slot = Some(watcher);
+    *state.watcher.lock().expect("监听锁中毒") = Some(watcher);
+    true
 }
 ```
 
@@ -3187,7 +3242,6 @@ AI-Tool: TophantAI"
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use notify::{RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::commands::dto::FileRow;
@@ -3306,6 +3360,8 @@ pub fn parent_dir(path: String) -> Option<String> {
     Path::new(&path)
         .parent()
         .filter(|parent| *parent != Path::new(&path))
+        // 相对路径的 parent 是空串，空串不是有效目录，要一并挡掉。
+        .filter(|parent| !parent.as_os_str().is_empty())
         .map(|parent| parent.to_string_lossy().to_string())
 }
 
@@ -3334,23 +3390,9 @@ pub fn home_dir() -> String {
 #[tauri::command]
 pub fn watch_dir(app: AppHandle, state: State<'_, Arc<AppState>>, path: String) {
     let target = PathBuf::from(path);
-
-    let watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-        if let Ok(event) = result
-            && crate::system::tasks::is_content_change(&event.kind)
-        {
-            let _ = app.emit(EV_FILES_CHANGED, ());
-        }
-    });
-
-    let Ok(mut watcher) = watcher else {
-        return;
-    };
-    if watcher.watch(&target, RecursiveMode::NonRecursive).is_err() {
-        return;
-    }
-
-    *state.watcher.lock().expect("监听锁中毒") = Some(watcher);
+    // 监听器的创建与挂载统一在 system::tasks::watch_path 里，
+    // 失败原因由它打到 stderr —— 静默失败会让前端以为已经切到新目录。
+    crate::system::tasks::watch_path(&app, state.inner(), &target);
 }
 ```
 
@@ -3428,17 +3470,34 @@ pub fn clipboard_history(state: State<'_, Arc<AppState>>) -> Vec<HistoryRow> {
 }
 
 /// 删除一条历史（按稳定 id）。
+///
+/// 只在锁内改内存，快照出来之后**在锁外落盘** —— 磁盘 IO 不该占着剪贴板锁。
 #[tauri::command]
 pub fn remove_history_item(state: State<'_, Arc<AppState>>, id: u64) {
-    let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-    manager.delete_history_item(id);
+    let snapshot = {
+        let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
+        if manager.delete_history_item(id) {
+            Some(manager.history.clone())
+        } else {
+            None
+        }
+    };
+    if let Some(history) = snapshot {
+        clipboard::persist_history(&history);
+    }
 }
 
 /// 清空历史。
+///
+/// 只在锁内改内存，快照出来之后**在锁外落盘** —— 磁盘 IO 不该占着剪贴板锁。
 #[tauri::command]
 pub fn clear_history(state: State<'_, Arc<AppState>>) {
-    let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-    manager.clear_history();
+    let snapshot = {
+        let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
+        manager.clear_history();
+        manager.history.clone()
+    };
+    clipboard::persist_history(&snapshot);
 }
 ```
 
@@ -3588,22 +3647,35 @@ pub const EV_MENU_ACTION: &str = "menu-action";
 //! 使用 Tauri 的 `Menu::set_as_app_menu()` 构建真正的 macOS 菜单栏：
 //! 关于、设置、隐藏、退出走 `PredefinedMenuItem`（系统原生行为），
 //! 视图切换走带 `Cmd+数字` 加速器的自定义项。
+//!
+//! 菜单文案走 `core::i18n`：`nav.*` / `menubar.*` 都有现成的 key。
+//! 「编辑 / 视图 / 窗口」三个下拉的标题**没有**对应 key，而 `locales/*.strings`
+//! 约定「不新增 key」，因此这三个标题保持硬编码中文。
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter};
 
+use crate::core::i18n::{I18n, Locale};
 use crate::events::EV_MENU_ACTION;
 
 /// 构建并安装应用菜单栏。
-pub fn build(app: &AppHandle) -> tauri::Result<()> {
+pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
+    let i18n = I18n::new(locale);
+
     let app_menu = Submenu::with_items(
         app,
-        "chuaker7",
+        i18n.t("menubar.title"),
         true,
         &[
             &PredefinedMenuItem::about(app, Some("chuaker7"), None)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "app:settings", "设置…", true, Some("CmdOrCtrl+,"))?,
+            &MenuItem::with_id(
+                app,
+                "app:settings",
+                i18n.t("nav.settings"),
+                true,
+                Some("CmdOrCtrl+,"),
+            )?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::hide(app, Some("隐藏 chuaker7"))?,
             &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
@@ -3628,18 +3700,20 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         ],
     )?;
 
+    // 「设置」的 Cmd+, 加速键只留给应用菜单里的那一项；视图菜单里再挂一次
+    // 会让同一个快捷键指向两个菜单项，macOS 只能二选一。
     let view_menu = Submenu::with_items(
         app,
         "视图",
         true,
         &[
-            &MenuItem::with_id(app, "nav:processes", "进程管理", true, Some("CmdOrCtrl+1"))?,
-            &MenuItem::with_id(app, "nav:files", "文件管理", true, Some("CmdOrCtrl+2"))?,
-            &MenuItem::with_id(app, "nav:clipboard", "剪贴板", true, Some("CmdOrCtrl+3"))?,
-            &MenuItem::with_id(app, "nav:monitor", "系统监控", true, Some("CmdOrCtrl+4"))?,
-            &MenuItem::with_id(app, "nav:plugins", "插件", true, Some("CmdOrCtrl+5"))?,
+            &MenuItem::with_id(app, "nav:processes", i18n.t("nav.process"), true, Some("CmdOrCtrl+1"))?,
+            &MenuItem::with_id(app, "nav:files", i18n.t("nav.file"), true, Some("CmdOrCtrl+2"))?,
+            &MenuItem::with_id(app, "nav:clipboard", i18n.t("nav.clipboard"), true, Some("CmdOrCtrl+3"))?,
+            &MenuItem::with_id(app, "nav:monitor", i18n.t("nav.monitor"), true, Some("CmdOrCtrl+4"))?,
+            &MenuItem::with_id(app, "nav:plugins", i18n.t("nav.plugins"), true, Some("CmdOrCtrl+5"))?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "nav:settings", "设置", true, Some("CmdOrCtrl+,"))?,
+            &MenuItem::with_id(app, "nav:settings", i18n.t("nav.settings"), true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, None)?,
         ],
@@ -3686,21 +3760,20 @@ pub mod menu;
 
 - [ ] **Step 3: 接入 Builder**
 
-`src-tauri/src/lib.rs`：
+> `lib.rs` 里**已经**有 `use tauri::Manager;`（Task 1 建壳时就写了，`app.state::<Arc<AppState>>()` 要用它）。
+> **不要再加一遍** —— 同名 `use` 重复导入会报 E0252。
 
-```rust
-use tauri::Manager;
-```
-
-Builder 追加：
+`src-tauri/src/lib.rs` 的 setup 闭包改成：
 
 ```rust
         .setup(|app| {
             let handle = app.handle().clone();
-
-            crate::system::menu::build(&handle)?;
-
             let state = app.state::<Arc<AppState>>().inner().clone();
+
+            // 菜单文案跟着设置里的语言走。
+            let locale = state.settings.lock().expect("设置锁中毒").locale;
+            crate::system::menu::build(&handle, locale)?;
+
             crate::system::tasks::spawn_process_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_clipboard_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_monitor_loop(
@@ -3770,6 +3843,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::core::icon::bird_rgba;
+use crate::core::i18n::{I18n, Locale};
 use crate::events::{EV_TRAY_OPEN, EV_TRAY_QUIT};
 
 /// 托盘里需要动态刷新的菜单项。
@@ -3779,19 +3853,68 @@ struct TrayItems<R: Runtime> {
     disk: MenuItem<R>,
     upload: MenuItem<R>,
     download: MenuItem<R>,
+    /// 本地化后的指标名称，刷新时拼在数值前面。
+    cpu_label: String,
+    memory_label: String,
+    disk_label: String,
+    upload_label: String,
+    download_label: String,
 }
 
 /// 构建托盘图标与菜单。
-pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()> {
     let (pixels, width, height) = bird_rgba(22);
     let icon = Image::new_owned(pixels, width, height);
 
-    let title = MenuItem::with_id(app, "tray:title", "chuaker7", false, None::<&str>)?;
-    let cpu = MenuItem::with_id(app, "tray:cpu", "CPU  —", false, None::<&str>)?;
-    let memory = MenuItem::with_id(app, "tray:memory", "内存  —", false, None::<&str>)?;
-    let disk = MenuItem::with_id(app, "tray:disk", "磁盘  —", false, None::<&str>)?;
-    let upload = MenuItem::with_id(app, "tray:upload", "上传  —", false, None::<&str>)?;
-    let download = MenuItem::with_id(app, "tray:download", "下载  —", false, None::<&str>)?;
+    let i18n = I18n::new(locale);
+    let cpu_label = i18n.t("monitor.cpu");
+    let memory_label = i18n.t("monitor.memory");
+    let disk_label = i18n.t("monitor.disk");
+    let upload_label = i18n.t("monitor.upload");
+    let download_label = i18n.t("monitor.download");
+
+    let title = MenuItem::with_id(
+        app,
+        "tray:title",
+        i18n.t("menubar.title"),
+        false,
+        None::<&str>,
+    )?;
+    let cpu = MenuItem::with_id(
+        app,
+        "tray:cpu",
+        format!("{cpu_label}  —"),
+        false,
+        None::<&str>,
+    )?;
+    let memory = MenuItem::with_id(
+        app,
+        "tray:memory",
+        format!("{memory_label}  —"),
+        false,
+        None::<&str>,
+    )?;
+    let disk = MenuItem::with_id(
+        app,
+        "tray:disk",
+        format!("{disk_label}  —"),
+        false,
+        None::<&str>,
+    )?;
+    let upload = MenuItem::with_id(
+        app,
+        "tray:upload",
+        format!("{upload_label}  —"),
+        false,
+        None::<&str>,
+    )?;
+    let download = MenuItem::with_id(
+        app,
+        "tray:download",
+        format!("{download_label}  —"),
+        false,
+        None::<&str>,
+    )?;
 
     let menu = Menu::with_items(
         app,
@@ -3803,9 +3926,15 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             &upload,
             &download,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "tray:open", "打开 chuaker7", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app,
+                "tray:open",
+                i18n.t("menubar.open"),
+                true,
+                None::<&str>,
+            )?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some("退出"))?,
+            &PredefinedMenuItem::quit(app, Some(&i18n.t("menubar.quit")))?,
         ],
     )?;
 
@@ -3824,6 +3953,11 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         disk,
         upload,
         download,
+        cpu_label,
+        memory_label,
+        disk_label,
+        upload_label,
+        download_label,
     });
 
     Ok(())
@@ -3834,19 +3968,21 @@ pub fn update_metrics<R: Runtime>(app: &AppHandle<R>, info: &crate::core::monito
     let Some(items) = app.try_state::<TrayItems<R>>() else {
         return;
     };
-    let _ = items.cpu.set_text(format!("CPU  {:.1}%", info.cpu_usage));
+    let _ = items
+        .cpu
+        .set_text(format!("{}  {:.1}%", items.cpu_label, info.cpu_usage));
     let _ = items
         .memory
-        .set_text(format!("内存  {:.1}%", info.memory_usage));
+        .set_text(format!("{}  {:.1}%", items.memory_label, info.memory_usage));
     let _ = items
         .disk
-        .set_text(format!("磁盘  {:.1}%", info.disk_usage));
+        .set_text(format!("{}  {:.1}%", items.disk_label, info.disk_usage));
     let _ = items
         .upload
-        .set_text(format!("上传  {:.2} MB/s", info.network_upload));
+        .set_text(format!("{}  {:.2} MB/s", items.upload_label, info.network_upload));
     let _ = items
         .download
-        .set_text(format!("下载  {:.2} MB/s", info.network_download));
+        .set_text(format!("{}  {:.2} MB/s", items.download_label, info.network_download));
 }
 
 /// 处理托盘点击与菜单点击。
@@ -3896,10 +4032,10 @@ pub mod tray;
 > 同理：不写这一行，`tray.rs` 不会被编译，`crate::system::tray::...` 会报 E0433。
 - [ ] **Step 2: 接入 Builder 与采样循环**
 
-`src-tauri/src/lib.rs` 的 setup 追加：
+`src-tauri/src/lib.rs` 的 setup 追加（`locale` 变量是 Task 11 引入的）：
 
 ```rust
-            crate::system::tray::build(&handle)?;
+            crate::system::tray::build(&handle, locale)?;
 ```
 
 Builder 追加：
@@ -4268,15 +4404,12 @@ AI-Tool: TophantAI"
 
 ---
 
-## P3 前端页面
-
 ### Task 15: 设置、文案与系统命令
 
 **Files:**
 - Create: `src-tauri/src/commands/settings.rs`
 - Create: `src-tauri/src/commands/system.rs`
 - Modify: `src-tauri/src/commands/mod.rs`
-- Modify: `src-tauri/src/lib.rs`
 
 **Interfaces:**
 - Consumes: `core::settings::{Settings, SettingsPatch}`、`core::i18n::Locale`
@@ -4472,6 +4605,8 @@ AI-Tool: TophantAI"
 ```
 
 ---
+
+## P3 前端页面
 
 ### Task 16: 前端基础层（类型 / 桥接 / 状态 / 工具函数）
 
@@ -8313,6 +8448,7 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
 `src-tauri/src/system/menu.rs` 追加：
 
 ```rust
+use crate::core::clipboard;
 use crate::core::platform;
 use crate::events::EV_NOTICE;
 use tauri::Manager;
@@ -8381,9 +8517,17 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
             notify(app, "info", "已复制到剪贴板");
         }
         ("ctx.clipboard.delete", ContextTarget::Clipboard { id, .. }) => {
-            {
+            let snapshot = {
                 let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-                manager.delete_history_item(*id);
+                if manager.delete_history_item(*id) {
+                    Some(manager.history.clone())
+                } else {
+                    None
+                }
+            };
+            // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
+            if let Some(history) = snapshot {
+                clipboard::persist_history(&history);
             }
             notify(app, "info", "已删除");
         }

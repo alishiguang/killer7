@@ -169,33 +169,38 @@ process 定时刷新 ─┘
 
 ### 6.1 Commands
 
-| 分组 | 命令 | 签名 |
-| --- | --- | --- |
-| 进程 | `list_processes` | `() -> Vec<ProcessRow>` |
-| | `refresh_processes` | `() -> ()` |
-| | `kill_process` | `(pid: i32) -> ()` |
-| 文件 | `list_dir` | `(path: String) -> Vec<FileRow>` |
-| | `create_folder` | `(dir: String, name: String) -> Result<(), String>` |
-| | `create_file` | `(dir: String, name: String) -> Result<(), String>` |
-| | `rename_path` | `(path: String, new_name: String) -> Result<(), String>` |
-| | `delete_to_trash` | `(path: String) -> Result<(), String>` |
-| | `reveal_in_finder` | `(path: String) -> ()` |
-| | `parent_dir` | `(path: String) -> Option<String>` |
-| | `copy_text` | `(text: String) -> ()` |
-| 剪贴板 | `clipboard_current` | `() -> String` |
-| | `clipboard_history` | `() -> Vec<HistoryRow>` |
-| | `remove_history_item` | `(id: u64) -> ()` |
-| | `clear_history` | `() -> ()` |
-| 监控 | `system_snapshot` | `() -> SystemInfo` |
-| 插件 | `list_plugins` | `() -> Vec<PluginRow>` |
-| | `reload_plugins` | `() -> Vec<PluginRow>` |
-| 设置 | `get_settings` | `() -> Settings` |
-| | `update_settings` | `(patch: SettingsPatch) -> Settings` |
-| | `get_strings` | `(locale: String) -> HashMap<String, String>` |
-| 系统 | `set_menu_bar_mode` | `(enabled: bool) -> ()` |
-| | `set_shortcut_enabled` | `(enabled: bool) -> ()` |
-| | `set_auto_launch` | `(enabled: bool) -> Result<(), String>` |
-| | `hide_main_window` / `show_main_window` | `() -> ()` |
+| 分组 | 命令 | 参数 | 返回 |
+| --- | --- | --- | --- |
+| 进程 | `list_processes` | — | `Vec<ProcessRow>` |
+| | `refresh_processes` | — | `Vec<ProcessRow>` |
+| | `kill_process` | `pid: i32` | `Result<bool, String>` |
+| 文件 | `list_dir` | `path: String` | `Vec<FileRow>` |
+| | `create_folder` | `dir: String, name: String` | `Result<(), String>` |
+| | `create_file` | `dir: String, name: String` | `Result<(), String>` |
+| | `rename_path` | `path: String, new_name: String` | `Result<(), String>` |
+| | `delete_to_trash` | `path: String` | `Result<(), String>` |
+| | `reveal_in_finder` | `path: String` | `()` |
+| | `parent_dir` | `path: String` | `Option<String>` |
+| | `copy_text` | `text: String` | `()` |
+| | `home_dir` | — | `String` |
+| | `watch_dir` | `path: String` | `()` |
+| 剪贴板 | `clipboard_current` | — | `String` |
+| | `clipboard_history` | — | `Vec<HistoryRow>` |
+| | `remove_history_item` | `id: u64` | `()` |
+| | `clear_history` | — | `()` |
+| 监控 | `system_snapshot` | — | `SystemInfoDto` |
+| 插件 | `list_plugins` | — | `Vec<PluginRow>` |
+| | `reload_plugins` | — | `Vec<PluginRow>` |
+| | `plugins_dir` | — | `String` |
+| 设置 | `get_settings` | — | `Settings` |
+| | `update_settings` | `patch: SettingsPatch` | `Settings` |
+| | `get_strings` | `locale: String` | `HashMap<String, String>` |
+| 系统 | `set_menu_bar_mode` | `enabled: bool` | `()` |
+| | `set_shortcut_enabled` | `enabled: bool` | `()` |
+| | `set_auto_launch` | `enabled: bool` | `Result<(), String>` |
+| | `hide_main_window` | — | `()` |
+| | `show_main_window` | — | `()` |
+| | `popup_context_menu` | `kind: String, payload: serde_json::Value` | `()` |
 
 ### 6.2 Events
 

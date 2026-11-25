@@ -3,7 +3,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use notify::{RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::commands::dto::FileRow;
@@ -122,6 +121,8 @@ pub fn parent_dir(path: String) -> Option<String> {
     Path::new(&path)
         .parent()
         .filter(|parent| *parent != Path::new(&path))
+        // 相对路径的 parent 是空串，空串不是有效目录，要一并挡掉。
+        .filter(|parent| !parent.as_os_str().is_empty())
         .map(|parent| parent.to_string_lossy().to_string())
 }
 
@@ -144,21 +145,7 @@ pub fn home_dir() -> String {
 #[tauri::command]
 pub fn watch_dir(app: AppHandle, state: State<'_, Arc<AppState>>, path: String) {
     let target = PathBuf::from(path);
-
-    let watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-        if let Ok(event) = result
-            && crate::system::tasks::is_content_change(&event.kind)
-        {
-            let _ = app.emit(EV_FILES_CHANGED, ());
-        }
-    });
-
-    let Ok(mut watcher) = watcher else {
-        return;
-    };
-    if watcher.watch(&target, RecursiveMode::NonRecursive).is_err() {
-        return;
-    }
-
-    *state.watcher.lock().expect("监听锁中毒") = Some(watcher);
+    // 监听器的创建与挂载统一在 system::tasks::watch_path 里，
+    // 失败原因由它打到 stderr —— 静默失败会让前端以为已经切到新目录。
+    crate::system::tasks::watch_path(&app, state.inner(), &target);
 }
