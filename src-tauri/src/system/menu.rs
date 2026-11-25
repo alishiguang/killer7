@@ -23,7 +23,7 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
         i18n.t("menubar.title"),
         true,
         &[
-            &PredefinedMenuItem::about(app, None, None)?,
+            &PredefinedMenuItem::about(app, Some("chuaker7"), None)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(
                 app,
@@ -33,13 +33,18 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
                 Some("CmdOrCtrl+,"),
             )?,
             &PredefinedMenuItem::separator(app)?,
-            // 预定义项传 None，交给 macOS 用系统语言渲染（「隐藏 / 隐藏其他 /
-            // 显示全部 / 退出」），不要自己写死中文。
-            &PredefinedMenuItem::hide(app, None)?,
-            &PredefinedMenuItem::hide_others(app, None)?,
-            &PredefinedMenuItem::show_all(app, None)?,
+            // 这三项**不能**传 None：muda 0.20.0 在 text=None 时用的是它自己写死的
+            // 英文表（`muda-0.20.0/src/items/predefined.rs:305-308,434-487`），而 macOS
+            // 后端用 `initWithTitle:` 显式设标题，AppKit 不再本地化 —— 实测本机
+            // AppleLocale=zh_CN，菜单仍然显示英文的 Hide / Hide Others / Show All。
+            // `locales/*.strings` 与 Swift 版共用、约定不新增 key，而这三项没有对应
+            // key，所以只能写死中文（应用以简体中文为主）；英文版会在这三处不一致，
+            // 属已知取舍。退出项有 `menubar.quit` key，走 i18n。
+            &PredefinedMenuItem::hide(app, Some("隐藏 chuaker7"))?,
+            &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
+            &PredefinedMenuItem::show_all(app, Some("显示全部"))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, None)?,
+            &PredefinedMenuItem::quit(app, Some(&i18n.t("menubar.quit")))?,
         ],
     )?;
 

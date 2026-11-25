@@ -814,8 +814,13 @@ Expected：
 
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+# 1420 端口被另一个项目的孤儿 vite dev server 占用，运行验收走 release 构建直跑：
+# default = ["custom-protocol"] 让 release 二进制直接内嵌 frontend/dist，不依赖 dev server。
+# 注意：这是 cargo **工作区**，产物在仓库根的 target/ 下，不在 src-tauri/target/。
 source ~/.nvm/nvm.sh && nvm use
-npm run tauri dev
+npm run build
+cargo build --release -p chuaker7
+./target/release/chuaker7
 ```
 
 Expected：弹出名为 chuaker7 的窗口，尺寸 1080×720，窗口内显示「chuaker7 / Tauri v2 + React 脚手架已就绪。」。用 `⌘W` 关闭后继续。
@@ -3734,7 +3739,7 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
         i18n.t("menubar.title"),
         true,
         &[
-            &PredefinedMenuItem::about(app, None, None)?,
+            &PredefinedMenuItem::about(app, Some("chuaker7"), None)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(
                 app,
@@ -3744,13 +3749,18 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
                 Some("CmdOrCtrl+,"),
             )?,
             &PredefinedMenuItem::separator(app)?,
-            // 预定义项传 None，交给 macOS 用系统语言渲染（「隐藏 / 隐藏其他 /
-            // 显示全部 / 退出」），不要自己写死中文。
-            &PredefinedMenuItem::hide(app, None)?,
-            &PredefinedMenuItem::hide_others(app, None)?,
-            &PredefinedMenuItem::show_all(app, None)?,
+            // 这三项**不能**传 None：muda 0.20.0 在 text=None 时用的是它自己写死的
+            // 英文表（`muda-0.20.0/src/items/predefined.rs:305-308,434-487`），而 macOS
+            // 后端用 `initWithTitle:` 显式设标题，AppKit 不再本地化 —— 实测本机
+            // AppleLocale=zh_CN，菜单仍然显示英文的 Hide / Hide Others / Show All。
+            // `locales/*.strings` 与 Swift 版共用、约定不新增 key，而这三项没有对应
+            // key，所以只能写死中文（应用以简体中文为主）；英文版会在这三处不一致，
+            // 属已知取舍。退出项有 `menubar.quit` key，走 i18n。
+            &PredefinedMenuItem::hide(app, Some("隐藏 chuaker7"))?,
+            &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
+            &PredefinedMenuItem::show_all(app, Some("显示全部"))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, None)?,
+            &PredefinedMenuItem::quit(app, Some(&i18n.t("menubar.quit")))?,
         ],
     )?;
 
@@ -3776,13 +3786,49 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
         "视图",
         true,
         &[
-            &MenuItem::with_id(app, "nav:processes", i18n.t("nav.process"), true, Some("CmdOrCtrl+1"))?,
-            &MenuItem::with_id(app, "nav:files", i18n.t("nav.file"), true, Some("CmdOrCtrl+2"))?,
-            &MenuItem::with_id(app, "nav:clipboard", i18n.t("nav.clipboard"), true, Some("CmdOrCtrl+3"))?,
-            &MenuItem::with_id(app, "nav:monitor", i18n.t("nav.monitor"), true, Some("CmdOrCtrl+4"))?,
-            &MenuItem::with_id(app, "nav:plugins", i18n.t("nav.plugins"), true, Some("CmdOrCtrl+5"))?,
+            &MenuItem::with_id(
+                app,
+                "nav:processes",
+                i18n.t("nav.process"),
+                true,
+                Some("CmdOrCtrl+1"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:files",
+                i18n.t("nav.file"),
+                true,
+                Some("CmdOrCtrl+2"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:clipboard",
+                i18n.t("nav.clipboard"),
+                true,
+                Some("CmdOrCtrl+3"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:monitor",
+                i18n.t("nav.monitor"),
+                true,
+                Some("CmdOrCtrl+4"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:plugins",
+                i18n.t("nav.plugins"),
+                true,
+                Some("CmdOrCtrl+5"),
+            )?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "nav:settings", i18n.t("nav.settings"), true, None::<&str>)?,
+            &MenuItem::with_id(
+                app,
+                "nav:settings",
+                i18n.t("nav.settings"),
+                true,
+                None::<&str>,
+            )?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, None)?,
         ],
@@ -3865,7 +3911,13 @@ pub mod menu;
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7
-npm run tauri dev
+# 1420 端口被另一个项目的孤儿 vite dev server 占用，运行验收走 release 构建直跑：
+# default = ["custom-protocol"] 让 release 二进制直接内嵌 frontend/dist，不依赖 dev server。
+# 注意：这是 cargo **工作区**，产物在仓库根的 target/ 下，不在 src-tauri/target/。
+source ~/.nvm/nvm.sh && nvm use
+npm run build
+cargo build --release -p chuaker7
+./target/release/chuaker7
 ```
 
 Expected：窗口出现后，屏幕顶部出现 macOS 菜单栏，含「chuaker7 / 编辑 / 视图 / 窗口」四个下拉；点「视图 → 进程管理」无报错。
@@ -4003,8 +4055,16 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
                 None::<&str>,
             )?,
             &PredefinedMenuItem::separator(app)?,
-            // 预定义项传 None，交给 macOS 用系统语言渲染「退出」。
-            &PredefinedMenuItem::quit(app, None)?,
+            // 用**自定义**项而不是 `PredefinedMenuItem::quit`：预定义项由系统直接
+            // 退出应用，走不到下面的 `on_tray_menu_event`，`tray-quit` 事件就永远
+            // 发不出去（契约里写了托盘「退出」要发这个事件）。
+            &MenuItem::with_id(
+                app,
+                "tray:quit",
+                i18n.t("menubar.quit"),
+                true,
+                None::<&str>,
+            )?,
         ],
     )?;
 
@@ -4014,6 +4074,11 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
         .tooltip("chuaker7")
         .show_menu_on_left_click(false)
         .menu(&menu)
+        // 托盘菜单的点击必须自己接：`Builder::on_menu_event` 是**全局**监听，
+        // 会和应用菜单的监听一起触发；而这里要的是「只认托盘菜单里的项」。
+        .on_menu_event(|app, event| {
+            on_tray_menu_event(app, event.id().as_ref());
+        })
         .build(app)?;
 
     // 把可更新的菜单项挂到全局状态上，供采样循环更新。
@@ -4108,11 +4173,12 @@ pub mod tray;
             crate::system::tray::build(&handle, locale)?;
 ```
 
-Builder 追加：
+Builder 追加（`Builder::on_tray_icon_event` 的第一个参数是 `&AppHandle<R>`，
+不是 `&TrayIcon`；`tray.app_handle()` 只是把它再取一遍）：
 
 ```rust
-        .on_tray_icon_event(|tray, event| {
-            crate::system::tray::on_tray_event(tray.app_handle(), &event);
+        .on_tray_icon_event(|app, event| {
+            crate::system::tray::on_tray_event(app, &event);
         })
 ```
 
@@ -4127,7 +4193,13 @@ Builder 追加：
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7
-npm run tauri dev
+# 1420 端口被另一个项目的孤儿 vite dev server 占用，运行验收走 release 构建直跑：
+# default = ["custom-protocol"] 让 release 二进制直接内嵌 frontend/dist，不依赖 dev server。
+# 注意：这是 cargo **工作区**，产物在仓库根的 target/ 下，不在 src-tauri/target/。
+source ~/.nvm/nvm.sh && nvm use
+npm run build
+cargo build --release -p chuaker7
+./target/release/chuaker7
 ```
 
 Expected：菜单栏右侧出现小鸟图标；左键点击弹出菜单，显示 CPU / 内存 / 磁盘 / 上传 / 下载 五行数值（随采样刷新）；点「打开 chuaker7」窗口置前。
@@ -4284,7 +4356,13 @@ pub mod shortcut;
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
-npm run tauri dev
+# 1420 端口被另一个项目的孤儿 vite dev server 占用，运行验收走 release 构建直跑：
+# default = ["custom-protocol"] 让 release 二进制直接内嵌 frontend/dist，不依赖 dev server。
+# 注意：这是 cargo **工作区**，产物在仓库根的 target/ 下，不在 src-tauri/target/。
+source ~/.nvm/nvm.sh && nvm use
+npm run build
+cargo build --release -p chuaker7
+./target/release/chuaker7
 ```
 
 Expected：
@@ -6027,6 +6105,7 @@ import { useEffect } from 'react';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { applyTheme } from '../lib/theme';
 import { pushToast, setState, useAppStore } from '../lib/store';
+import type { TabId } from '../lib/types';
 import { Sidebar } from './Sidebar';
 import { Toast } from './Toast';
 import { TopBar } from './TopBar';
@@ -6078,7 +6157,10 @@ export function AppShell() {
     track(
       onEvent<string>(EVENT.menuAction, (action) => {
         if (action.startsWith('nav:')) {
-          setState({ activeTab: action.slice(4) as never });
+          setState({ activeTab: action.slice(4) as TabId });
+        } else if (action === 'app:settings') {
+          // 应用菜单里的「设置…」发的是 app:settings，不是 nav: 前缀。
+          setState({ activeTab: 'settings' });
         }
       }),
     );
@@ -8700,7 +8782,13 @@ fn notify(app: &AppHandle, kind: &str, message: &str) {
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 source ~/.nvm/nvm.sh && nvm use && npm run test && npm run typecheck
-npm run tauri dev
+# 1420 端口被另一个项目的孤儿 vite dev server 占用，运行验收走 release 构建直跑：
+# default = ["custom-protocol"] 让 release 二进制直接内嵌 frontend/dist，不依赖 dev server。
+# 注意：这是 cargo **工作区**，产物在仓库根的 target/ 下，不在 src-tauri/target/。
+source ~/.nvm/nvm.sh && nvm use
+npm run build
+cargo build --release -p chuaker7
+./target/release/chuaker7
 ```
 
 Expected：进程行、文件行、剪贴板行右键均弹出 macOS 原生菜单；「复制完整路径」后系统剪贴板内容正确；「重命名」与「移到废纸篓」由前端接管并弹窗确认。
@@ -8884,7 +8972,8 @@ const ProcessRowView = memo(function ProcessRowView({
 
 ## 测量方法
 
-1. `npm run tauri dev` 启动应用。
+1. 启动应用（1420 端口被别的项目占用，走 release 构建直跑：
+   `npm run build` → `cargo build --release -p chuaker7` → `./target/release/chuaker7`）。
 2. 进程页：`document.querySelectorAll('*').length` 记录 DOM 节点总数。
 3. 滚动帧率：在 Web Inspector 的 Performance 面板录制滚动过程。
 4. 事件负载：在 DevTools Network 面板查看 `processes` 事件消息体大小。
