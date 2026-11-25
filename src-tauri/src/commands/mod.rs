@@ -3,8 +3,11 @@
 //! 这一层只做「编解码 + 转发」：参数来自前端，调用 core 或 system，
 //! 返回可序列化的结果。业务逻辑不写在这里。
 
+pub mod clipboard;
 pub mod dto;
 pub mod files;
+pub mod monitor;
+pub mod plugins;
 pub mod processes;
 
 /// 汇总所有 command。
@@ -23,5 +26,13 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         files::copy_text,
         files::home_dir,
         files::watch_dir,
+        clipboard::clipboard_current,
+        clipboard::clipboard_history,
+        clipboard::remove_history_item,
+        clipboard::clear_history,
+        monitor::system_snapshot,
+        plugins::list_plugins,
+        plugins::reload_plugins,
+        plugins::plugins_dir,
     ]
 }
