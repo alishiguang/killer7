@@ -38,6 +38,13 @@ export function AppShell() {
       }
       applyTheme(settings.themeMode, settings.accent);
       setState({ settings, strings, locale: settings.locale });
+
+      // 支持用 `?page=processes` 直接定位标签页：截图与自动化脚本需要能直达某一页，
+      // 而不必先点侧栏。参数非法时忽略，留在默认页。
+      const requested = new URLSearchParams(window.location.search).get('page');
+      if (requested && requested in PAGES) {
+        setState({ activeTab: requested as TabId });
+      }
     })();
 
     return () => {

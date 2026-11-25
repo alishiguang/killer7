@@ -52,6 +52,8 @@
 "clipboard.title" = "Clipboard";
 "clipboard.current" = "Current Clipboard";
 "clipboard.history" = "History";
+"clipboard.column.type" = "Type";
+"clipboard.column.time" = "Time";
 "clipboard.search.placeholder" = "Search history";
 "clipboard.clear" = "Clear";
 "clipboard.clearHistory" = "Clear History";

@@ -49,10 +49,10 @@ export function Monitor() {
 
       <div className="chart-grid">
         <Card title={t('monitor.cpu.history')}>
-          <Sparkline values={info.cpuHistory} width={420} height={72} />
+          <Sparkline values={info.cpuHistory} height={72} />
         </Card>
         <Card title={t('monitor.memory.history')}>
-          <Sparkline values={info.memoryHistory} width={420} height={72} />
+          <Sparkline values={info.memoryHistory} height={72} />
         </Card>
       </div>
     </div>

@@ -14,6 +14,10 @@ build/
 # Tauri 生成的 ACL / 权限 schema（构建产物，可再生）
 src-tauri/gen/schemas/
 
+# Tauri 构建产物（cargo 工作区根在仓库根，但独立构建 src-tauri 时会落在这里）
+src-tauri/target/
+src-tauri/gen/
+
 # 图标源图（由 scripts/make-icon.mjs 生成，可再生）
 scripts/icon-source.png
 

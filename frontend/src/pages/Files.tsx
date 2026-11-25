@@ -90,7 +90,8 @@ export function Files() {
       {
         key: 'action',
         title: t('file.column.action'),
-        width: 180,
+        // 三个操作按钮（进入文件夹 / 重命名 / 删除）挤在 180px 里会溢出卡片右边界。
+        width: 230,
         render: (row) => (
           <div className="row-actions">
             {row.isDir ? (

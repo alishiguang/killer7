@@ -6,6 +6,13 @@ import { useI18n } from '../lib/i18n';
 import { pushToast } from '../lib/store';
 import type { HistoryRow } from '../lib/types';
 
+/** 剪贴板类型 → 文案 key。后端只给 `text` / `image` / `url` 三种原始值。 */
+const KIND_KEYS: Record<string, string> = {
+  text: 'clipboard.type.text',
+  image: 'clipboard.type.image',
+  url: 'clipboard.type.url',
+};
+
 export function Clipboard() {
   const { t } = useI18n();
   const [current, setCurrent] = useState('');
@@ -60,13 +67,13 @@ export function Clipboard() {
       },
       {
         key: 'kind',
-        title: t('clipboard.current'),
+        title: t('clipboard.column.type'),
         width: 90,
-        render: (row) => <span className="text-muted">{row.kind}</span>,
+        render: (row) => <span className="text-muted">{t(KIND_KEYS[row.kind] ?? 'clipboard.type.text')}</span>,
       },
       {
         key: 'time',
-        title: t('common.more'),
+        title: t('clipboard.column.time'),
         width: 130,
         render: (row) => <span className="mono">{formatTime(row.timestamp)}</span>,
       },

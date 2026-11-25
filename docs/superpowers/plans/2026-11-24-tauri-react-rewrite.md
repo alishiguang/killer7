@@ -6278,12 +6278,12 @@ export function Modal({ open, title, children, footer, onClose }: ModalProps) {
 - [ ] **Step 6: 写 `Sparkline.tsx`（Canvas 手绘曲线）**
 
 ```tsx
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface SparklineProps {
   /** 采样序列。 */
   values: number[];
-  /** 画布宽（CSS px）。 */
+  /** 画布宽（CSS px）；缺省时自动跟随容器宽度。 */
   width?: number;
   /** 画布高（CSS px）。 */
   height?: number;
@@ -6293,13 +6293,45 @@ export interface SparklineProps {
   max?: number;
 }
 
-/** Canvas 手绘曲线，避免 SVG 逐点重排。 */
-export function Sparkline({ values, width = 240, height = 48, color, max = 100 }: SparklineProps) {
+/**
+ * Canvas 手绘曲线，避免 SVG 逐点重排。
+ *
+ * 宽度默认**跟随容器**：卡片有内边距，写死像素宽度会让画布溢出卡片右边界
+ * （内边距被吃掉之后还会压到描边上）。用 ResizeObserver 量容器内容宽度，
+ * 容器变化时自动重绘。
+ */
+export function Sparkline({ values, width, height = 48, color, max = 100 }: SparklineProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [measured, setMeasured] = useState(0);
+
+  useEffect(() => {
+    if (width !== undefined) {
+      return;
+    }
+    const canvas = canvasRef.current;
+    const parent = canvas?.parentElement;
+    if (!parent) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      const next = Math.floor(entry.contentRect.width);
+      if (next > 0) {
+        setMeasured(next);
+      }
+    });
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, [width]);
+
+  const drawWidth = width ?? measured;
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) {
+    if (!canvas || drawWidth <= 0) {
       return;
     }
     const ctx = canvas.getContext('2d');
@@ -6308,17 +6340,17 @@ export function Sparkline({ values, width = 240, height = 48, color, max = 100 }
     }
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(width * dpr);
+    canvas.width = Math.round(drawWidth * dpr);
     canvas.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, drawWidth, height);
 
     if (values.length < 2) {
       return;
     }
 
     const stroke = color ?? getComputedStyle(canvas).getPropertyValue('--accent').trim() ?? '#F43D3F';
-    const step = width / (values.length - 1);
+    const step = drawWidth / (values.length - 1);
     const y = (value: number) => height - (Math.min(value, max) / max) * height;
 
     ctx.beginPath();
@@ -6330,14 +6362,20 @@ export function Sparkline({ values, width = 240, height = 48, color, max = 100 }
     ctx.lineWidth = 1.25;
     ctx.stroke();
 
-    ctx.lineTo(width, height);
+    ctx.lineTo(drawWidth, height);
     ctx.lineTo(0, height);
     ctx.closePath();
     ctx.fillStyle = `${stroke}1f`;
     ctx.fill();
-  }, [values, width, height, color, max]);
+  }, [values, drawWidth, height, color, max]);
 
-  return <canvas ref={canvasRef} className="sparkline" style={{ width, height }} />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className="sparkline"
+      style={{ width: width === undefined ? '100%' : width, height }}
+    />
+  );
 }
 ```
 
@@ -6773,6 +6811,13 @@ export function AppShell() {
       }
       applyTheme(settings.themeMode, settings.accent);
       setState({ settings, strings, locale: settings.locale });
+
+      // 支持用 `?page=processes` 直接定位标签页：截图与自动化脚本需要能直达某一页，
+      // 而不必先点侧栏。参数非法时忽略，留在默认页。
+      const requested = new URLSearchParams(window.location.search).get('page');
+      if (requested && requested in PAGES) {
+        setState({ activeTab: requested as TabId });
+      }
     })();
 
     return () => {
@@ -7694,7 +7739,8 @@ export function Files() {
       {
         key: 'action',
         title: t('file.column.action'),
-        width: 180,
+        // 三个操作按钮（进入文件夹 / 重命名 / 删除）挤在 180px 里会溢出卡片右边界。
+        width: 230,
         render: (row) => (
           <div className="row-actions">
             {row.isDir ? (
@@ -7987,7 +8033,8 @@ function formatTime(seconds: number): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
     date.getMinutes(),
   )}`;
-}```
+}
+```
 
 > **实际落地**：Task 26 接入 `useDeferredValue`，行点击/行右键回调改为稳定引用。
 > 上文是当前文件的**完整内容**。
@@ -8192,6 +8239,13 @@ import { useI18n } from '../lib/i18n';
 import { pushToast } from '../lib/store';
 import type { HistoryRow } from '../lib/types';
 
+/** 剪贴板类型 → 文案 key。后端只给 `text` / `image` / `url` 三种原始值。 */
+const KIND_KEYS: Record<string, string> = {
+  text: 'clipboard.type.text',
+  image: 'clipboard.type.image',
+  url: 'clipboard.type.url',
+};
+
 export function Clipboard() {
   const { t } = useI18n();
   const [current, setCurrent] = useState('');
@@ -8246,13 +8300,13 @@ export function Clipboard() {
       },
       {
         key: 'kind',
-        title: t('clipboard.current'),
+        title: t('clipboard.column.type'),
         width: 90,
-        render: (row) => <span className="text-muted">{row.kind}</span>,
+        render: (row) => <span className="text-muted">{t(KIND_KEYS[row.kind] ?? 'clipboard.type.text')}</span>,
       },
       {
         key: 'time',
-        title: t('common.more'),
+        title: t('clipboard.column.time'),
         width: 130,
         render: (row) => <span className="mono">{formatTime(row.timestamp)}</span>,
       },
@@ -8350,7 +8404,8 @@ function formatTime(seconds: number): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
     date.getMinutes(),
   )}`;
-}```
+}
+```
 
 > **实际落地**：Task 26 接入 `useDeferredValue`，行右键回调改为稳定引用。
 > 上文是当前文件的**完整内容**。
@@ -8533,10 +8588,10 @@ export function Monitor() {
 
       <div className="chart-grid">
         <Card title={t('monitor.cpu.history')}>
-          <Sparkline values={info.cpuHistory} width={420} height={72} />
+          <Sparkline values={info.cpuHistory} height={72} />
         </Card>
         <Card title={t('monitor.memory.history')}>
-          <Sparkline values={info.memoryHistory} width={420} height={72} />
+          <Sparkline values={info.memoryHistory} height={72} />
         </Card>
       </div>
     </div>
@@ -9943,47 +9998,61 @@ AI-Tool: TophantAI"
 - Create: `docs/screenshots/tauri-settings.png`
 - Modify: `README.md`
 - Modify: `.gitignore`
-- Create: `release/chuaker7.zip`
+- Create: `release/Ki6.zip`
 
 **Interfaces:**
 - Consumes: 全部前置任务
-- Produces: 六个页面的新截图、更新的 README、可分发 `.app` 包
+- Produces: 六个页面的新截图、更新的 README、可分发 `.app` / `.dmg` 包
 
-- [ ] **Step 1: 启动前端并截图**
+- [ ] **Step 1: 逐页截图**
 
-```bash
-cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
-source ~/.nvm/nvm.sh && nvm use
-npm run dev &
-sleep 4
-```
+> **环境限制**：本机没有 Screen Recording 权限，`screencapture` 只能得到黑图；
+> 且打包后的 `.app` 运行时 AX 查询 `count of windows` = 0（应用在、无可见窗口），
+> 无法在 WKWebView 里真机截图。
+>
+> 因此改走「Rust 侧导出真实数据 → mock IPC → Chrome headless 截图」路径：
+> 渲染与 CSS、字体都是真的，数据也是真的，只是宿主是 Chromium 而不是 WKWebView。
 
-逐页截图（用 Chrome headless）：
-
-```bash
-CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-for page in processes files clipboard monitor plugins settings; do
-  "$CHROME" --headless --disable-gpu --hide-scrollbars \
-    --screenshot="docs/screenshots/tauri-${page}.png" \
-    --window-size=1080,720 \
-    "http://localhost:1420/?page=${page}"
-done
-```
-
-> 前端需支持 `?page=` 参数直接定位标签页。在 `frontend/src/app/AppShell.tsx` 的启动引导里追加：
+前端需支持 `?page=` 参数直接定位标签页。`frontend/src/app/AppShell.tsx` 的启动引导里：
 
 ```tsx
+      // 支持用 `?page=processes` 直接定位标签页：截图与自动化脚本需要能直达某一页，
+      // 而不必先点侧栏。参数非法时忽略，留在默认页。
       const requested = new URLSearchParams(window.location.search).get('page');
-      if (requested && (requested in PAGES)) {
-        setState({ activeTab: requested as never });
+      if (requested && requested in PAGES) {
+        setState({ activeTab: requested as TabId });
       }
 ```
 
-重新截完图后：
+截图三步：
+
+1. **导出真实数据**：临时集成测试 `src-tauri/tests/shot_dump.rs` 调 `core/` 里的
+   真实实现，把进程 / 文件 / 剪贴板 / 监控 / 插件 / 设置的 DTO 导出成 JSON 到
+   `/tmp/ki6-shot/`。该测试文件**用完即删**，不进仓库。
+2. **mock IPC**：本地 HTTP 服务器在 `index.html` 里注入 `window.__TAURI_INTERNALS__`，
+   把 `invoke` 转成读 JSON。判断路径时要用 `self.path.split("?")[0]`，
+   否则 `/?page=xxx` 会拿到未注入的原始 `index.html`。
+3. **Chrome headless 截图**：
 
 ```bash
-kill %1
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo test -p chuaker7 --test shot_dump -- --nocapture   # 导出 /tmp/ki6-shot/*.json
+python3 /tmp/shot_server.py 5179 &
+
+CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+for page in processes files clipboard monitor plugins settings; do
+  "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
+    --window-size=1080,720 --virtual-time-budget=8000 \
+    --screenshot=/tmp/shots/$page.png "http://127.0.0.1:5179/?page=$page"
+done
+
+# 归档进仓库
+for page in processes files clipboard monitor plugins settings; do
+  cp "/tmp/shots/$page.png" "docs/screenshots/tauri-$page.png"
+done
 ```
+
+截图脚本与 mock 服务器**只存在于 `/tmp`**，不进仓库。
 
 - [ ] **Step 2: 与 egui 版对照**
 
@@ -9996,16 +10065,24 @@ kill %1
 
 发现偏差时只调整 CSS 变量与尺寸，**不改视觉语言本身**。
 
+本轮实际发现并修复 3 个视觉缺陷 —— 都不是视觉语言问题，是布局溢出：
+
+| 缺陷 | 根因 | 修复 |
+| --- | --- | --- |
+| 监控页曲线溢出卡片右边界 | `Sparkline` 写死 `width=420`，卡片内边距被吃掉后仍压到描边上 | 改用 `ResizeObserver` 跟随容器宽度，`Monitor.tsx` 去掉硬编码 width |
+| 文件页「操作」列被卡片右边界裁掉 | 180px 装不下 3 个按钮 | 列宽 180 → 230 |
+| 剪贴板页列头文案错位 | 「类型」列写成「当前剪贴板」，「时间」列写成「更多」 | 新增 `clipboard.column.type` / `clipboard.column.time` 两个 locale key（zh + en），并用 `clipboard.type.*` 本地化 kind 值 |
+
 - [ ] **Step 3: 更新 README**
 
 README 需要包含：
 
-- 项目简介：chuaker7 是 LuciBox 的 Rust + Tauri v2 重写版；
+- 项目简介：Ki6 是 LuciBox 的 Rust + Tauri v2 重写版；
 - 技术栈表格（Tauri v2 / React 19 / TypeScript 5.9 / Rust 1.90）；
 - 功能清单（进程管理、文件管理、剪贴板、系统监控、插件、设置）与原生能力清单（应用菜单栏、原生右键菜单、托盘菜单、⌘L 全局快捷键、菜单栏模式、开机自启）；
 - 开发指南（`nvm use` → `npm install` → `npm run tauri dev`）；
-- 构建指南（`npm run tauri build` → `src-tauri/target/release/bundle/`）；
-- 六张新截图（替换 egui 版截图）；
+- 构建指南（`npm run tauri build` → `target/release/bundle/`，注意是**仓库根**的 `target/`）；
+- 六张新截图（`docs/screenshots/tauri-*.png`）；
 - 许可证说明（MIT，字体为 SIL OFL）。
 
 - [ ] **Step 4: 更新 `.gitignore`**
@@ -10013,7 +10090,7 @@ README 需要包含：
 追加：
 
 ```gitignore
-# Tauri 构建产物
+# Tauri 构建产物（cargo 工作区根在仓库根，但独立构建 src-tauri 时会落在这里）
 src-tauri/target/
 src-tauri/gen/
 ```
@@ -10028,25 +10105,27 @@ source ~/.nvm/nvm.sh && nvm use
 npm run tauri build
 ```
 
-Expected：
-- `src-tauri/target/release/bundle/macos/chuaker7.app` 生成；
-- `src-tauri/target/release/bundle/dmg/chuaker7_1.2.0_*.dmg` 生成。
+Expected（**产物在仓库根的 `target/`，不在 `src-tauri/target/`**）：
+
+- `target/release/bundle/macos/Ki6.app` 生成（`productName` = `Ki6`）；
+- `target/release/bundle/dmg/Ki6_1.2.0_*.dmg` 生成。
 
 验证应用可运行：
 
 ```bash
-open src-tauri/target/release/bundle/macos/chuaker7.app
+open target/release/bundle/macos/Ki6.app
 sleep 3
 osascript -e 'tell application "System Events" to get name of every process whose background only is false'
 ```
 
-Expected：进程列表包含 `chuaker7`。
+Expected：进程列表包含 `Ki6`；**菜单栏标题必须显示 `Ki6`** —— 未打包的裸二进制会
+继承父进程名显示 `chuaker7`，这是打包是否生效的直接判据。
 
 打包 zip：
 
 ```bash
-cd src-tauri/target/release/bundle/macos
-zip -r /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react/release/chuaker7.zip chuaker7.app
+cd target/release/bundle/macos
+zip -r /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react/release/Ki6.zip Ki6.app
 ```
 
 - [ ] **Step 6: 提交并推送**
@@ -10058,7 +10137,7 @@ git commit -m "docs: 更新 README 与界面预览，产出可分发 .app 包
 
 - README 补充 Tauri 架构说明、原生能力清单与开发构建指南
 - 六张页面截图替换 egui 版预览
-- tauri build 产出 chuaker7.app 与 dmg
+- tauri build 产出 Ki6.app 与 dmg
 
 AI-Coding: true
 AI-Tool: TophantAI"
@@ -10090,7 +10169,7 @@ cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git status --short          # 应为空
 git log --oneline -5        # 确认新提交
 git branch -a               # legacy-egui 仍在
-ls -la release/             # chuaker7.zip 存在
+ls -la release/             # Ki6.zip 存在
 ```
 
 ---
@@ -10173,9 +10252,23 @@ Task 4–15 可与 Task 16–24 并行（Rust 侧与前端侧文件不重叠）�
 | Task 1 | #5 | 7 | `src-tauri/src/lib.rs` | `pub fn run() {` |
 | Task 4 | #7 | 13 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
 | Task 11 | #2 | 17 | `（片段，无单一对应文件）` | `> "menubar.edit"      = "编辑"        / "Edit"` |
-| Task 27 | #0 | 4 | `（片段，无单一对应文件）` | `      const requested = new URLSearchParams(wind` |
-| Task 27 | #1 | 3 | `（片段，无单一对应文件）` | `# Tauri 构建产物` |
-| Task 27 | #2 | 6 | `（片段，无单一对应文件）` | `Task 1 → Task 2 → Task 3` |
+
+### 本轮同步记录（Task 27 执行期间）
+
+T27 为了做视觉验收与打包，动了 6 个前端文件，产生的漂移已**全部回写为实际文件**，
+不再需要「以实际文件为准」的例外：
+
+| 任务 | 块序号 | 回写来源 | 变更原因 |
+| --- | --- | --- | --- |
+| Task 17 | #8 | `frontend/src/components/Sparkline.tsx` | `Sparkline` 改为 `ResizeObserver` 跟随容器宽度（原来写死 420px 会溢出卡片右边界） |
+| Task 18 | #4 | `frontend/src/app/AppShell.tsx` | 新增 `?page=` 参数直达标签页（截图 / 自动化脚本需要） |
+| Task 20 | #0 | `frontend/src/pages/Files.tsx` | 「操作」列宽 180 → 230（3 个按钮原来会被卡片右边界裁掉） |
+| Task 21 | #0 | `frontend/src/pages/Clipboard.tsx` | 列头改用 `clipboard.column.type` / `clipboard.column.time`，kind 值走 `clipboard.type.*` 本地化 |
+| Task 22 | #0 | `frontend/src/pages/Monitor.tsx` | 去掉硬编码的 `width={420}`，改由 `Sparkline` 自适应 |
+| Task 27 | #0 / #1 | `frontend/src/app/AppShell.tsx` / `.gitignore` | 截图步骤改为「真实数据 + mock IPC + Chrome headless」；`.gitignore` 追加 `src-tauri/target/` 与 `src-tauri/gen/` |
+
+> `clipboard.column.type` / `clipboard.column.time` 是本轮新增的两个 locale key，
+> zh-Hans 与 en 两份 `Localizable.strings` 已同步。
 
 > **单独说明**
 >

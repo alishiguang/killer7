@@ -52,6 +52,8 @@
 "clipboard.title" = "剪贴板管理";
 "clipboard.current" = "当前剪贴板";
 "clipboard.history" = "历史记录";
+"clipboard.column.type" = "类型";
+"clipboard.column.time" = "时间";
 "clipboard.search.placeholder" = "搜索历史记录";
 "clipboard.clear" = "清空";
 "clipboard.clearHistory" = "清空历史";
