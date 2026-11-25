@@ -31,6 +31,11 @@
 - **删除文件**：一律使用 `"/Users/lishiguang/.minimax/bin/mavis-trash" -- "<path>"`，**不得**使用 `rm`（会被权限网关拦截）。
 - **不泄露凭证**：推送 GitHub 用 `GIT_ASKPASS` 注入临时脚本，推送完立即用 `mavis-trash` 删除脚本；任何提交、日志、计划文件中不得出现 PAT 明文。
 - **性能红线**：进程列表 500 行时 DOM 节点数不超过 60（虚拟列表，固定行高 26px，overscan 8）；滚动不得掉帧；首帧不得出现空白（WebView 直接渲染 HTML，不存在 egui 的整帧丢弃）。
+- **构建前置条件（重要）**：`src-tauri/Cargo.toml` 的 `default = ["custom-protocol"]` 让 `tauri::generate_context!` 在编译期**无条件**校验 `frontendDist`（即 `frontend/dist`）目录存在，而该目录由前端构建产出且被 `.gitignore` 的 `dist/` 规则忽略。因此：
+  - **干净检出后直接 `cargo build` / `cargo test` 必然失败**（报 `The frontendDist configuration is set to "../frontend/dist" but this path doesn't exist`），这是 Tauri v2 项目的固有形态，**不是缺陷**。
+  - 所有 Rust 命令（`cargo build` / `cargo test` / `cargo clippy`）必须在**已跑过 `npm run build`** 的工作树里执行。
+  - **任何 release 构建（`tauri build`）之前，必须确认 `frontend/dist/index.html` 是真实前端产物，而不是占位文件**——否则空白首页会被内嵌进二进制，直接违反「首帧不得出现空白」的性能红线。
+  - 占位文件（若需要临时创建以让 Rust 侧先跑起来）必须位于被 gitignore 的路径下，不得提交。
 - **分支策略**：`main` 继续演进；egui 版永久存档在 `legacy-egui` 分支（指向 `b36b8dc`），**不得删除或改写该分支**。
 
 ---
