@@ -42,11 +42,15 @@ pub fn spawn_process_loop(app: AppHandle, state: Arc<AppState>) {
 
             let rows = {
                 let mut processes = state.processes.lock().expect("进程锁中毒");
-                processes
-                    .collect(limit)
+                let list = processes.collect(limit);
+                let rows = list
                     .iter()
                     .map(crate::commands::dto::ProcessRow::from)
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>();
+                // 回写缓存：`list_processes` 命令读的就是这个字段，
+                // 不回写的话那条命令永远返回空列表。
+                processes.processes = list;
+                rows
             };
 
             let _ = app.emit(EV_PROCESSES, rows);

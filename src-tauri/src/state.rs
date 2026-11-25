@@ -57,9 +57,15 @@ impl AppState {
         let mut plugins = PluginManager::default();
         plugins.load_plugins();
 
+        // 启动时同步采一次进程列表：窗口一打开就有数据，不必等后台循环的第一轮。
+        // 实测 `ps` 约 30ms、`lsof` 约 55ms，这个代价可以接受；
+        // 不这么做的话 `list_processes` 会拿到空列表，进程页要空好几秒。
+        let mut processes = ProcessManager::default();
+        processes.load_blocking(settings.process_list_limit);
+
         Self {
             i18n: Mutex::new(I18n::new(locale)),
-            processes: Mutex::new(ProcessManager::default()),
+            processes: Mutex::new(processes),
             files: Mutex::new(FileManager::default()),
             clipboard: Mutex::new(clipboard),
             monitor: Mutex::new(SystemMonitor::default()),
