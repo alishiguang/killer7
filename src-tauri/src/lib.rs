@@ -31,6 +31,7 @@ pub fn run() {
             // 菜单文案跟着设置里的语言走。
             let locale = state.settings.lock().expect("设置锁中毒").locale;
             crate::system::menu::build(&handle, locale)?;
+            crate::system::tray::build(&handle, locale)?;
 
             crate::system::tasks::spawn_process_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_clipboard_loop(handle.clone(), state.clone());
@@ -46,6 +47,9 @@ pub fn run() {
         })
         .on_menu_event(|app, event| {
             crate::system::menu::on_menu_event(app, event.id().as_ref());
+        })
+        .on_tray_icon_event(|app, event| {
+            crate::system::tray::on_tray_event(app, &event);
         })
         .run(tauri::generate_context!())
         .expect("error while running chuaker7");

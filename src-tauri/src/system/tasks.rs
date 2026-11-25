@@ -146,6 +146,8 @@ pub fn spawn_monitor_loop(
                 }
             };
 
+            crate::system::tray::update_metrics(&app, &info);
+
             let _ = app.emit(EV_SYSTEM_INFO, dto);
         }
     });
