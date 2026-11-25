@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.2.0",
   "type": "module",
-  "description": "chuaker7 —— macOS 系统工具箱（Tauri v2 + React 重写版）",
+  "description": "Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

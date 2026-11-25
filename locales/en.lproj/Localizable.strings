@@ -6,7 +6,7 @@
 */
 
 // MARK: - App Info
-"app.name" = "chuaker7";
+"app.name" = "Ki6";
 "app.description" = "A powerful macOS system toolkit";
 
 // MARK: - Tab Titles
@@ -73,8 +73,8 @@
 "monitor.download" = "Download";
 
 // MARK: - Menu Bar
-"menubar.title" = "chuaker7";
-"menubar.open" = "Open chuaker7";
+"menubar.title" = "Ki6";
+"menubar.open" = "Open Ki6";
 "menubar.quit" = "Quit";
 
 // MARK: - Settings
@@ -123,10 +123,10 @@
 "view.menu" = "View";
 "view.menuBar.mode" = "Menu Bar Mode";
 
-// MARK: - chuaker7 branding
-"app.brand" = "CHUAKER7";
+// MARK: - Ki6 branding
+"app.brand" = "KI6";
 "app.tagline" = "MACOS SYSTEM TOOLBOX";
-"app.subtitle" = "chuaker7 · Rust rewrite";
+"app.subtitle" = "Ki6 · Rust rewrite";
 
 "nav.section.tools" = "Tools";
 "nav.section.system" = "System";
@@ -193,15 +193,15 @@
 "plugin.permissions" = "Permissions";
 "plugin.minVersion" = "Minimum App Version";
 
-"menubar.open" = "Open chuaker7";
+"menubar.open" = "Open Ki6";
 "menubar.quit" = "Quit";
-"menubar.title" = "chuaker7";
+"menubar.title" = "Ki6";
 
 // MARK: - Native Menu Bar (macOS predefined items)
 // These keys let every native menu-bar entry follow the app language. muda 0.20
 // hard-codes the title via initWithTitle: and never follows the system language,
 // so we have to supply the copy ourselves. The three app-name-bearing entries
-// (About / Hide / Quit) are assembled as "<verb> chuaker7" on the Rust side.
+// (About / Hide / Quit) are assembled as "<verb> Ki6" on the Rust side.
 "menubar.edit" = "Edit";
 "menubar.view" = "View";
 "menubar.window" = "Window";

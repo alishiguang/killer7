@@ -6,7 +6,7 @@
 */
 
 // MARK: - App Info
-"app.name" = "鸬鹚工具箱";
+"app.name" = "Ki6";
 "app.description" = "功能强大的 macOS 系统工具箱";
 
 // MARK: - Tab Titles
@@ -73,8 +73,8 @@
 "monitor.download" = "下载";
 
 // MARK: - Menu Bar
-"menubar.title" = "鸬鹚工具箱";
-"menubar.open" = "打开鸬鹚工具箱";
+"menubar.title" = "Ki6";
+"menubar.open" = "打开 Ki6";
 "menubar.quit" = "退出";
 
 // MARK: - Settings
@@ -123,10 +123,10 @@
 "view.menu" = "视图";
 "view.menuBar.mode" = "菜单栏模式";
 
-// MARK: - chuaker7 品牌
-"app.brand" = "CHUAKER7";
+// MARK: - Ki6 品牌
+"app.brand" = "KI6";
 "app.tagline" = "MACOS 系统工具箱";
-"app.subtitle" = "鸬鹚工具箱 · Rust 重写版";
+"app.subtitle" = "Ki6 · Rust 重写版";
 
 "nav.section.tools" = "工具";
 "nav.section.system" = "系统";
@@ -193,14 +193,14 @@
 "plugin.permissions" = "权限";
 "plugin.minVersion" = "最低应用版本";
 
-"menubar.open" = "打开 chuaker7";
+"menubar.open" = "打开 Ki6";
 "menubar.quit" = "退出";
-"menubar.title" = "chuaker7";
+"menubar.title" = "Ki6";
 
 // MARK: - Native Menu Bar (macOS 预定义菜单项)
 // 这些 key 让原生菜单栏的**全部**条目都能跟随应用语言。muda 0.20 用
 // initWithTitle: 写死标题，不会跟随系统语言，只能由我们自己提供文案。
-// 带应用名的三项（关于 / 隐藏 / 退出）在 Rust 侧拼成「<动词> chuaker7」。
+// 带应用名的三项（关于 / 隐藏 / 退出）在 Rust 侧拼成「<动词> Ki6」。
 "menubar.edit" = "编辑";
 "menubar.view" = "视图";
 "menubar.window" = "窗口";

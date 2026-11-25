@@ -1,4 +1,4 @@
-//! chuaker7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
+//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
@@ -52,5 +52,5 @@ pub fn run() {
             crate::system::tray::on_tray_event(app, &event);
         })
         .run(tauri::generate_context!())
-        .expect("error while running chuaker7");
+        .expect("error while running Ki6");
 }

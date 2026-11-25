@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "chuaker7",
+  "productName": "Ki6",
   "version": "1.2.0",
   "identifier": "com.igigi.chuaker7",
   "build": {
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "chuaker7",
+        "title": "Ki6",
         "width": 1080,
         "height": 720,
         "minWidth": 880,
@@ -40,7 +40,7 @@
     ],
     "category": "Utility",
     "shortDescription": "macOS 系统工具箱",
-    "longDescription": "chuaker7 —— 进程管理、文件管理、剪贴板、系统监控、插件与设置。",
+    "longDescription": "Ki6 —— 进程管理、文件管理、剪贴板、系统监控、插件与设置。",
     "macOS": { "minimumSystemVersion": "12.0" }
   },
   "plugins": {}

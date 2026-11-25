@@ -33,19 +33,15 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
     let icon = Image::new_owned(pixels, width, height);
 
     let i18n = I18n::new(locale);
+    // 应用名（展示名 "Ki6"），托盘标题项与 tooltip 共用。
+    let app_name = i18n.t("menubar.title");
     let cpu_label = i18n.t("monitor.cpu");
     let memory_label = i18n.t("monitor.memory");
     let disk_label = i18n.t("monitor.disk");
     let upload_label = i18n.t("monitor.upload");
     let download_label = i18n.t("monitor.download");
 
-    let title = MenuItem::with_id(
-        app,
-        "tray:title",
-        i18n.t("menubar.title"),
-        false,
-        None::<&str>,
-    )?;
+    let title = MenuItem::with_id(app, "tray:title", app_name.clone(), false, None::<&str>)?;
     let cpu = MenuItem::with_id(
         app,
         "tray:cpu",
@@ -104,7 +100,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
     TrayIconBuilder::with_id("main")
         .icon(icon)
         .icon_as_template(true)
-        .tooltip("chuaker7")
+        .tooltip(&app_name)
         .show_menu_on_left_click(false)
         .menu(&menu)
         // 托盘菜单的点击必须自己接：`Builder::on_menu_event` 是**全局**监听，
