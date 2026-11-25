@@ -162,7 +162,7 @@ chuaker7/
 | | `show_main_window` | — | `()` |
 | | `popup_context_menu` | `kind: String, payload: serde_json::Value` | `()` |
 
-> `popup_context_menu` 分两步落地：**P2 阶段**（Task 11）先注册一个空实现（`popup_context_menu` 直接返回，不弹菜单），保证 command 名与参数签名从一开始就固定下来，前端可以并行开发；**P3 收尾**（Task 25）再补上完整菜单逻辑。Task 25 的验收标准包含「右键能弹出原生菜单」，因此空实现不会被遗留到最终交付。
+> `popup_context_menu` 分两步落地：**P2 阶段**（Task 15）先注册一个空实现（`popup_context_menu` 直接返回，不弹菜单），保证 command 名与参数签名从一开始就固定下来，前端可以并行开发；**P3 收尾**（Task 25）再补上完整菜单逻辑。Task 25 的验收标准包含「右键能弹出原生菜单」，因此空实现不会被遗留到最终交付。
 
 ### Event 清单（Rust `app.emit(name, payload)`）
 
@@ -2872,7 +2872,7 @@ pub fn spawn_watcher(app: AppHandle, state: Arc<AppState>) {
 pub mod tasks;
 ```
 
-> `activation.rs` / `autolaunch.rs` / `menu.rs` / `shortcut.rs` / `tray.rs` 在 Task 12–15 创建。本步骤**先只写** `pub mod tasks;`，其余在对应任务补齐（否则编译不过）。
+> `activation.rs` / `autolaunch.rs` / `menu.rs` / `shortcut.rs` / `tray.rs` 在 Task 11–14 创建。本步骤**先只写** `pub mod tasks;`，其余在对应任务补齐（否则编译不过）。
 
 - [ ] **Step 4: 在 `events.rs` 追加事件名常量**
 
@@ -3061,7 +3061,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
 > `tauri::Wry` 是本应用默认运行时（`tauri::Builder::default()` 即 `Builder<Wry>`），
 > 本项目只跑 macOS，不做跨平台适配，显式写死它是准确的。
 >
-> 后续 Task 9–11 继续**往这一个 `generate_handler!` 列表里追加条目**，
+> 后续 Task 9、10 与 Task 15 继续**往这一个 `generate_handler!` 列表里追加条目**，
 > 不要另起一个 `handler()` 函数（会与本函数重复定义）。
 
 - [ ] **Step 3: 编译并提交**
@@ -3245,11 +3245,7 @@ pub fn home_dir() -> String {
 ```rust
 /// 切换监听目录并重新挂载监听器。
 #[tauri::command]
-pub fn watch_dir(
-    app: AppHandle,
-    state: State<'_, Arc<AppState>>,
-    path: String,
-) {
+pub fn watch_dir(app: AppHandle, state: State<'_, Arc<AppState>>, path: String) {
     let target = PathBuf::from(path);
 
     let watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
@@ -3346,10 +3342,7 @@ pub fn clipboard_history(state: State<'_, Arc<AppState>>) -> Vec<HistoryRow> {
 
 /// 删除一条历史（按稳定 id）。
 #[tauri::command]
-pub fn remove_history_item(
-    state: State<'_, Arc<AppState>>,
-    id: u64,
-) {
+pub fn remove_history_item(state: State<'_, Arc<AppState>>, id: u64) {
     let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
     manager.delete_history_item(id);
 }
@@ -3439,7 +3432,10 @@ pub fn reload_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
 /// 插件目录路径。
 #[tauri::command]
 pub fn plugins_dir() -> String {
-    PluginManager::default().plugins_dir().to_string_lossy().to_string()
+    PluginManager::default()
+        .plugins_dir()
+        .to_string_lossy()
+        .to_string()
 }
 ```
 
@@ -3476,216 +3472,7 @@ AI-Tool: TophantAI"
 
 ---
 
-### Task 11: 设置、文案与系统命令
-
-**Files:**
-- Create: `src-tauri/src/commands/settings.rs`
-- Create: `src-tauri/src/commands/system.rs`
-- Modify: `src-tauri/src/commands/mod.rs`
-- Modify: `src-tauri/src/lib.rs`
-
-**Interfaces:**
-- Consumes: `core::settings::{Settings, SettingsPatch}`、`core::i18n::Locale`
-- Produces: command `get_settings` / `update_settings` / `get_strings` / `set_menu_bar_mode` / `set_shortcut_enabled` / `set_auto_launch` / `hide_main_window` / `show_main_window` / `popup_context_menu`（本任务注册空实现，完整菜单逻辑在 Task 25 落地）
-
-- [ ] **Step 1: 写 `src-tauri/src/commands/settings.rs`**
-
-```rust
-//! 设置与文案命令。
-
-use std::collections::HashMap;
-use std::sync::Arc;
-
-use tauri::{AppHandle, State};
-
-use crate::core::i18n::{I18n, Locale};
-use crate::core::settings::{Settings, SettingsPatch};
-use crate::state::AppState;
-
-/// 读取当前设置。
-#[tauri::command]
-pub fn get_settings(state: State<'_, Arc<AppState>>) -> Settings {
-    let settings = state.settings.lock().expect("设置锁中毒");
-    settings.clone()
-}
-
-/// 提交设置补丁，返回合并后的完整设置。
-#[tauri::command]
-pub fn update_settings(
-    app: AppHandle,
-    state: State<'_, Arc<AppState>>,
-    patch: SettingsPatch,
-) -> Settings {
-    // 先取旧值：菜单栏模式与全局快捷键要靠「改了什么」判断是否重新作用到原生层。
-    // 若在写入之后再取旧值，拿到的就是新值，比较永远相等，热更新就成了死代码。
-    let previous = state.settings.lock().expect("设置锁中毒").clone();
-
-    let next = {
-        let mut settings = state.settings.lock().expect("设置锁中毒");
-        let next = patch.apply(&settings);
-        next.save();
-        *settings = next.clone();
-        next
-    };
-
-    // 语言变了要换文案表。
-    {
-        let mut i18n = state.i18n.lock().expect("文案锁中毒");
-        if i18n.locale() != next.locale {
-            i18n.set_locale(next.locale);
-        }
-    }
-
-    // 采样间隔与网络开关热更新。
-    {
-        state
-            .sample_interval_ms
-            .store((next.auto_refresh_interval * 1000.0) as u64, std::sync::atomic::Ordering::Relaxed);
-        state
-            .network_enabled
-            .store(next.enable_network_monitor, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    // 菜单栏模式与全局快捷键的变化需要立即作用到原生层。
-    if previous.show_menu_bar != next.show_menu_bar {
-        crate::system::activation::set_accessory_mode(next.show_menu_bar, &app);
-    }
-
-    if previous.global_shortcut_enabled != next.global_shortcut_enabled {
-        crate::system::shortcut::set_enabled(&app, next.global_shortcut_enabled);
-    }
-
-    next
-}
-
-/// 取指定语言的整张文案表。
-#[tauri::command]
-pub fn get_strings(locale: String) -> HashMap<String, String> {
-    let parsed = match locale.as_str() {
-        "en" => Locale::En,
-        _ => Locale::ZhHans,
-    };
-    I18n::new(parsed).table()
-}
-```
-
-- [ ] **Step 2: 写 `src-tauri/src/commands/system.rs`**
-
-```rust
-//! 系统级命令：窗口显隐、菜单栏模式、快捷键、自启。
-
-use std::sync::Arc;
-
-use tauri::{AppHandle, Manager, State};
-
-use crate::state::AppState;
-
-/// 隐藏主窗口。
-#[tauri::command]
-pub fn hide_main_window(app: AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-    }
-}
-
-/// 显示主窗口并置前。
-#[tauri::command]
-pub fn show_main_window(app: AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-}
-
-/// 切换菜单栏模式（隐藏 Dock 图标）。
-#[tauri::command]
-pub fn set_menu_bar_mode(
-    app: AppHandle,
-    state: State<'_, Arc<AppState>>,
-    enabled: bool,
-) {
-    {
-        let mut settings = state.settings.lock().expect("设置锁中毒");
-        settings.show_menu_bar = enabled;
-        settings.save();
-    }
-
-    crate::system::activation::set_accessory_mode(enabled, &app);
-
-    if enabled {
-        let _ = app.get_webview_window("main").map(|w| w.hide());
-    } else {
-        let _ = app.get_webview_window("main").map(|w| w.show());
-    }
-}
-
-/// 启用或停用全局快捷键。
-#[tauri::command]
-pub fn set_shortcut_enabled(
-    app: AppHandle,
-    state: State<'_, Arc<AppState>>,
-    enabled: bool,
-) {
-    {
-        let mut settings = state.settings.lock().expect("设置锁中毒");
-        settings.global_shortcut_enabled = enabled;
-        settings.save();
-    }
-
-    crate::system::shortcut::set_enabled(&app, enabled);
-}
-
-/// 启用或停用开机自启。
-#[tauri::command]
-pub fn set_auto_launch(enabled: bool) -> Result<(), String> {
-    if enabled {
-        crate::system::autolaunch::enable().map_err(|err| err.to_string())
-    } else {
-        crate::system::autolaunch::disable().map_err(|err| err.to_string())
-    }
-}
-
-/// 弹出原生右键菜单（Task 25 实现完整逻辑）。
-#[tauri::command]
-pub fn popup_context_menu(app: AppHandle, kind: String, payload: serde_json::Value) {
-    let _ = (app, kind, payload);
-}
-```
-
-- [ ] **Step 3: 挂到 invoke_handler 并提交**
-
-`commands/mod.rs` 追加 `pub mod settings;` / `pub mod system;` 与 handler 列表：
-
-```rust
-        settings::get_settings,
-        settings::update_settings,
-        settings::get_strings,
-        system::hide_main_window,
-        system::show_main_window,
-        system::set_menu_bar_mode,
-        system::set_shortcut_enabled,
-        system::set_auto_launch,
-        system::popup_context_menu,
-```
-
-```bash
-cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
-cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
-git add -A
-git commit -m "feat: 设置、文案与系统命令
-
-- get_settings / update_settings 采用补丁合并语义，语言变更同步换文案表
-- 采样间隔与网络开关热更新到原子变量，无需重启线程
-- 窗口显隐、菜单栏模式、快捷键、自启命令接入原生层
-
-AI-Coding: true
-AI-Tool: TophantAI"
-```
-
----
-
-### Task 12: 原生应用菜单栏
+### Task 11: 原生应用菜单栏
 
 **Files:**
 - Create: `src-tauri/src/system/menu.rs`
@@ -3731,11 +3518,11 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "app:settings", "设置…", true, Some("CmdOrCtrl+,"))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::hide(app, Some("隐藏 chuaker7"), Some("CmdOrCtrl+H"))?,
-            &PredefinedMenuItem::hide_others(app, Some("隐藏其他"), Some("CmdOrCtrl+Alt+H"))?,
-            &PredefinedMenuItem::show_all(app, Some("显示全部"), None)?,
+            &PredefinedMenuItem::hide(app, Some("隐藏 chuaker7"))?,
+            &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
+            &PredefinedMenuItem::show_all(app, Some("显示全部"))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some("退出 chuaker7"), Some("CmdOrCtrl+Q"))?,
+            &PredefinedMenuItem::quit(app, Some("退出 chuaker7"))?,
         ],
     )?;
 
@@ -3782,15 +3569,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         ],
     )?;
 
-    let menu = Menu::with_items(
-        app,
-        &[
-            &app_menu,
-            &edit_menu,
-            &view_menu,
-            &window_menu,
-        ],
-    )?;
+    let menu = Menu::with_items(app, &[&app_menu, &edit_menu, &view_menu, &window_menu])?;
 
     menu.set_as_app_menu()?;
     Ok(())
@@ -3803,6 +3582,20 @@ pub fn on_menu_event(app: &AppHandle, id: &str) {
     }
 }
 ```
+
+`src-tauri/src/system/mod.rs` 追加模块声明：
+
+```rust
+pub mod menu;
+```
+
+> **不写这一行，`menu.rs` 根本不会被编译**——`crate::system::menu::build` 会报
+> E0433（could not find `menu` in `system`）。`system/mod.rs` 在 Task 7 里只有
+> `pub mod tasks;`，其余模块各自的任务负责补。
+> **`PredefinedMenuItem` 只接受 `(manager, Option<&str>)` 两个参数**，没有加速键参数——
+> 计划早前的写法多传了第三个实参，编译会报 E0061。macOS 把「隐藏 / 隐藏其他 / 显示全部 / 退出」
+> 放进应用菜单后，系统会自动给它们分配 ⌘H / ⌥⌘H / ⌘Q，无需手写加速键。
+> 需要自定义加速键的项（视图菜单的 Cmd+1..5）用 `MenuItem::with_id(app, id, 文案, enabled, 加速键)`。
 
 - [ ] **Step 3: 接入 Builder**
 
@@ -3865,7 +3658,7 @@ AI-Tool: TophantAI"
 
 ---
 
-### Task 13: 托盘图标与托盘菜单
+### Task 12: 托盘图标与托盘菜单
 
 **Files:**
 - Create: `src-tauri/src/system/tray.rs`
@@ -3925,7 +3718,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "tray:open", "打开 chuaker7", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some("退出"), None)?,
+            &PredefinedMenuItem::quit(app, Some("退出"))?,
         ],
     )?;
 
@@ -3933,7 +3726,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .icon(icon)
         .icon_as_template(true)
         .tooltip("chuaker7")
-        .menu_on_left_click(false)
+        .show_menu_on_left_click(false)
         .menu(&menu)
         .build(app)?;
 
@@ -3955,8 +3748,12 @@ pub fn update_metrics<R: Runtime>(app: &AppHandle<R>, info: &crate::core::monito
         return;
     };
     let _ = items.cpu.set_text(format!("CPU  {:.1}%", info.cpu_usage));
-    let _ = items.memory.set_text(format!("内存  {:.1}%", info.memory_usage));
-    let _ = items.disk.set_text(format!("磁盘  {:.1}%", info.disk_usage));
+    let _ = items
+        .memory
+        .set_text(format!("内存  {:.1}%", info.memory_usage));
+    let _ = items
+        .disk
+        .set_text(format!("磁盘  {:.1}%", info.disk_usage));
     let _ = items
         .upload
         .set_text(format!("上传  {:.2} MB/s", info.network_upload));
@@ -4003,6 +3800,13 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 }
 ```
 
+`src-tauri/src/system/mod.rs` 追加模块声明：
+
+```rust
+pub mod tray;
+```
+
+> 同理：不写这一行，`tray.rs` 不会被编译，`crate::system::tray::...` 会报 E0433。
 - [ ] **Step 2: 接入 Builder 与采样循环**
 
 `src-tauri/src/lib.rs` 的 setup 追加：
@@ -4052,7 +3856,7 @@ AI-Tool: TophantAI"
 
 ---
 
-### Task 14: 全局快捷键与激活策略
+### Task 13: 全局快捷键与激活策略
 
 **Files:**
 - Create: `src-tauri/src/system/shortcut.rs`
@@ -4076,7 +3880,7 @@ use std::sync::Mutex;
 
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 /// 热键管理器（全局唯一）。
 static MANAGER: Mutex<Option<GlobalHotKeyManager>> = Mutex::new(None);
@@ -4085,7 +3889,8 @@ static HOTKEY: Mutex<Option<HotKey>> = Mutex::new(None);
 
 /// 注册 ⌘+L 并启动监听线程。
 pub fn register<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let manager = GlobalHotKeyManager::new().map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!(e)))?;
+    let manager =
+        GlobalHotKeyManager::new().map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!(e)))?;
     let hotkey = HotKey::new(Some(Modifiers::META), Code::KeyL);
     let id = hotkey.id();
     manager
@@ -4114,10 +3919,9 @@ pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) {
         let _ = register(app);
     } else {
         let hotkey = HOTKEY.lock().expect("快捷键锁中毒").take();
-        if let (Some(hotkey), Some(manager)) = (
-            hotkey,
-            MANAGER.lock().expect("快捷键锁中毒").as_ref(),
-        ) {
+        if let (Some(hotkey), Some(manager)) =
+            (hotkey, MANAGER.lock().expect("快捷键锁中毒").as_ref())
+        {
             let _ = manager.unregister(hotkey);
         }
         *MANAGER.lock().expect("快捷键锁中毒") = None;
@@ -4157,6 +3961,14 @@ pub fn set_accessory_mode<R: Runtime>(enabled: bool, _app: &AppHandle<R>) {
 }
 ```
 
+`src-tauri/src/system/mod.rs` 追加模块声明：
+
+```rust
+pub mod activation;
+pub mod shortcut;
+```
+
+> 同理：不写这两行，`shortcut.rs` 与 `activation.rs` 都不会被编译。
 - [ ] **Step 3: 接入 setup**
 
 `src-tauri/src/lib.rs` setup 内追加：
@@ -4203,7 +4015,7 @@ AI-Tool: TophantAI"
 
 ---
 
-### Task 15: 开机自启
+### Task 14: 开机自启
 
 **Files:**
 - Create: `src-tauri/src/system/autolaunch.rs`
@@ -4333,7 +4145,15 @@ mod tests {
 
 - [ ] **Step 2: 注册模块并提交**
 
-`src-tauri/src/system/mod.rs` 补齐全部模块声明：
+`src-tauri/src/system/mod.rs` 追加 `pub mod autolaunch;`：
+
+```rust
+pub mod autolaunch;
+```
+
+> Task 11（菜单栏）、Task 12（托盘）、Task 13（快捷键 + 激活策略）已各自追加过
+> `menu` / `tray` / `shortcut` + `activation`，加上 Task 7 的 `tasks` 与本任务的
+> `autolaunch`，此时 `system/mod.rs` 全文应为：
 
 ```rust
 //! 原生集成：菜单栏、托盘、快捷键、自启、激活策略与后台任务。
@@ -4363,6 +4183,209 @@ AI-Tool: TophantAI"
 
 ## P3 前端页面
 
+### Task 15: 设置、文案与系统命令
+
+**Files:**
+- Create: `src-tauri/src/commands/settings.rs`
+- Create: `src-tauri/src/commands/system.rs`
+- Modify: `src-tauri/src/commands/mod.rs`
+- Modify: `src-tauri/src/lib.rs`
+
+**Interfaces:**
+- Consumes: `core::settings::{Settings, SettingsPatch}`、`core::i18n::Locale`
+- Produces: command `get_settings` / `update_settings` / `get_strings` / `set_menu_bar_mode` / `set_shortcut_enabled` / `set_auto_launch` / `hide_main_window` / `show_main_window` / `popup_context_menu`（本任务注册空实现，完整菜单逻辑在 Task 25 落地）
+
+- [ ] **Step 1: 写 `src-tauri/src/commands/settings.rs`**
+
+```rust
+//! 设置与文案命令。
+
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use tauri::{AppHandle, State};
+
+use crate::core::i18n::{I18n, Locale};
+use crate::core::settings::{Settings, SettingsPatch};
+use crate::state::AppState;
+
+/// 读取当前设置。
+#[tauri::command]
+pub fn get_settings(state: State<'_, Arc<AppState>>) -> Settings {
+    let settings = state.settings.lock().expect("设置锁中毒");
+    settings.clone()
+}
+
+/// 提交设置补丁，返回合并后的完整设置。
+#[tauri::command]
+pub fn update_settings(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    patch: SettingsPatch,
+) -> Settings {
+    // 先取旧值：菜单栏模式与全局快捷键要靠「改了什么」判断是否重新作用到原生层。
+    // 若在写入之后再取旧值，拿到的就是新值，比较永远相等，热更新就成了死代码。
+    let previous = state.settings.lock().expect("设置锁中毒").clone();
+
+    let next = {
+        let mut settings = state.settings.lock().expect("设置锁中毒");
+        let next = patch.apply(&settings);
+        next.save();
+        *settings = next.clone();
+        next
+    };
+
+    // 语言变了要换文案表。
+    {
+        let mut i18n = state.i18n.lock().expect("文案锁中毒");
+        if i18n.locale() != next.locale {
+            i18n.set_locale(next.locale);
+        }
+    }
+
+    // 采样间隔与网络开关热更新。
+    {
+        state.sample_interval_ms.store(
+            (next.auto_refresh_interval * 1000.0) as u64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        state.network_enabled.store(
+            next.enable_network_monitor,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
+    // 菜单栏模式与全局快捷键的变化需要立即作用到原生层。
+    if previous.show_menu_bar != next.show_menu_bar {
+        crate::system::activation::set_accessory_mode(next.show_menu_bar, &app);
+    }
+
+    if previous.global_shortcut_enabled != next.global_shortcut_enabled {
+        crate::system::shortcut::set_enabled(&app, next.global_shortcut_enabled);
+    }
+
+    next
+}
+
+/// 取指定语言的整张文案表。
+#[tauri::command]
+pub fn get_strings(locale: String) -> HashMap<String, String> {
+    let parsed = match locale.as_str() {
+        "en" => Locale::En,
+        _ => Locale::ZhHans,
+    };
+    I18n::new(parsed).table()
+}
+```
+
+- [ ] **Step 2: 写 `src-tauri/src/commands/system.rs`**
+
+```rust
+//! 系统级命令：窗口显隐、菜单栏模式、快捷键、自启。
+
+use std::sync::Arc;
+
+use tauri::{AppHandle, Manager, State};
+
+use crate::state::AppState;
+
+/// 隐藏主窗口。
+#[tauri::command]
+pub fn hide_main_window(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+}
+
+/// 显示主窗口并置前。
+#[tauri::command]
+pub fn show_main_window(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+/// 切换菜单栏模式（隐藏 Dock 图标）。
+#[tauri::command]
+pub fn set_menu_bar_mode(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: bool) {
+    {
+        let mut settings = state.settings.lock().expect("设置锁中毒");
+        settings.show_menu_bar = enabled;
+        settings.save();
+    }
+
+    crate::system::activation::set_accessory_mode(enabled, &app);
+
+    if enabled {
+        let _ = app.get_webview_window("main").map(|w| w.hide());
+    } else {
+        let _ = app.get_webview_window("main").map(|w| w.show());
+    }
+}
+
+/// 启用或停用全局快捷键。
+#[tauri::command]
+pub fn set_shortcut_enabled(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: bool) {
+    {
+        let mut settings = state.settings.lock().expect("设置锁中毒");
+        settings.global_shortcut_enabled = enabled;
+        settings.save();
+    }
+
+    crate::system::shortcut::set_enabled(&app, enabled);
+}
+
+/// 启用或停用开机自启。
+#[tauri::command]
+pub fn set_auto_launch(enabled: bool) -> Result<(), String> {
+    if enabled {
+        crate::system::autolaunch::enable().map_err(|err| err.to_string())
+    } else {
+        crate::system::autolaunch::disable().map_err(|err| err.to_string())
+    }
+}
+
+/// 弹出原生右键菜单（Task 25 实现完整逻辑）。
+#[tauri::command]
+pub fn popup_context_menu(app: AppHandle, kind: String, payload: serde_json::Value) {
+    let _ = (app, kind, payload);
+}
+```
+
+- [ ] **Step 3: 挂到 invoke_handler 并提交**
+
+`commands/mod.rs` 追加 `pub mod settings;` / `pub mod system;` 与 handler 列表：
+
+```rust
+        settings::get_settings,
+        settings::update_settings,
+        settings::get_strings,
+        system::hide_main_window,
+        system::show_main_window,
+        system::set_menu_bar_mode,
+        system::set_shortcut_enabled,
+        system::set_auto_launch,
+        system::popup_context_menu,
+```
+
+```bash
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
+git add -A
+git commit -m "feat: 设置、文案与系统命令
+
+- get_settings / update_settings 采用补丁合并语义，语言变更同步换文案表
+- 采样间隔与网络开关热更新到原子变量，无需重启线程
+- 窗口显隐、菜单栏模式、快捷键、自启命令接入原生层
+
+AI-Coding: true
+AI-Tool: TophantAI"
+```
+
+---
+
 ### Task 16: 前端基础层（类型 / 桥接 / 状态 / 工具函数）
 
 **Files:**
@@ -4376,7 +4399,7 @@ AI-Tool: TophantAI"
 - Create: `frontend/src/lib/i18n.test.ts`
 
 **Interfaces:**
-- Consumes: Task 6 的 DTO 契约、Task 11 的 command 清单
+- Consumes: Task 6 的 DTO 契约、Task 15 的 command 清单
 - Produces:
   - `types.ts`：`ProcessRow` / `PortRow` / `FileRow` / `HistoryRow` / `SystemInfoDto` / `PluginRow` / `Settings` / `SettingsPatch` / `Notice` / `TabId`
   - `bridge.ts`：`api`（全部 command 的薄封装）、`onEvent(name, handler)`、`EVENT` 常量表
@@ -8077,8 +8100,8 @@ pub struct AppState {
 `src-tauri/src/commands/system.rs`：
 
 ```rust
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::Manager;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 
 use crate::commands::dto::ContextTarget;
 
@@ -8224,7 +8247,12 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
             platform::copy_to_clipboard(full_path);
             notify(app, "info", "已复制完整路径");
         }
-        ("ctx.process.kill", ContextTarget::Process { pid, display_name, .. }) => {
+        (
+            "ctx.process.kill",
+            ContextTarget::Process {
+                pid, display_name, ..
+            },
+        ) => {
             if ProcessManager::kill_process(*pid) {
                 notify(app, "info", &format!("已结束进程 {display_name}"));
                 // 立刻重采一次并把新列表推给前端，不要等下一个刷新周期。
@@ -8752,11 +8780,11 @@ ls -la release/             # chuaker7.zip 存在
 | --- | --- |
 | §3 技术选型 | Task 1（Rust 侧）、Task 2（前端）、Task 16（状态）、Task 17（虚拟列表） |
 | §4 目录结构 | Task 1 / 2 / 4 / 5 / 6（偏离两处已在「目录结构总览」说明） |
-| §5 进程模型与数据流 | Task 7（后台循环 + 事件）、Task 8–11（命令） |
-| §6.1 Commands | Task 8（进程）、Task 9（文件）、Task 10（剪贴板/监控/插件）、Task 11（设置/文案/系统） |
-| §6.2 Events | Task 7（事件常量）、Task 12（menu-action）、Task 25（notice） |
+| §5 进程模型与数据流 | Task 7（后台循环 + 事件）、Task 8–10 与 Task 15（命令） |
+| §6.1 Commands | Task 8（进程）、Task 9（文件）、Task 10（剪贴板/监控/插件）、Task 15（设置/文案/系统） |
+| §6.2 Events | Task 7（事件常量）、Task 11（menu-action）、Task 25（notice） |
 | §6.3 数据结构 | Task 6（DTO）、Task 16（TS 镜像） |
-| §7 原生感落地清单 | Task 12（应用菜单栏）、Task 13（托盘）、Task 14（⌘L + 激活策略）、Task 15（自启）、Task 17（控件 macOS 化）、Task 20（原生目录对话框）、Task 25（原生右键菜单）、Task 18（首帧直出）、Task 19/26（虚拟列表）、Task 22（Canvas 曲线） |
+| §7 原生感落地清单 | Task 11（应用菜单栏）、Task 12（托盘）、Task 13（⌘L + 激活策略）、Task 14（自启）、Task 17（控件 macOS 化）、Task 20（原生目录对话框）、Task 25（原生右键菜单）、Task 18（首帧直出）、Task 19/26（虚拟列表）、Task 22（Canvas 曲线） |
 | §8.1 状态 | Task 16（store.ts） |
 | §8.2 样式 | Task 3（tokens/base/native）、Task 18（主题属性） |
 | §8.3 性能 | Task 17（虚拟列表）、Task 26（memo / useDeferredValue） |
@@ -8764,14 +8792,14 @@ ls -la release/             # chuaker7.zip 存在
 | §9 视觉验收 | Task 27（Chrome headless 截图 + 与 egui 版对照） |
 | §10 实施阶段 P0–P4 | Task 1–3（P0）、Task 4–6（P1）、Task 7–15（P2）、Task 16–24（P3）、Task 25–27（P4） |
 | §11 仓库策略 | Task 4 Step 1（legacy-egui 存档）、全局提交规范 |
-| §12 风险对策 | Task 14（激活策略降级）、Task 27（Chrome headless 替代 egui 截图）、Task 7/26（事件负载控制） |
+| §12 风险对策 | Task 13（激活策略降级）、Task 27（Chrome headless 替代 egui 截图）、Task 7/26（事件负载控制） |
 
 ### 2. 与设计文档的契约增补（需在实现时同步回设计文档）
 
 | 增补项 | 原因 | 落点 |
 | --- | --- | --- |
 | event `notice` | 原生右键菜单由 Rust 弹出，动作结果需要回传提示文案 | Task 25 |
-| event `menu-action` | 原生应用菜单栏的「视图 → 某页」需要驱动前端切换标签页 | Task 12 |
+| event `menu-action` | 原生应用菜单栏的「视图 → 某页」需要驱动前端切换标签页 | Task 11 |
 | command `watch_dir` | 切换目录时需要重建后端 `notify` 监听器 | Task 9 |
 | command `plugins_dir` | 前端需要展示插件目录路径 | Task 10 |
 | `Settings` 字段加 `alias` | 兼容 egui 版写下的 snake_case 旧配置，避免用户设置丢失 | Task 4 |
@@ -8794,7 +8822,7 @@ ls -la release/             # chuaker7.zip 存在
 ```
 Task 1 → Task 2 → Task 3
 Task 1 → Task 4 → Task 5 → Task 6
-Task 5 + 6 → Task 7 → Task 8/9/10/11 → Task 12/13/14/15
+Task 5 + 6 → Task 7 → Task 8/9/10 → Task 11/12/13/14 → Task 15
 Task 16 → Task 17 → Task 18 → Task 19/20/21/22/23/24
 Task 8/9/10 + Task 19/20/21 → Task 25
 Task 24 → Task 26 → Task 27
