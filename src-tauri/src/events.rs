@@ -35,3 +35,18 @@ pub enum AppEvent {
 pub fn channel() -> (Sender<AppEvent>, Receiver<AppEvent>) {
     std::sync::mpsc::channel()
 }
+
+/// 进程列表更新事件。
+pub const EV_PROCESSES: &str = "processes";
+/// 系统指标更新事件。
+pub const EV_SYSTEM_INFO: &str = "system-info";
+/// 剪贴板内容变化事件。
+pub const EV_CLIPBOARD: &str = "clipboard";
+/// 当前目录内容变化事件。
+pub const EV_FILES_CHANGED: &str = "files-changed";
+/// 托盘请求打开主窗口。
+pub const EV_TRAY_OPEN: &str = "tray-open";
+/// 托盘请求退出应用。
+pub const EV_TRAY_QUIT: &str = "tray-quit";
+/// 界面提示事件。
+pub const EV_NOTICE: &str = "notice";
