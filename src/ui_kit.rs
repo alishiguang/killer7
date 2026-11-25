@@ -17,7 +17,7 @@ use crate::theme::Palette;
 
 /// 配色在 `egui::Context` 内存中的键。
 fn palette_key() -> egui::Id {
-    egui::Id::new("killer7.palette")
+    egui::Id::new("chuaker7.palette")
 }
 
 /// 写入当前配色。

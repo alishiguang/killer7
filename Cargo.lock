@@ -653,6 +653,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "chuaker7"
+version = "1.1.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "dirs",
+ "eframe",
+ "egui",
+ "egui_extras",
+ "global-hotkey",
+ "libc",
+ "notify",
+ "open",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "trash",
+ "tray-icon",
+]
+
+[[package]]
 name = "clipboard-win"
 version = "5.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2053,27 +2074,6 @@ name = "khronos_api"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
-
-[[package]]
-name = "killer7"
-version = "1.1.0"
-dependencies = [
- "anyhow",
- "arboard",
- "dirs",
- "eframe",
- "egui",
- "egui_extras",
- "global-hotkey",
- "libc",
- "notify",
- "open",
- "serde",
- "serde_json",
- "sysinfo",
- "trash",
- "tray-icon",
-]
 
 [[package]]
 name = "kqueue"

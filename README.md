@@ -1,10 +1,10 @@
-# killer7
+# chuaker7
 
 > 鸬鹚工具箱 LuciBox 的 **Rust 重写版** · 一个 macOS 系统工具箱
 >
 > 进程管理 · 文件管理 · 剪贴板管理 · 系统监控 · 菜单栏模式 · 全局快捷键 · 插件架构
 
-`killer7` 是 [LuciBox](https://github.com/hagenmagpie/LuciBox)（SwiftUI + AppKit）用
+`chuaker7` 是 [LuciBox](https://github.com/hagenmagpie/LuciBox)（SwiftUI + AppKit）用
 **Rust + egui** 重新实现的功能对等版本。业务逻辑、数据来源与交互语义保持一致，
 界面语言则换成了更克制的「ink / paper」暗色系。
 
@@ -56,7 +56,7 @@
 cargo build --release
 
 # 运行
-./target/release/killer7
+./target/release/chuaker7
 ```
 
 ### 打包成 .app
@@ -66,18 +66,18 @@ cargo build --release
 ```bash
 cargo build --release
 
-APP="target/release/killer7.app"
+APP="target/release/chuaker7.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp target/release/killer7 "$APP/Contents/MacOS/killer7"
+cp target/release/chuaker7 "$APP/Contents/MacOS/chuaker7"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleExecutable</key><string>killer7</string>
-    <key>CFBundleIdentifier</key><string>org.igigi.killer7</string>
-    <key>CFBundleName</key><string>killer7</string>
+    <key>CFBundleExecutable</key><string>chuaker7</string>
+    <key>CFBundleIdentifier</key><string>org.igigi.chuaker7</string>
+    <key>CFBundleName</key><string>chuaker7</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.1.0</string>
     <key>CFBundleVersion</key><string>1</string>
@@ -128,14 +128,14 @@ open "$APP"
 | 目录监听 | `DispatchSource` | `notify` crate |
 | 全局快捷键 | `NSEvent.addGlobalMonitor` | `global-hotkey` crate（系统级注册，无需辅助功能权限） |
 | 开机自启 | `SMAppService`（macOS 13+） | LaunchAgent plist + `launchctl` |
-| 设置存储 | `UserDefaults` | `~/Library/Application Support/killer7/settings.json` |
+| 设置存储 | `UserDefaults` | `~/Library/Application Support/chuaker7/settings.json` |
 
 ---
 
 ## 项目结构
 
 ```
-killer7/
+chuaker7/
 ├── Cargo.toml
 ├── build.rs                     # 字体可选加载
 ├── assets/fonts/                # Anton（展示体）+ Geist Mono（等宽），均为 SIL OFL
@@ -200,11 +200,11 @@ cargo run          # 开发模式运行
 字体是可选增强：若 `assets/fonts/` 下的字体文件缺失，`build.rs` 会关闭对应
 cfg，程序自动回退到系统字体，不影响编译与运行。
 
-用环境变量 `KILLER7_START_TAB` 可以指定启动时打开的标签页，取值为
+用环境变量 `CHUAKER7_START_TAB` 可以指定启动时打开的标签页，取值为
 `process` / `files` / `clipboard` / `monitor` / `plugins` / `settings`：
 
 ```bash
-KILLER7_START_TAB=monitor cargo run
+CHUAKER7_START_TAB=monitor cargo run
 ```
 
 ---

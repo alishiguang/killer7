@@ -6,7 +6,7 @@
 */
 
 // MARK: - App Info
-"app.name" = "LuciBox";
+"app.name" = "chuaker7";
 "app.description" = "A powerful macOS system toolkit";
 
 // MARK: - Tab Titles
@@ -73,8 +73,8 @@
 "monitor.download" = "Download";
 
 // MARK: - Menu Bar
-"menubar.title" = "LuciBox";
-"menubar.open" = "Open LuciBox";
+"menubar.title" = "chuaker7";
+"menubar.open" = "Open chuaker7";
 "menubar.quit" = "Quit";
 
 // MARK: - Settings
@@ -123,10 +123,10 @@
 "view.menu" = "View";
 "view.menuBar.mode" = "Menu Bar Mode";
 
-// MARK: - killer7 branding
-"app.brand" = "KILLER7";
+// MARK: - chuaker7 branding
+"app.brand" = "CHUAKER7";
 "app.tagline" = "MACOS SYSTEM TOOLBOX";
-"app.subtitle" = "LuciBox · Rust rewrite";
+"app.subtitle" = "chuaker7 · Rust rewrite";
 
 "nav.section.tools" = "Tools";
 "nav.section.system" = "System";
@@ -193,6 +193,6 @@
 "plugin.permissions" = "Permissions";
 "plugin.minVersion" = "Minimum App Version";
 
-"menubar.open" = "Open killer7";
+"menubar.open" = "Open chuaker7";
 "menubar.quit" = "Quit";
-"menubar.title" = "killer7";
+"menubar.title" = "chuaker7";

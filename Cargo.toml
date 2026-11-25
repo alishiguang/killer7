@@ -1,12 +1,12 @@
 [package]
-name = "killer7"
+name = "chuaker7"
 version = "1.1.0"
 edition = "2024"
 rust-version = "1.88"
-description = "killer7 — macOS 系统工具箱（SwiftUI 原版 LuciBox 的 Rust 重写）"
-authors = ["alishiguang <alishiguang@users.noreply.github.com>"]
+description = "chuaker7 — macOS 系统工具箱（SwiftUI 原版 LuciBox 的 Rust 重写）"
+authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
 license = "MIT"
-repository = "https://github.com/alishiguang/killer7"
+repository = "https://github.com/chuaker7/chuaker7"
 readme = "README.md"
 keywords = ["macos", "toolbox", "egui", "system-monitor", "process-manager"]
 categories = ["gui", "os::macos-apis"]

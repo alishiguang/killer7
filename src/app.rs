@@ -53,7 +53,7 @@ pub enum ProcessSort {
 }
 
 /// 应用主体。
-pub struct Killer7App {
+pub struct Chuaker7App {
     /// 全局设置。
     pub settings: Settings,
     /// 主题。
@@ -112,7 +112,7 @@ pub struct Killer7App {
     last_process_refresh: Instant,
 }
 
-impl Killer7App {
+impl Chuaker7App {
     /// 构造应用。
     pub fn new(settings: Settings) -> Self {
         Self::build(settings, true)
@@ -338,7 +338,7 @@ impl Killer7App {
     }
 }
 
-impl Drop for Killer7App {
+impl Drop for Chuaker7App {
     fn drop(&mut self) {
         self.settings.save();
         self.clipboard.save_history();
@@ -385,13 +385,13 @@ fn menu_labels(i18n: &I18n) -> MenuLabels {
     }
 }
 
-impl eframe::App for Killer7App {
+impl eframe::App for Chuaker7App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.render(ctx);
     }
 }
 
-impl Killer7App {
+impl Chuaker7App {
     /// 绘制一帧。
     ///
     /// 与 `eframe::App::update` 分开，方便在单元测试里离屏渲染。
@@ -439,12 +439,12 @@ impl Killer7App {
     }
 }
 
-impl Killer7App {
+impl Chuaker7App {
     /// 顶部标题栏。
     fn render_header(&mut self, ctx: &egui::Context) {
         let palette = ui_kit::palette(ctx);
 
-        egui::TopBottomPanel::top("killer7.header")
+        egui::TopBottomPanel::top("chuaker7.header")
             .exact_height(54.0)
             .frame(egui::Frame {
                 fill: palette.background,
@@ -541,7 +541,7 @@ impl Killer7App {
     fn render_sidebar(&mut self, ctx: &egui::Context) {
         let palette = ui_kit::palette(ctx);
 
-        egui::SidePanel::left("killer7.nav")
+        egui::SidePanel::left("chuaker7.nav")
             .exact_width(206.0)
             .resizable(false)
             .frame(egui::Frame {
@@ -621,7 +621,7 @@ impl Killer7App {
         }
 
         let palette = ui_kit::palette(ctx);
-        egui::TopBottomPanel::top("killer7.toast")
+        egui::TopBottomPanel::top("chuaker7.toast")
             .exact_height(0.0)
             .frame(egui::Frame::NONE)
             .show(ctx, |ui| {
@@ -675,7 +675,7 @@ mod tests {
     fn every_tab_renders_without_panic() {
         let ctx = egui::Context::default();
         crate::fonts::install(&ctx);
-        let mut app = Killer7App::new_headless(Settings::default());
+        let mut app = Chuaker7App::new_headless(Settings::default());
         app.processes.processes = sample_processes();
 
         for tab in [
@@ -701,7 +701,7 @@ mod tests {
     fn no_tab_requests_a_frame_discard() {
         let ctx = egui::Context::default();
         crate::fonts::install(&ctx);
-        let mut app = Killer7App::new_headless(Settings::default());
+        let mut app = Chuaker7App::new_headless(Settings::default());
         app.processes.processes = sample_processes();
 
         for tab in [
@@ -741,7 +741,7 @@ mod tests {
             crate::theme::ThemeMode::Dark,
             crate::theme::ThemeMode::Light,
         ] {
-            let mut app = Killer7App::new_headless(Settings::default());
+            let mut app = Chuaker7App::new_headless(Settings::default());
             app.theme.mode = mode;
             app.tab = Tab::Monitor;
             let _ = ctx.run(egui::RawInput::default(), |ctx| {
@@ -765,7 +765,7 @@ mod tests {
 
         let ctx = egui::Context::default();
         crate::fonts::install(&ctx);
-        let mut app = Killer7App::new_headless(Settings::default());
+        let mut app = Chuaker7App::new_headless(Settings::default());
         app.tab = Tab::Files;
 
         let base = egui::RawInput {
@@ -811,7 +811,7 @@ mod tests {
     fn process_search_filters_by_name_pid_and_port() {
         let ctx = egui::Context::default();
         crate::fonts::install(&ctx);
-        let mut app = Killer7App::new_headless(Settings::default());
+        let mut app = Chuaker7App::new_headless(Settings::default());
         app.processes.processes = sample_processes();
 
         app.process_search = "node".to_string();

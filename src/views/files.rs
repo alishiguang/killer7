@@ -5,12 +5,12 @@ use std::time::UNIX_EPOCH;
 
 use egui::{Align, FontFamily, FontId, Layout, RichText, Stroke};
 
-use crate::app::Killer7App;
+use crate::app::Chuaker7App;
 use crate::files::FileItem;
 use crate::ui_kit;
 
 /// 渲染文件管理页。
-pub fn render(ui: &mut egui::Ui, app: &mut Killer7App) {
+pub fn render(ui: &mut egui::Ui, app: &mut Chuaker7App) {
     let palette = ui_kit::palette(ui.ctx());
 
     let title = app.i18n.t("file.title");
@@ -316,7 +316,7 @@ pub fn render(ui: &mut egui::Ui, app: &mut Killer7App) {
 }
 
 /// 新建文件夹弹窗。
-fn render_new_folder_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
+fn render_new_folder_dialog(ui: &mut egui::Ui, app: &mut Chuaker7App) {
     let Some(name) = app.new_folder_name.clone() else {
         return;
     };
@@ -328,7 +328,7 @@ fn render_new_folder_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
     let create_label = app.i18n.t("common.create");
     let created_template = app.i18n.t("file.created");
 
-    egui::Modal::new(egui::Id::new("killer7.new_folder"))
+    egui::Modal::new(egui::Id::new("chuaker7.new_folder"))
         .frame(egui::Frame {
             fill: palette.background,
             stroke: Stroke::new(1.0, palette.border),
@@ -367,7 +367,7 @@ fn render_new_folder_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
 }
 
 /// 新建文件弹窗。
-fn render_new_file_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
+fn render_new_file_dialog(ui: &mut egui::Ui, app: &mut Chuaker7App) {
     let Some(name) = app.new_file_name.clone() else {
         return;
     };
@@ -378,7 +378,7 @@ fn render_new_file_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
     let create_label = app.i18n.t("common.create");
     let created_template = app.i18n.t("file.created");
 
-    egui::Modal::new(egui::Id::new("killer7.new_file"))
+    egui::Modal::new(egui::Id::new("chuaker7.new_file"))
         .frame(egui::Frame {
             fill: palette.background,
             stroke: Stroke::new(1.0, palette.border),
@@ -417,7 +417,7 @@ fn render_new_file_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
 }
 
 /// 重命名弹窗。
-fn render_rename_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
+fn render_rename_dialog(ui: &mut egui::Ui, app: &mut Chuaker7App) {
     let Some((path, name)) = app.file_rename.clone() else {
         return;
     };
@@ -429,7 +429,7 @@ fn render_rename_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
     let confirm_label = app.i18n.t("common.save");
     let renamed_template = app.i18n.t("file.renamed");
 
-    egui::Modal::new(egui::Id::new("killer7.rename"))
+    egui::Modal::new(egui::Id::new("chuaker7.rename"))
         .frame(egui::Frame {
             fill: palette.background,
             stroke: Stroke::new(1.0, palette.border),
@@ -469,7 +469,7 @@ fn render_rename_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
 }
 
 /// 按搜索词过滤。
-fn filtered_files(app: &Killer7App) -> Vec<FileItem> {
+fn filtered_files(app: &Chuaker7App) -> Vec<FileItem> {
     let keyword = app.file_search.trim().to_lowercase();
     if keyword.is_empty() {
         return app.files.files.clone();

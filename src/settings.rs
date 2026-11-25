@@ -1,7 +1,7 @@
 //! 应用设置与持久化。
 //!
 //! Swift 版用 `@AppStorage` 把设置写在 `UserDefaults` 里；Rust 版改为把同一份
-//! 配置写到 `~/Library/Application Support/killer7/settings.json`，字段名保持一致，
+//! 配置写到 `~/Library/Application Support/chuaker7/settings.json`，字段名保持一致，
 //! 方便对照迁移。
 
 use std::path::PathBuf;
@@ -11,10 +11,10 @@ use serde::{Deserialize, Serialize};
 use crate::i18n::Locale;
 use crate::theme::{Accent, ThemeMode};
 
-/// 应用数据目录（macOS 下为 `~/Library/Application Support/killer7`）。
+/// 应用数据目录（macOS 下为 `~/Library/Application Support/chuaker7`）。
 pub fn data_dir() -> PathBuf {
     let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
-    base.join("killer7")
+    base.join("chuaker7")
 }
 
 /// 配置文件路径。

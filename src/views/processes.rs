@@ -2,12 +2,12 @@
 
 use egui::{Align, FontFamily, FontId, Layout, RichText, Stroke};
 
-use crate::app::{Killer7App, ProcessSort};
+use crate::app::{Chuaker7App, ProcessSort};
 use crate::process::ProcessInfo;
 use crate::ui_kit;
 
 /// 渲染进程管理页。
-pub fn render(ui: &mut egui::Ui, app: &mut Killer7App) {
+pub fn render(ui: &mut egui::Ui, app: &mut Chuaker7App) {
     let palette = ui_kit::palette(ui.ctx());
 
     // 先取出文案，避免在表格闭包里借用 app。
@@ -229,7 +229,7 @@ pub fn render(ui: &mut egui::Ui, app: &mut Killer7App) {
 }
 
 /// 结束进程的确认弹窗。
-fn render_kill_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
+fn render_kill_dialog(ui: &mut egui::Ui, app: &mut Chuaker7App) {
     let Some(pid) = app.pending_kill else {
         return;
     };
@@ -252,7 +252,7 @@ fn render_kill_dialog(ui: &mut egui::Ui, app: &mut Killer7App) {
     let done_template = app.i18n.t("process.kill.done");
     let failed_template = app.i18n.t("process.kill.failed");
 
-    egui::Modal::new(egui::Id::new("killer7.kill"))
+    egui::Modal::new(egui::Id::new("chuaker7.kill"))
         .frame(egui::Frame {
             fill: palette.background,
             stroke: Stroke::new(1.0, palette.border),
@@ -318,7 +318,7 @@ fn header_button(
 }
 
 /// 按搜索词过滤并排序。
-fn filtered_processes(app: &Killer7App) -> Vec<ProcessInfo> {
+fn filtered_processes(app: &Chuaker7App) -> Vec<ProcessInfo> {
     let keyword = app.process_search.trim().to_lowercase();
 
     let mut list: Vec<ProcessInfo> = app

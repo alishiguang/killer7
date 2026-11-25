@@ -2,11 +2,11 @@
 
 use egui::{Align, FontFamily, FontId, Layout, RichText};
 
-use crate::app::Killer7App;
+use crate::app::Chuaker7App;
 use crate::ui_kit;
 
 /// 渲染系统监控页。
-pub fn render(ui: &mut egui::Ui, app: &mut Killer7App) {
+pub fn render(ui: &mut egui::Ui, app: &mut Chuaker7App) {
     let palette = ui_kit::palette(ui.ctx());
 
     let title = app.i18n.t("monitor.title");

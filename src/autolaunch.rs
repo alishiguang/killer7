@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 /// LaunchAgent 的 Label / plist 文件名。
-const LABEL: &str = "com.igigi.lucibox";
+const LABEL: &str = "com.igigi.chuaker7";
 
 /// plist 文件路径。
 pub fn plist_path() -> PathBuf {

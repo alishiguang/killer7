@@ -1,8 +1,8 @@
-# killer7 Tauri v2 + React 重写实施计划
+# chuaker7 Tauri v2 + React 重写实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 killer7 从 egui 立即模式重写为 Tauri v2 + React 19 + TypeScript 前端架构，保留 cindy.cn 的 ink/paper 视觉语言与全部业务功能，同时用 macOS 原生能力（应用菜单栏、原生右键菜单、托盘菜单、原生对话框）替换自绘交互层，消除首帧空白与滚动掉帧。
+**Goal:** 把 chuaker7 从 egui 立即模式重写为 Tauri v2 + React 19 + TypeScript 前端架构，保留 cindy.cn 的 ink/paper 视觉语言与全部业务功能，同时用 macOS 原生能力（应用菜单栏、原生右键菜单、托盘菜单、原生对话框）替换自绘交互层，消除首帧空白与滚动掉帧。
 
 **Architecture:** Rust 侧保留全部业务逻辑（`core/`），作为唯一权威状态源；前端只持有渲染快照，搜索与排序在本地完成。Rust 通过 Tauri `invoke`（命令）与 `emit`（事件）与前端通信；原生能力一律走 Tauri 官方 API，仅「切换 NSApp 激活策略」一处使用 `objc2-app-kit` 直调 AppKit。egui 层（`app.rs`/`ui_kit.rs`/`theme.rs` 的 egui 部分/`fonts.rs`/`views/*`）整体废弃。
 
@@ -63,7 +63,7 @@
 ## 目录结构总览
 
 ```
-killer7/
+chuaker7/
 ├── Cargo.toml                      # workspace 根（members = ["src-tauri"]）
 ├── Cargo.lock
 ├── .cargo/config.toml              # 保留（tuna 稀疏索引），对子目录同样生效
@@ -221,7 +221,7 @@ type Notice = { kind: 'info' | 'error'; message: string };
 - [ ] **Step 1: 用 mavis-trash 归档 egui 源码，保留可回退能力**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 "/Users/lishiguang/.minimax/bin/mavis-trash" -- "src" "build.rs"
 ```
 
@@ -249,19 +249,19 @@ opt-level = 1
 
 ```toml
 [package]
-name = "killer7"
+name = "chuaker7"
 version = "1.2.0"
 edition = "2024"
 rust-version = "1.88"
-description = "killer7 — macOS 系统工具箱（Tauri v2 + React 重写版）"
-authors = ["alishiguang <alishiguang@users.noreply.github.com>"]
+description = "chuaker7 — macOS 系统工具箱（Tauri v2 + React 重写版）"
+authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
 license = "MIT"
-repository = "https://github.com/alishiguang/killer7"
+repository = "https://github.com/chuaker7/chuaker7"
 keywords = ["macos", "toolbox", "tauri", "system-monitor"]
 categories = ["gui", "os::macos-apis"]
 
 [lib]
-name = "killer7_lib"
+name = "chuaker7_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -302,7 +302,7 @@ fn main() {
 `src-tauri/src/lib.rs`：
 
 ```rust
-//! killer7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
+//! chuaker7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
@@ -318,7 +318,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
-        .expect("error while running killer7");
+        .expect("error while running chuaker7");
 }
 ```
 
@@ -329,7 +329,7 @@ pub fn run() {
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    killer7_lib::run();
+    chuaker7_lib::run();
 }
 ```
 
@@ -341,7 +341,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
-        .expect("error while running killer7");
+        .expect("error while running chuaker7");
 }
 ```
 
@@ -350,9 +350,9 @@ pub fn run() {
 ```json
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "killer7",
+  "productName": "chuaker7",
   "version": "1.2.0",
-  "identifier": "com.igigi.killer7",
+  "identifier": "com.igigi.chuaker7",
   "build": {
     "frontendDist": "../frontend/dist",
     "devUrl": "http://localhost:1420",
@@ -364,7 +364,7 @@ pub fn run() {
     "windows": [
       {
         "label": "main",
-        "title": "killer7",
+        "title": "chuaker7",
         "width": 1080,
         "height": 720,
         "minWidth": 880,
@@ -390,7 +390,7 @@ pub fn run() {
     ],
     "category": "Utility",
     "shortDescription": "macOS 系统工具箱",
-    "longDescription": "killer7 —— 进程管理、文件管理、剪贴板、系统监控、插件与设置。",
+    "longDescription": "chuaker7 —— 进程管理、文件管理、剪贴板、系统监控、插件与设置。",
     "macOS": { "minimumSystemVersion": "12.0" }
   },
   "plugins": {}
@@ -403,7 +403,7 @@ pub fn run() {
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "killer7 默认权限",
+  "description": "chuaker7 默认权限",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -419,7 +419,7 @@ pub fn run() {
 - [ ] **Step 7: 写 `scripts/make-icon.mjs`（依赖无关的 PNG 生成器）**
 
 ```javascript
-// 生成 killer7 应用图标源图（1024×1024 RGBA PNG）。
+// 生成 chuaker7 应用图标源图（1024×1024 RGBA PNG）。
 // 设计语言取自 cindy.cn：近黑 ink 底 + 单一信号红强调 + 奶油色小菱形。
 // 纯 Node 实现，不依赖任何三方库；PNG 由 node:zlib 手写编码。
 import { deflateSync } from 'node:zlib';
@@ -538,23 +538,23 @@ console.log(`wrote ${out} (${SIZE}x${SIZE}, ${png.length} bytes)`);
 - [ ] **Step 8: 生成图标并跑通构建**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 node scripts/make-icon.mjs scripts/icon-source.png
 npx --yes @tauri-apps/cli@2.12.6 icon scripts/icon-source.png
-cargo build -p killer7
+cargo build -p chuaker7
 ```
 
 Expected：
 - `scripts/icon-source.png` 生成成功（文件大小 > 10KB）。
 - `src-tauri/icons/` 下出现 `32x32.png` / `128x128.png` / `128x128@2x.png` / `icon.png` / `icon.icns` / `icon.ico`。
-- `cargo build -p killer7` 输出 `Finished` 且 **0 warning**。
+- `cargo build -p chuaker7` 输出 `Finished` 且 **0 warning**。
 
 > `npx @tauri-apps/cli` 需要联网拉包；若网络不可用，改为先在根 `package.json` 安装 `@tauri-apps/cli`（Task 2 会做），此处可临时 `npm i -D @tauri-apps/cli@2.12.6` 后用 `npx tauri icon`。
 
 - [ ] **Step 9: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移到 Tauri v2 workspace 骨架
 
@@ -589,7 +589,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 固定 Node 版本并写 `.nvmrc`**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 printf '24.17.0\n' > .nvmrc
 source ~/.nvm/nvm.sh && nvm use
 node -v
@@ -601,11 +601,11 @@ Expected：`v24.17.0`。
 
 ```json
 {
-  "name": "killer7",
+  "name": "chuaker7",
   "private": true,
   "version": "1.2.0",
   "type": "module",
-  "description": "killer7 —— macOS 系统工具箱（Tauri v2 + React 重写版）",
+  "description": "chuaker7 —— macOS 系统工具箱（Tauri v2 + React 重写版）",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -724,7 +724,7 @@ export default defineConfig({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>killer7</title>
+    <title>chuaker7</title>
   </head>
   <body>
     <div id="root"></div>
@@ -764,7 +764,7 @@ ReactDOM.createRoot(container).render(
 export function App() {
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui' }}>
-      <h1>killer7</h1>
+      <h1>chuaker7</h1>
       <p>Tauri v2 + React 脚手架已就绪。</p>
     </main>
   );
@@ -785,7 +785,7 @@ frontend/dist/
 - [ ] **Step 8: 安装依赖并验证**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm install
 npm run typecheck
@@ -801,17 +801,17 @@ Expected：
 - [ ] **Step 9: 端到端验证 Tauri 窗口**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run tauri dev
 ```
 
-Expected：弹出名为 killer7 的窗口，尺寸 1080×720，窗口内显示「killer7 / Tauri v2 + React 脚手架已就绪。」。用 `⌘W` 关闭后继续。
+Expected：弹出名为 chuaker7 的窗口，尺寸 1080×720，窗口内显示「chuaker7 / Tauri v2 + React 脚手架已就绪。」。用 `⌘W` 关闭后继续。
 
 - [ ] **Step 10: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 前端脚手架 —— Vite 7 + React 19 + TypeScript 5.9
 
@@ -955,7 +955,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 3: 暴露字体静态资源**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 mkdir -p frontend/public/fonts
 cp assets/fonts/Anton-Regular.ttf assets/fonts/GeistMono-Variable.ttf frontend/public/fonts/
 ```
@@ -1271,7 +1271,7 @@ describe('cindy.cn 设计令牌', () => {
 - [ ] **Step 7: 跑测试与类型检查**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test
 npm run typecheck
@@ -1282,7 +1282,7 @@ Expected：`tokens.test.ts` 3 个用例全 PASS；`typecheck` 退出码 0。
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 设计令牌与 macOS 化基础样式
 
@@ -1466,7 +1466,7 @@ mod tests {
 //! 应用设置与持久化。
 //!
 //! Swift 版用 `@AppStorage` 把设置写在 `UserDefaults` 里；Rust 版写到
-//! `~/Library/Application Support/killer7/settings.json`。
+//! `~/Library/Application Support/chuaker7/settings.json`。
 //!
 //! 字段以 camelCase 落盘（与前端契约一致），同时通过 `alias` 接受 egui 版
 //! 写下的 snake_case 旧字段，用户设置不会因为改版而丢失。
@@ -1478,10 +1478,10 @@ use serde::{Deserialize, Serialize};
 use crate::core::i18n::Locale;
 use crate::core::theme::{Accent, ThemeMode};
 
-/// 应用数据目录（macOS 下为 `~/Library/Application Support/killer7`）。
+/// 应用数据目录（macOS 下为 `~/Library/Application Support/chuaker7`）。
 pub fn data_dir() -> PathBuf {
     let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
-    base.join("killer7")
+    base.join("chuaker7")
 }
 
 /// 配置文件路径。
@@ -1702,7 +1702,7 @@ mod tests {
 `src-tauri/src/lib.rs` 改为：
 
 ```rust
-//! killer7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
+//! chuaker7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
@@ -1713,14 +1713,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
-        .expect("error while running killer7");
+        .expect("error while running chuaker7");
 }
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo test -p killer7
-cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo test -p chuaker7
+cargo clippy -p chuaker7 --all-targets
 ```
 
 Expected：所有测试 PASS，`clippy` **0 warning**。
@@ -1728,7 +1728,7 @@ Expected：所有测试 PASS，`clippy` **0 warning**。
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移 core 纯逻辑模块（平台/图标/本地化/设置/主题/插件）
 
@@ -2118,10 +2118,10 @@ pub mod events;
 - [ ] **Step 7: 跑测试与静态检查**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 cargo fmt
-cargo test -p killer7
-cargo clippy -p killer7 --all-targets
+cargo test -p chuaker7
+cargo clippy -p chuaker7 --all-targets
 ```
 
 Expected：测试数 ≥ 19（egui 版基线）且全 PASS；`clippy` 0 warning；`cargo fmt --check` 干净。
@@ -2129,7 +2129,7 @@ Expected：测试数 ≥ 19（egui 版基线）且全 PASS；`clippy` 0 warning�
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移 core 取数模块并解耦线程调度
 
@@ -2458,8 +2458,8 @@ pub mod dto;
 `src-tauri/src/lib.rs` 追加 `pub mod commands;`。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo test -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo test -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 ```
 
 Expected：DTO 三个测试 PASS；`clippy` 0 warning。
@@ -2467,7 +2467,7 @@ Expected：DTO 三个测试 PASS；`clippy` 0 warning。
 - [ ] **Step 4: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 新增前后端 DTO 契约层
 
@@ -2764,7 +2764,7 @@ pub const EV_NOTICE: &str = "notice";
 - [ ] **Step 5: 接入 `lib.rs`，让应用能真正跑起来**
 
 ```rust
-//! killer7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
+//! chuaker7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
@@ -2806,7 +2806,7 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running killer7");
+        .expect("error while running chuaker7");
 }
 ```
 
@@ -2815,8 +2815,8 @@ pub fn run() {
 - [ ] **Step 6: 编译验证**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 ```
 
 Expected：编译通过，0 warning。
@@ -2826,7 +2826,7 @@ Expected：编译通过，0 warning。
 - [ ] **Step 7: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 引入 AppState 与后台任务循环
 
@@ -2930,8 +2930,8 @@ pub fn handler() -> InvokeHandler {
 - [ ] **Step 3: 编译并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 进程管理命令
 
@@ -3159,8 +3159,8 @@ pub fn watch_dir(
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 文件管理命令与目录监听重建
 
@@ -3335,8 +3335,8 @@ pub fn plugins_dir() -> String {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 剪贴板 / 监控 / 插件命令
 
@@ -3551,8 +3551,8 @@ pub fn popup_context_menu(app: AppHandle, kind: String, payload: serde_json::Val
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 设置、文案与系统命令
 
@@ -3605,18 +3605,18 @@ use crate::events::EV_MENU_ACTION;
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let app_menu = Submenu::with_items(
         app,
-        "killer7",
+        "chuaker7",
         true,
         &[
-            &PredefinedMenuItem::about(app, Some("killer7"), None)?,
+            &PredefinedMenuItem::about(app, Some("chuaker7"), None)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "app:settings", "设置…", true, Some("CmdOrCtrl+,"))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::hide(app, Some("隐藏 killer7"), Some("CmdOrCtrl+H"))?,
+            &PredefinedMenuItem::hide(app, Some("隐藏 chuaker7"), Some("CmdOrCtrl+H"))?,
             &PredefinedMenuItem::hide_others(app, Some("隐藏其他"), Some("CmdOrCtrl+Alt+H"))?,
             &PredefinedMenuItem::show_all(app, Some("显示全部"), None)?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some("退出 killer7"), Some("CmdOrCtrl+Q"))?,
+            &PredefinedMenuItem::quit(app, Some("退出 chuaker7"), Some("CmdOrCtrl+Q"))?,
         ],
     )?;
 
@@ -3722,21 +3722,21 @@ Builder 追加：
 - [ ] **Step 4: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7
 npm run tauri dev
 ```
 
-Expected：窗口出现后，屏幕顶部出现 macOS 菜单栏，含「killer7 / 编辑 / 视图 / 窗口」四个下拉；点「视图 → 进程管理」无报错。
+Expected：窗口出现后，屏幕顶部出现 macOS 菜单栏，含「chuaker7 / 编辑 / 视图 / 窗口」四个下拉；点「视图 → 进程管理」无报错。
 
 - [ ] **Step 5: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 原生 macOS 应用菜单栏
 
-- set_as_app_menu 构建 killer7/编辑/视图/窗口四个原生菜单
+- set_as_app_menu 构建 chuaker7/编辑/视图/窗口四个原生菜单
 - 关于/隐藏/退出/剪切/拷贝/粘贴/全选走 PredefinedMenuItem
 - 视图项带 Cmd+1..5 加速器，点击后发 menu-action 事件驱动前端切换
 
@@ -3787,7 +3787,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let (pixels, width, height) = bird_rgba(22);
     let icon = Image::new_owned(pixels, width, height);
 
-    let title = MenuItem::with_id(app, "tray:title", "killer7", false, None::<&str>)?;
+    let title = MenuItem::with_id(app, "tray:title", "chuaker7", false, None::<&str>)?;
     let cpu = MenuItem::with_id(app, "tray:cpu", "CPU  —", false, None::<&str>)?;
     let memory = MenuItem::with_id(app, "tray:memory", "内存  —", false, None::<&str>)?;
     let disk = MenuItem::with_id(app, "tray:disk", "磁盘  —", false, None::<&str>)?;
@@ -3804,7 +3804,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             &upload,
             &download,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "tray:open", "打开 killer7", true, None::<&str>)?,
+            &MenuItem::with_id(app, "tray:open", "打开 chuaker7", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::quit(app, Some("退出"), None)?,
         ],
@@ -3813,7 +3813,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     TrayIconBuilder::with_id("main")
         .icon(icon)
         .icon_as_template(true)
-        .tooltip("killer7")
+        .tooltip("chuaker7")
         .menu_on_left_click(false)
         .menu(&menu)
         .build(app)?;
@@ -3909,17 +3909,17 @@ Builder 追加：
 - [ ] **Step 3: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7
 npm run tauri dev
 ```
 
-Expected：菜单栏右侧出现小鸟图标；左键点击弹出菜单，显示 CPU / 内存 / 磁盘 / 上传 / 下载 五行数值（随采样刷新）；点「打开 killer7」窗口置前。
+Expected：菜单栏右侧出现小鸟图标；左键点击弹出菜单，显示 CPU / 内存 / 磁盘 / 上传 / 下载 五行数值（随采样刷新）；点「打开 chuaker7」窗口置前。
 
 - [ ] **Step 4: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 托盘图标与原生托盘菜单
 
@@ -4059,8 +4059,8 @@ pub fn set_accessory_mode<R: Runtime>(enabled: bool, _app: &AppHandle<R>) {
 - [ ] **Step 4: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 npm run tauri dev
 ```
 
@@ -4071,7 +4071,7 @@ Expected：
 - [ ] **Step 5: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 全局快捷键 ⌘L 与 Dock/菜单栏模式切换
 
@@ -4106,7 +4106,7 @@ AI-Tool: TophantAI"
 use std::path::PathBuf;
 
 /// LaunchAgent 的 Label / plist 文件名。
-const LABEL: &str = "com.igigi.lucibox";
+const LABEL: &str = "com.igigi.chuaker7";
 
 /// plist 文件路径。
 pub fn plist_path() -> PathBuf {
@@ -4208,7 +4208,7 @@ mod tests {
     fn plist_path_lives_in_launch_agents() {
         let path = plist_path();
         assert!(path.to_string_lossy().contains("LaunchAgents"));
-        assert!(path.to_string_lossy().ends_with("com.igigi.lucibox.plist"));
+        assert!(path.to_string_lossy().ends_with("com.igigi.chuaker7.plist"));
     }
 }
 ```
@@ -4229,12 +4229,12 @@ pub mod tray;
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo test -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo test -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 开机自启（LaunchAgent）
 
-- 写 ~/Library/LaunchAgents/com.igigi.lucibox.plist 并用 launchctl 装载
+- 写 ~/Library/LaunchAgents/com.igigi.chuaker7.plist 并用 launchctl 装载
 - 补 XML 转义与 plist 路径单元测试
 
 AI-Coding: true
@@ -4695,7 +4695,7 @@ describe('translate', () => {
 - [ ] **Step 8: 跑测试并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -5429,7 +5429,7 @@ describe('Modal', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -5866,7 +5866,7 @@ vi.mock('../lib/bridge', () => ({
       'nav.settings': '设置',
       'nav.section.tools': '工具',
       'nav.section.system': '系统',
-      'app.brand': 'KILLER7',
+      'app.brand': 'CHUAKER7',
       'app.tagline': 'MACOS 系统工具箱',
     }),
   },
@@ -5886,7 +5886,7 @@ vi.mock('../lib/store', async () => {
       'nav.settings': '设置',
       'nav.section.tools': '工具',
       'nav.section.system': '系统',
-      'app.brand': 'KILLER7',
+      'app.brand': 'CHUAKER7',
       'app.tagline': 'MACOS 系统工具箱',
     },
     activeTab: 'processes',
@@ -5909,7 +5909,7 @@ describe('AppShell', () => {
 
   it('渲染品牌与六个标签页', async () => {
     render(<AppShell />);
-    expect(await screen.findByText('KILLER7')).toBeInTheDocument();
+    expect(await screen.findByText('CHUAKER7')).toBeInTheDocument();
     for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控', '插件', '设置']) {
       expect(await screen.findByText(label)).toBeInTheDocument();
     }
@@ -5918,7 +5918,7 @@ describe('AppShell', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6262,7 +6262,7 @@ describe('Processes', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6731,7 +6731,7 @@ describe('Files', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6935,7 +6935,7 @@ function formatTime(seconds: number): string {
 `frontend/src/pages/Clipboard.test.tsx`：mock `api.clipboardCurrent` / `api.clipboardHistory` / `onEvent`，断言「当前剪贴板」「历史记录」两个卡片标题出现，以及历史条目文本出现。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7072,7 +7072,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 `frontend/src/pages/Monitor.test.tsx`：mock `api.systemSnapshot` 返回固定数值，断言四个指标标签与数值出现。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7219,7 +7219,7 @@ export function Plugins() {
 `frontend/src/pages/Plugins.test.tsx`：mock `api.listPlugins` 返回一条插件，断言插件名与版本出现；返回空数组时断言空态文案。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7409,7 +7409,7 @@ export function Settings() {
             <dt>{t('settings.version')}</dt>
             <dd>1.2.0</dd>
             <dt>{t('settings.bundleId')}</dt>
-            <dd>com.igigi.killer7</dd>
+            <dd>com.igigi.chuaker7</dd>
             <dt>{t('settings.copyright')}</dt>
             <dd>MIT</dd>
           </dl>
@@ -7454,7 +7454,7 @@ export function Settings() {
 `frontend/src/pages/Settings.test.tsx`：mock `api.updateSettings` 与 `api.getSettings`，断言「外观」「性能」「启动项」「关于」四个卡片标题出现，且主题分段控件可渲染。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7793,8 +7793,8 @@ fn notify(app: &AppHandle, kind: &str, message: &str) {
 - [ ] **Step 5: 验收并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 source ~/.nvm/nvm.sh && nvm use && npm run test && npm run typecheck
 npm run tauri dev
 ```
@@ -8002,7 +8002,7 @@ import { useDeferredValue } from 'react';
 创建 `docs/PERFORMANCE.md`：
 
 ```markdown
-# killer7 性能记录
+# chuaker7 性能记录
 
 ## 测量环境
 
@@ -8038,7 +8038,7 @@ import { useDeferredValue } from 'react';
 - [ ] **Step 5: 跑全量质量门禁**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 cargo fmt --check
 cargo clippy --all-targets
 cargo test
@@ -8077,7 +8077,7 @@ AI-Tool: TophantAI"
 - Create: `docs/screenshots/tauri-settings.png`
 - Modify: `README.md`
 - Modify: `.gitignore`
-- Create: `release/killer7.zip`
+- Create: `release/chuaker7.zip`
 
 **Interfaces:**
 - Consumes: 全部前置任务
@@ -8086,7 +8086,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 启动前端并截图**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run dev &
 sleep 4
@@ -8134,7 +8134,7 @@ kill %1
 
 README 需要包含：
 
-- 项目简介：killer7 是 LuciBox 的 Rust + Tauri v2 重写版；
+- 项目简介：chuaker7 是 LuciBox 的 Rust + Tauri v2 重写版；
 - 技术栈表格（Tauri v2 / React 19 / TypeScript 5.9 / Rust 1.90）；
 - 功能清单（进程管理、文件管理、剪贴板、系统监控、插件、设置）与原生能力清单（应用菜单栏、原生右键菜单、托盘菜单、⌘L 全局快捷键、菜单栏模式、开机自启）；
 - 开发指南（`nvm use` → `npm install` → `npm run tauri dev`）；
@@ -8157,42 +8157,42 @@ src-tauri/gen/
 - [ ] **Step 5: 构建可分发包**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run tauri build
 ```
 
 Expected：
-- `src-tauri/target/release/bundle/macos/killer7.app` 生成；
-- `src-tauri/target/release/bundle/dmg/killer7_1.2.0_*.dmg` 生成。
+- `src-tauri/target/release/bundle/macos/chuaker7.app` 生成；
+- `src-tauri/target/release/bundle/dmg/chuaker7_1.2.0_*.dmg` 生成。
 
 验证应用可运行：
 
 ```bash
-open src-tauri/target/release/bundle/macos/killer7.app
+open src-tauri/target/release/bundle/macos/chuaker7.app
 sleep 3
 osascript -e 'tell application "System Events" to get name of every process whose background only is false'
 ```
 
-Expected：进程列表包含 `killer7`。
+Expected：进程列表包含 `chuaker7`。
 
 打包 zip：
 
 ```bash
 cd src-tauri/target/release/bundle/macos
-zip -r /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react/release/killer7.zip killer7.app
+zip -r /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react/release/chuaker7.zip chuaker7.app
 ```
 
 - [ ] **Step 6: 提交并推送**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git add -A
 git commit -m "docs: 更新 README 与界面预览，产出可分发 .app 包
 
 - README 补充 Tauri 架构说明、原生能力清单与开发构建指南
 - 六张页面截图替换 egui 版预览
-- tauri build 产出 killer7.app 与 dmg
+- tauri build 产出 chuaker7.app 与 dmg
 
 AI-Coding: true
 AI-Tool: TophantAI"
@@ -8201,16 +8201,16 @@ AI-Tool: TophantAI"
 推送当前分支（用 `GIT_ASKPASS` 注入凭证，脚本用完即删）：
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 cat > /tmp/k7-askpass.sh <<'EOF'
 #!/bin/sh
 case "$1" in
   *Username*) echo "alishiguang" ;;
-  *Password*) echo "$KILLER7_TOKEN" ;;
+  *Password*) echo "$CHUAKER7_TOKEN" ;;
 esac
 EOF
 chmod +x /tmp/k7-askpass.sh
-KILLER7_TOKEN="<从安全位置读取的 PAT>" GIT_ASKPASS=/tmp/k7-askpass.sh GIT_TERMINAL_PROMPT=0 git push -u origin feat/tauri-react-rewrite
+CHUAKER7_TOKEN="<从安全位置读取的 PAT>" GIT_ASKPASS=/tmp/k7-askpass.sh GIT_TERMINAL_PROMPT=0 git push -u origin feat/tauri-react-rewrite
 "/Users/lishiguang/.minimax/bin/mavis-trash" -- "/tmp/k7-askpass.sh"
 ```
 
@@ -8220,11 +8220,11 @@ KILLER7_TOKEN="<从安全位置读取的 PAT>" GIT_ASKPASS=/tmp/k7-askpass.sh GI
 - [ ] **Step 7: 收尾核对**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
 git status --short          # 应为空
 git log --oneline -5        # 确认新提交
 git branch -a               # legacy-egui 仍在
-ls -la release/             # killer7.zip 存在
+ls -la release/             # chuaker7.zip 存在
 ```
 
 ---

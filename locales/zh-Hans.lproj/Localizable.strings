@@ -123,8 +123,8 @@
 "view.menu" = "视图";
 "view.menuBar.mode" = "菜单栏模式";
 
-// MARK: - killer7 品牌
-"app.brand" = "KILLER7";
+// MARK: - chuaker7 品牌
+"app.brand" = "CHUAKER7";
 "app.tagline" = "MACOS 系统工具箱";
 "app.subtitle" = "鸬鹚工具箱 · Rust 重写版";
 
@@ -193,6 +193,6 @@
 "plugin.permissions" = "权限";
 "plugin.minVersion" = "最低应用版本";
 
-"menubar.open" = "打开 killer7";
+"menubar.open" = "打开 chuaker7";
 "menubar.quit" = "退出";
-"menubar.title" = "killer7";
+"menubar.title" = "chuaker7";

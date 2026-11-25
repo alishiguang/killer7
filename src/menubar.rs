@@ -13,9 +13,9 @@ use crate::events::AppEvent;
 use crate::monitor::SystemInfo;
 
 /// 「打开主窗口」菜单项 id。
-const MENU_OPEN: &str = "killer7.open";
+const MENU_OPEN: &str = "chuaker7.open";
 /// 「退出」菜单项 id。
-const MENU_QUIT: &str = "killer7.quit";
+const MENU_QUIT: &str = "chuaker7.quit";
 
 /// 菜单栏图标。
 pub struct MenuBar {

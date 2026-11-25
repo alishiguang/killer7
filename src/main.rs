@@ -1,4 +1,4 @@
-//! killer7 —— macOS 系统工具箱（SwiftUI 原版 LuciBox 的 Rust 重写）。
+//! chuaker7 —— macOS 系统工具箱（SwiftUI 原版 LuciBox 的 Rust 重写）。
 //!
 //! 入口负责加载设置、准备字体并启动 egui 运行时。
 
@@ -21,7 +21,7 @@ mod theme;
 mod ui_kit;
 mod views;
 
-use app::Killer7App;
+use app::Chuaker7App;
 use eframe::egui;
 
 fn main() -> eframe::Result<()> {
@@ -31,16 +31,16 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1080.0, 720.0])
             .with_min_inner_size([880.0, 600.0])
-            .with_title("killer7"),
+            .with_title("chuaker7"),
         ..Default::default()
     };
 
     eframe::run_native(
-        "killer7",
+        "chuaker7",
         options,
         Box::new(|creation| {
             fonts::install(&creation.egui_ctx);
-            let mut app = Killer7App::new(settings);
+            let mut app = Chuaker7App::new(settings);
             if let Some(tab) = start_tab() {
                 app.tab = tab;
             }
@@ -49,11 +49,11 @@ fn main() -> eframe::Result<()> {
     )
 }
 
-/// 允许用 `KILLER7_START_TAB` 指定启动时打开的标签页。
+/// 允许用 `CHUAKER7_START_TAB` 指定启动时打开的标签页。
 ///
 /// 主要用于自动化截图和「打开时直接进入某个功能」的场景。
 fn start_tab() -> Option<app::Tab> {
-    let raw = std::env::var("KILLER7_START_TAB").ok()?;
+    let raw = std::env::var("CHUAKER7_START_TAB").ok()?;
     match raw.trim().to_ascii_lowercase().as_str() {
         "process" | "processes" => Some(app::Tab::Process),
         "files" | "file" => Some(app::Tab::Files),

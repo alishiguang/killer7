@@ -1,4 +1,4 @@
-# killer7 架构改版设计：Tauri v2 + React + TypeScript
+# chuaker7 架构改版设计：Tauri v2 + React + TypeScript
 
 - 日期：2026-11-24
 - 状态：已批准
@@ -55,7 +55,7 @@ egui 版功能对等移植完成，但实际使用感受不佳，用户明确指
 ## 4. 目录结构
 
 ```
-killer7/
+chuaker7/
 ├── src-tauri/                 # Rust 侧（Tauri v2 应用）
 │   ├── Cargo.toml
 │   ├── tauri.conf.json        # 窗口、托盘、权限、bundle 配置
@@ -220,7 +220,7 @@ Rust 侧类型用 `serde::Serialize` 直接导出给前端（`camelCase`），�
 
 | 元素 | 实现 | 对应痛点 |
 | --- | --- | --- |
-| 应用菜单栏 | Tauri `setAsAppMenu()`：关于 killer7 / 设置… / 隐藏 / 退出，含 ⌘, ⌘L, ⌘W 加速器 | 缺少原生交互 |
+| 应用菜单栏 | Tauri `setAsAppMenu()`：关于 chuaker7 / 设置… / 隐藏 / 退出，含 ⌘, ⌘L, ⌘W 加速器 | 缺少原生交互 |
 | 右键菜单 | `Menu.popup()`：进程行、文件行、剪贴板条目各自一套原生菜单 | 缺少原生交互 |
 | 托盘菜单 | `TrayIconBuilder` + 原生菜单，实时显示 CPU / 内存 / 磁盘 | 缺少原生交互 |
 | 文件对话框 | Tauri dialog 插件 | 缺少原生交互 |
@@ -283,7 +283,7 @@ Rust 侧类型用 `serde::Serialize` 直接导出给前端（`camelCase`），�
 
 ## 11. 仓库策略
 
-- 同一个 `alishiguang/killer7` 仓库继续演进，主分支 `main`。
+- 同一个 `chuaker7/chuaker7` 仓库继续演进，主分支 `main`。
 - 当前 egui 版保留在 `legacy-egui` 分支（指向 `b36b8dc`），随时可对照或回退。
 - 提交信息中文，结尾附 `AI-Coding: true` / `AI-Tool: TophantAI`。
 

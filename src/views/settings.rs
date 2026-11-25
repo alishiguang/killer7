@@ -5,12 +5,12 @@
 
 use egui::{FontFamily, FontId, RichText};
 
-use crate::app::Killer7App;
+use crate::app::Chuaker7App;
 use crate::theme::{Accent, ThemeMode};
 use crate::ui_kit;
 
 /// 渲染设置页。
-pub fn render(ui: &mut egui::Ui, app: &mut Killer7App) {
+pub fn render(ui: &mut egui::Ui, app: &mut Chuaker7App) {
     let palette = ui_kit::palette(ui.ctx());
 
     let startup_label = app.i18n.t("settings.startup");
@@ -38,7 +38,7 @@ pub fn render(ui: &mut egui::Ui, app: &mut Killer7App) {
 
     // 设置项较多，放进纵向滚动区，保证小窗口下也能看到「关于」区块。
     egui::ScrollArea::vertical()
-        .id_salt("killer7.settings_scroll")
+        .id_salt("chuaker7.settings_scroll")
         .auto_shrink([false, false])
         .show(ui, |ui| {
             ui.add_space(10.0);
@@ -445,8 +445,8 @@ pub fn render(ui: &mut egui::Ui, app: &mut Killer7App) {
                     ui_kit::card(ui, |ui| {
                         for (label, value) in [
                             (version_label.as_str(), "1.1.0"),
-                            (bundle_label.as_str(), "org.igigi.killer7"),
-                            (copyright_label.as_str(), "© 2026 Killer7 · MIT"),
+                            (bundle_label.as_str(), "org.igigi.chuaker7"),
+                            (copyright_label.as_str(), "© 2026 Chuaker7 · MIT"),
                         ] {
                             ui_kit::key_value(ui, 110.0, label, value);
                         }
