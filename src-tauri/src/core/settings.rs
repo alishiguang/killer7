@@ -5,8 +5,10 @@
 //!
 //! 字段以 camelCase 落盘（与前端契约一致），同时通过 `alias` 接受 egui 版
 //! 写下的 snake_case 旧字段，用户设置不会因为改版而丢失。
+//! 数据目录同样从 egui 版的 `killer7` 换成 `chuaker7`，由 `Settings::load()`
+//! 在首次启动时做一次性目录迁移。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +34,34 @@ pub fn clipboard_history_path() -> PathBuf {
 /// 插件目录（对应 Swift 版的 `Application Support/LuciBox/Plugins`）。
 pub fn plugins_dir() -> PathBuf {
     data_dir().join("Plugins")
+}
+
+/// 旧版（egui 时代）数据目录：`~/Library/Application Support/killer7`。
+///
+/// 项目全局改名为 `chuaker7` 后，新旧版本的配置落在**不同目录**。
+/// `Settings` 里的 `alias` 只解决**字段名**的兼容，解决不了**文件路径**——
+/// 若不迁移，egui 版用户的设置、剪贴板历史与插件目录都会静默"消失"。
+///
+/// > 这是整个代码库里**唯一**允许出现旧名 `killer7` 的地方，且只用于一次性迁移。
+pub fn legacy_data_dir() -> PathBuf {
+    let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+    base.join("killer7")
+}
+
+/// 把旧版数据目录整体改名到新版目录。
+///
+/// 仅在旧目录存在、且新版目录尚不存在时执行——绝不覆盖已有数据。
+/// 失败（例如权限不足）时静默忽略：迁移只是锦上添花，不该挡住应用启动。
+fn migrate_data_dir(from: &Path, to: &Path) -> bool {
+    if !from.exists() || to.exists() {
+        return false;
+    }
+    if let Some(parent) = to.parent()
+        && std::fs::create_dir_all(parent).is_err()
+    {
+        return false;
+    }
+    std::fs::rename(from, to).is_ok()
 }
 
 /// 全局设置。
@@ -149,7 +179,10 @@ impl Default for Settings {
 
 impl Settings {
     /// 从磁盘读取设置，文件缺失或损坏时返回默认值。
+    ///
+    /// 读取前先做一次性旧目录迁移（egui 版 → 本重写版）。
     pub fn load() -> Self {
+        migrate_data_dir(&legacy_data_dir(), &data_dir());
         let Ok(text) = std::fs::read_to_string(settings_path()) else {
             return Self::default();
         };
@@ -217,5 +250,30 @@ mod tests {
         let text = serde_json::to_string(&Settings::default()).unwrap();
         assert!(text.contains("\"showMenuBar\""));
         assert!(text.contains("\"autoRefreshInterval\""));
+    }
+
+    #[test]
+    fn migrates_legacy_data_dir_only_once() {
+        let base = std::env::temp_dir().join(format!(
+            "chuaker7-migrate-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let from = base.join("killer7");
+        let to = base.join("chuaker7");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&from).expect("应能创建旧目录");
+        std::fs::write(from.join("settings.json"), "{}").expect("应能写入旧配置");
+
+        // 旧目录存在、新目录不存在 → 迁移
+        assert!(migrate_data_dir(&from, &to));
+        assert!(to.join("settings.json").exists());
+        assert!(!from.exists());
+
+        // 新目录已存在 → 不再迁移，绝不覆盖已有数据
+        assert!(!migrate_data_dir(&from, &to));
+        assert!(to.join("settings.json").exists());
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
