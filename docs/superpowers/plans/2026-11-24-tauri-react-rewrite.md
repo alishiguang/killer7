@@ -1248,6 +1248,33 @@ ReactDOM.createRoot(container).render(
 
 ```typescript
 import '@testing-library/jest-dom/vitest';
+
+// jsdom 不实现 ResizeObserver；进程页用它测量虚拟列表视口高度。
+// 桩必须放在共享 setup 里 —— AppShell 测试也会挂载进程页，
+// 只在 Processes.test.tsx 里打桩会让 AppShell 测试炸在
+// "ResizeObserver is not defined" 上。
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
+
+// jsdom 不实现 Canvas 2D 上下文，会往 stderr 刷 "Not implemented"。
+// Sparkline 只用到下面这几个方法与属性，给一个空实现桩即可，
+// 同时保证测试输出是干净的。
+HTMLCanvasElement.prototype.getContext = (() => ({
+  setTransform: () => {},
+  clearRect: () => {},
+  beginPath: () => {},
+  moveTo: () => {},
+  lineTo: () => {},
+  stroke: () => {},
+  closePath: () => {},
+  fill: () => {},
+  strokeStyle: '',
+  lineWidth: 0,
+  fillStyle: '',
+})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 ```
 
 `frontend/src/styles/tokens.test.ts`：
@@ -5983,7 +6010,7 @@ export function App() {
 `frontend/src/app/AppShell.test.tsx`：
 
 ```tsx
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/bridge', () => ({
@@ -6086,8 +6113,12 @@ describe('AppShell', () => {
   it('渲染品牌与六个标签页', async () => {
     render(<AppShell />);
     expect(await screen.findByText('CHUAKER7')).toBeInTheDocument();
+
+    // 当前激活页的标题（Kicker）与侧栏导航项同名，
+    // findByText 会命中多个元素，必须限定在侧栏导航区内断言。
+    const nav = screen.getByRole('navigation');
     for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控', '插件', '设置']) {
-      expect(await screen.findByText(label)).toBeInTheDocument();
+      expect(await within(nav).findByText(label)).toBeInTheDocument();
     }
   });
 });
@@ -6447,15 +6478,8 @@ export { VirtualList } from './VirtualList';
 `frontend/src/pages/Processes.test.tsx`：
 
 ```tsx
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-// jsdom 不实现 ResizeObserver；进程页用它测量列表视口高度。
-globalThis.ResizeObserver = class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-} as unknown as typeof ResizeObserver;
 
 vi.mock('../lib/bridge', () => ({
   EVENT: { processes: 'processes' },
@@ -6509,10 +6533,15 @@ describe('Processes', () => {
   });
 
   it('渲染进程表头与行', async () => {
-    render(<Processes />);
-    expect(await screen.findByText('PID')).toBeInTheDocument();
+    const { container } = render(<Processes />);
     expect(await screen.findByText('Finder')).toBeInTheDocument();
     expect(await screen.findByText('*:8080')).toBeInTheDocument();
+
+    // 「PID」同时出现在排序分段控件与虚拟表表头里，
+    // findByText('PID') 会命中多个元素，必须限定在表头行内断言。
+    const head = container.querySelector('.vrow--head');
+    expect(head).not.toBeNull();
+    expect(within(head as HTMLElement).getByText('PID')).toBeInTheDocument();
   });
 
   it('显示进程总数', async () => {
