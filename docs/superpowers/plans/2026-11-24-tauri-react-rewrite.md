@@ -3113,7 +3113,6 @@ AI-Tool: TophantAI"
 **Files:**
 - Create: `src-tauri/src/commands/files.rs`
 - Modify: `src-tauri/src/commands/mod.rs`
-- Modify: `src-tauri/src/lib.rs`
 
 **Interfaces:**
 - Consumes: `core::files::FileManager`、`core::platform`、`state::AppState`
