@@ -4,9 +4,15 @@
 //! 关于、设置、隐藏、退出走 `PredefinedMenuItem`（系统原生行为），
 //! 视图切换走带 `Cmd+数字` 加速器的自定义项。
 //!
-//! 菜单文案走 `core::i18n`：`nav.*` / `menubar.*` 都有现成的 key。
-//! 「编辑 / 视图 / 窗口」三个下拉的标题**没有**对应 key，而 `locales/*.strings`
-//! 约定「不新增 key」，因此这三个标题保持硬编码中文。
+//! 菜单文案全部走 `core::i18n`。muda 0.20 在 `text=None` 时用的是它自己写死的
+//! 英文表（`muda-0.20.0/src/items/predefined.rs:305-308,434-487`），而 macOS 后端
+//! 用 `initWithTitle:` 显式设标题，AppKit 不再本地化 —— 实测本机 AppleLocale=zh_CN，
+//! 菜单仍然显示英文的 Hide / Hide Others / Show All / Undo / Cut / Minimize。
+//! 因此**每一个**预定义项都必须显式传文案，`locales/*.strings` 里为此备了
+//! `menubar.*` / `edit.*` / `window.*` / `view.fullscreen` 等 key。
+//!
+//! 「关于 / 隐藏 / 退出」三项按 macOS 惯例带应用名后缀，在 Rust 侧拼成
+//! `<动词> chuaker7`；应用名本身取自 `menubar.title`（= "chuaker7"）。
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter};
@@ -18,12 +24,18 @@ use crate::events::EV_MENU_ACTION;
 pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
     let i18n = I18n::new(locale);
 
+    // 应用名（"chuaker7"），用于拼「关于 / 隐藏 / 退出」三项。
+    let app_name = i18n.t("menubar.title");
+    let about_text = format!("{} {}", i18n.t("settings.about"), app_name);
+    let hide_text = format!("{} {}", i18n.t("menubar.hide"), app_name);
+    let quit_text = format!("{} {}", i18n.t("menubar.quitApp"), app_name);
+
     let app_menu = Submenu::with_items(
         app,
         i18n.t("menubar.title"),
         true,
         &[
-            &PredefinedMenuItem::about(app, Some("chuaker7"), None)?,
+            &PredefinedMenuItem::about(app, Some(about_text.as_str()), None)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(
                 app,
@@ -33,33 +45,26 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
                 Some("CmdOrCtrl+,"),
             )?,
             &PredefinedMenuItem::separator(app)?,
-            // 这三项**不能**传 None：muda 0.20.0 在 text=None 时用的是它自己写死的
-            // 英文表（`muda-0.20.0/src/items/predefined.rs:305-308,434-487`），而 macOS
-            // 后端用 `initWithTitle:` 显式设标题，AppKit 不再本地化 —— 实测本机
-            // AppleLocale=zh_CN，菜单仍然显示英文的 Hide / Hide Others / Show All。
-            // `locales/*.strings` 与 Swift 版共用、约定不新增 key，而这三项没有对应
-            // key，所以只能写死中文（应用以简体中文为主）；英文版会在这三处不一致，
-            // 属已知取舍。退出项有 `menubar.quit` key，走 i18n。
-            &PredefinedMenuItem::hide(app, Some("隐藏 chuaker7"))?,
-            &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
-            &PredefinedMenuItem::show_all(app, Some("显示全部"))?,
+            &PredefinedMenuItem::hide(app, Some(hide_text.as_str()))?,
+            &PredefinedMenuItem::hide_others(app, Some(&i18n.t("menubar.hideOthers")))?,
+            &PredefinedMenuItem::show_all(app, Some(&i18n.t("menubar.showAll")))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some(&i18n.t("menubar.quit")))?,
+            &PredefinedMenuItem::quit(app, Some(quit_text.as_str()))?,
         ],
     )?;
 
     let edit_menu = Submenu::with_items(
         app,
-        "编辑",
+        i18n.t("menubar.edit"),
         true,
         &[
-            &PredefinedMenuItem::undo(app, None)?,
-            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::undo(app, Some(&i18n.t("edit.undo")))?,
+            &PredefinedMenuItem::redo(app, Some(&i18n.t("edit.redo")))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::cut(app, None)?,
-            &PredefinedMenuItem::copy(app, None)?,
-            &PredefinedMenuItem::paste(app, None)?,
-            &PredefinedMenuItem::select_all(app, None)?,
+            &PredefinedMenuItem::cut(app, Some(&i18n.t("edit.cut")))?,
+            &PredefinedMenuItem::copy(app, Some(&i18n.t("edit.copy")))?,
+            &PredefinedMenuItem::paste(app, Some(&i18n.t("edit.paste")))?,
+            &PredefinedMenuItem::select_all(app, Some(&i18n.t("edit.selectAll")))?,
         ],
     )?;
 
@@ -67,7 +72,7 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
     // 会让同一个快捷键指向两个菜单项，macOS 只能二选一。
     let view_menu = Submenu::with_items(
         app,
-        "视图",
+        i18n.t("menubar.view"),
         true,
         &[
             &MenuItem::with_id(
@@ -114,18 +119,18 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
                 None::<&str>,
             )?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::fullscreen(app, None)?,
+            &PredefinedMenuItem::fullscreen(app, Some(&i18n.t("view.fullscreen")))?,
         ],
     )?;
 
     let window_menu = Submenu::with_items(
         app,
-        "窗口",
+        i18n.t("menubar.window"),
         true,
         &[
-            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::minimize(app, Some(&i18n.t("window.minimize")))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(app, None)?,
+            &PredefinedMenuItem::close_window(app, Some(&i18n.t("window.close")))?,
         ],
     )?;
 

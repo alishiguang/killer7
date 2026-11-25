@@ -196,3 +196,25 @@
 "menubar.open" = "Open chuaker7";
 "menubar.quit" = "Quit";
 "menubar.title" = "chuaker7";
+
+// MARK: - Native Menu Bar (macOS predefined items)
+// These keys let every native menu-bar entry follow the app language. muda 0.20
+// hard-codes the title via initWithTitle: and never follows the system language,
+// so we have to supply the copy ourselves. The three app-name-bearing entries
+// (About / Hide / Quit) are assembled as "<verb> chuaker7" on the Rust side.
+"menubar.edit" = "Edit";
+"menubar.view" = "View";
+"menubar.window" = "Window";
+"menubar.hide" = "Hide";
+"menubar.hideOthers" = "Hide Others";
+"menubar.showAll" = "Show All";
+"menubar.quitApp" = "Quit";
+"edit.undo" = "Undo";
+"edit.redo" = "Redo";
+"edit.cut" = "Cut";
+"edit.copy" = "Copy";
+"edit.paste" = "Paste";
+"edit.selectAll" = "Select All";
+"window.minimize" = "Minimize";
+"window.close" = "Close Window";
+"view.fullscreen" = "Toggle Full Screen";
