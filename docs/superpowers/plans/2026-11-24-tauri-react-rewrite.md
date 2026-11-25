@@ -221,7 +221,7 @@ type Notice = { kind: 'info' | 'error'; message: string };
 - [ ] **Step 1: 用 mavis-trash 归档 egui 源码，保留可回退能力**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 "/Users/lishiguang/.minimax/bin/mavis-trash" -- "src" "build.rs"
 ```
 
@@ -538,7 +538,7 @@ console.log(`wrote ${out} (${SIZE}x${SIZE}, ${png.length} bytes)`);
 - [ ] **Step 8: 生成图标并跑通构建**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 node scripts/make-icon.mjs scripts/icon-source.png
 npx --yes @tauri-apps/cli@2.12.6 icon scripts/icon-source.png
 cargo build -p chuaker7
@@ -554,7 +554,7 @@ Expected：
 - [ ] **Step 9: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移到 Tauri v2 workspace 骨架
 
@@ -589,7 +589,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 固定 Node 版本并写 `.nvmrc`**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 printf '24.17.0\n' > .nvmrc
 source ~/.nvm/nvm.sh && nvm use
 node -v
@@ -785,7 +785,7 @@ frontend/dist/
 - [ ] **Step 8: 安装依赖并验证**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm install
 npm run typecheck
@@ -801,7 +801,7 @@ Expected：
 - [ ] **Step 9: 端到端验证 Tauri 窗口**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run tauri dev
 ```
@@ -811,7 +811,7 @@ Expected：弹出名为 chuaker7 的窗口，尺寸 1080×720，窗口内显示�
 - [ ] **Step 10: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 前端脚手架 —— Vite 7 + React 19 + TypeScript 5.9
 
@@ -955,7 +955,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 3: 暴露字体静态资源**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 mkdir -p frontend/public/fonts
 cp assets/fonts/Anton-Regular.ttf assets/fonts/GeistMono-Variable.ttf frontend/public/fonts/
 ```
@@ -1271,7 +1271,7 @@ describe('cindy.cn 设计令牌', () => {
 - [ ] **Step 7: 跑测试与类型检查**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test
 npm run typecheck
@@ -1282,7 +1282,7 @@ Expected：`tokens.test.ts` 3 个用例全 PASS；`typecheck` 退出码 0。
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 设计令牌与 macOS 化基础样式
 
@@ -1718,7 +1718,7 @@ pub fn run() {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo test -p chuaker7
 cargo clippy -p chuaker7 --all-targets
 ```
@@ -1728,7 +1728,7 @@ Expected：所有测试 PASS，`clippy` **0 warning**。
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移 core 纯逻辑模块（平台/图标/本地化/设置/主题/插件）
 
@@ -2118,7 +2118,7 @@ pub mod events;
 - [ ] **Step 7: 跑测试与静态检查**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt
 cargo test -p chuaker7
 cargo clippy -p chuaker7 --all-targets
@@ -2129,7 +2129,7 @@ Expected：测试数 ≥ 19（egui 版基线）且全 PASS；`clippy` 0 warning�
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移 core 取数模块并解耦线程调度
 
@@ -2458,7 +2458,7 @@ pub mod dto;
 `src-tauri/src/lib.rs` 追加 `pub mod commands;`。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo test -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 ```
 
@@ -2467,7 +2467,7 @@ Expected：DTO 三个测试 PASS；`clippy` 0 warning。
 - [ ] **Step 4: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 新增前后端 DTO 契约层
 
@@ -2815,7 +2815,7 @@ pub fn run() {
 - [ ] **Step 6: 编译验证**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 ```
 
@@ -2826,7 +2826,7 @@ Expected：编译通过，0 warning。
 - [ ] **Step 7: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 引入 AppState 与后台任务循环
 
@@ -2930,7 +2930,7 @@ pub fn handler() -> InvokeHandler {
 - [ ] **Step 3: 编译并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 进程管理命令
@@ -3159,7 +3159,7 @@ pub fn watch_dir(
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 文件管理命令与目录监听重建
@@ -3335,7 +3335,7 @@ pub fn plugins_dir() -> String {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 剪贴板 / 监控 / 插件命令
@@ -3551,7 +3551,7 @@ pub fn popup_context_menu(app: AppHandle, kind: String, payload: serde_json::Val
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 设置、文案与系统命令
@@ -3722,7 +3722,7 @@ Builder 追加：
 - [ ] **Step 4: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7
 npm run tauri dev
 ```
@@ -3732,7 +3732,7 @@ Expected：窗口出现后，屏幕顶部出现 macOS 菜单栏，含「chuaker7
 - [ ] **Step 5: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 原生 macOS 应用菜单栏
 
@@ -3909,7 +3909,7 @@ Builder 追加：
 - [ ] **Step 3: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7
 npm run tauri dev
 ```
@@ -3919,7 +3919,7 @@ Expected：菜单栏右侧出现小鸟图标；左键点击弹出菜单，显示
 - [ ] **Step 4: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 托盘图标与原生托盘菜单
 
@@ -4059,7 +4059,7 @@ pub fn set_accessory_mode<R: Runtime>(enabled: bool, _app: &AppHandle<R>) {
 - [ ] **Step 4: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 npm run tauri dev
 ```
@@ -4071,7 +4071,7 @@ Expected：
 - [ ] **Step 5: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 全局快捷键 ⌘L 与 Dock/菜单栏模式切换
 
@@ -4229,7 +4229,7 @@ pub mod tray;
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7 && cargo test -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 开机自启（LaunchAgent）
@@ -4695,7 +4695,7 @@ describe('translate', () => {
 - [ ] **Step 8: 跑测试并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -5429,7 +5429,7 @@ describe('Modal', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -5869,6 +5869,30 @@ vi.mock('../lib/bridge', () => ({
       'app.brand': 'CHUAKER7',
       'app.tagline': 'MACOS 系统工具箱',
     }),
+    // 默认激活的是进程页，AppShell 会把它挂载起来，
+    // 页面在 useEffect 里调用的每个 api 方法都必须有桩，否则测试会抛
+    // "api.xxx is not a function"。
+    listProcesses: vi.fn().mockResolvedValue([]),
+    refreshProcesses: vi.fn().mockResolvedValue([]),
+    killProcess: vi.fn().mockResolvedValue(true),
+    popupContextMenu: vi.fn().mockResolvedValue(undefined),
+    listDir: vi.fn().mockResolvedValue([]),
+    homeDir: vi.fn().mockResolvedValue('/tmp'),
+    watchDir: vi.fn().mockResolvedValue(undefined),
+    pickDirectory: vi.fn().mockResolvedValue(null),
+    clipboardCurrent: vi.fn().mockResolvedValue(''),
+    clipboardHistory: vi.fn().mockResolvedValue([]),
+    systemSnapshot: vi.fn().mockResolvedValue({
+      cpuUsage: 0,
+      memoryUsage: 0,
+      diskUsage: 0,
+      networkUpload: 0,
+      networkDownload: 0,
+      cpuHistory: [],
+      memoryHistory: [],
+    }),
+    listPlugins: vi.fn().mockResolvedValue([]),
+    pluginsDir: vi.fn().mockResolvedValue('/tmp/plugins'),
   },
   onEvent: vi.fn().mockResolvedValue(() => {}),
 }));
@@ -5918,7 +5942,7 @@ describe('AppShell', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6187,6 +6211,53 @@ export { VirtualList } from './VirtualList';
 .text-muted {
   color: var(--text-muted);
 }
+
+/* 虚拟列表的表格骨架：表头 + 行共用同一套栅格 */
+.vtable {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.vrow {
+  display: grid;
+  grid-template-columns: 72px 1fr 140px;
+  align-items: center;
+  height: var(--row-height);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.vrow:hover {
+  background: var(--surface-alt);
+}
+
+.vrow--head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  height: 24px;
+}
+
+.vrow__pid {
+  text-align: right;
+  padding-right: 10px;
+}
+
+.vrow__name,
+.vrow__port {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 ```
 
 - [ ] **Step 4: 写测试并提交**
@@ -6262,7 +6333,7 @@ describe('Processes', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6731,7 +6802,7 @@ describe('Files', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6932,10 +7003,82 @@ function formatTime(seconds: number): string {
 
 - [ ] **Step 3: 写测试并提交**
 
-`frontend/src/pages/Clipboard.test.tsx`：mock `api.clipboardCurrent` / `api.clipboardHistory` / `onEvent`，断言「当前剪贴板」「历史记录」两个卡片标题出现，以及历史条目文本出现。
+`frontend/src/pages/Clipboard.test.tsx`：
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../lib/bridge', () => ({
+  EVENT: { clipboard: 'clipboard' },
+  api: {
+    clipboardCurrent: vi.fn().mockResolvedValue('hello chuaker7'),
+    clipboardHistory: vi.fn().mockResolvedValue([
+      { id: 1, content: '第一条历史', timestamp: 1700000000, kind: 'text' },
+    ]),
+    removeHistoryItem: vi.fn().mockResolvedValue(undefined),
+    clearHistory: vi.fn().mockResolvedValue(undefined),
+    copyText: vi.fn().mockResolvedValue(undefined),
+  },
+  onEvent: vi.fn().mockResolvedValue(() => {}),
+}));
+
+vi.mock('../lib/store', async () => {
+  const actual = await vi.importActual<typeof import('../lib/store')>('../lib/store');
+  const state = {
+    settings: null,
+    strings: {
+      'clipboard.title': '剪贴板管理',
+      'clipboard.current': '当前剪贴板',
+      'clipboard.history': '历史记录',
+      'clipboard.history.count': '共 %@ 条历史',
+      'clipboard.search.placeholder': '搜索历史记录',
+      'clipboard.clearHistory': '清空历史',
+      'clipboard.copy': '复制',
+      'clipboard.delete': '删除',
+      'clipboard.empty': '（空）',
+      'clipboard.copied': '已复制到剪贴板',
+      'file.column.action': '操作',
+      'common.more': '更多',
+    }},
+    activeTab: 'clipboard',
+    toast: null,
+    locale: 'zh-Hans',
+  };
+  return {
+    ...actual,
+    useAppState: () => state,
+    useAppStore: () => [state, () => {}],
+  };
+});
+
+import { Clipboard } from './Clipboard';
+
+describe('Clipboard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('展示当前剪贴板内容', async () => {
+    render(<Clipboard />);
+    expect(await screen.findByText('hello chuaker7')).toBeInTheDocument();
+  });
+
+  it('展示历史条目与计数', async () => {
+    render(<Clipboard />);
+    expect(await screen.findByText('第一条历史')).toBeInTheDocument();
+    expect(await screen.findByText('共 1 条历史')).toBeInTheDocument();
+  });
+
+  it('渲染清空历史按钮', async () => {
+    render(<Clipboard />);
+    expect(await screen.findByText('清空历史')).toBeInTheDocument();
+  });
+});
+```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7069,10 +7212,81 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 - [ ] **Step 3: 写测试并提交**
 
-`frontend/src/pages/Monitor.test.tsx`：mock `api.systemSnapshot` 返回固定数值，断言四个指标标签与数值出现。
+`frontend/src/pages/Monitor.test.tsx`：
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../lib/bridge', () => ({
+  EVENT: { systemInfo: 'system-info' },
+  api: {
+    systemSnapshot: vi.fn().mockResolvedValue({
+      cpuUsage: 12.34,
+      memoryUsage: 56.78,
+      diskUsage: 90.12,
+      networkUpload: 1.5,
+      networkDownload: 2.25,
+      cpuHistory: [1, 2, 3],
+      memoryHistory: [4, 5, 6],
+    }),
+  },
+  onEvent: vi.fn().mockResolvedValue(() => {}),
+}));
+
+vi.mock('../lib/store', async () => {
+  const actual = await vi.importActual<typeof import('../lib/store')>('../lib/store');
+  const state = {
+    settings: null,
+    strings: {
+      'monitor.title': '系统监控',
+      'monitor.cpu': 'CPU使用率',
+      'monitor.memory': '内存使用率',
+      'monitor.disk': '磁盘使用率',
+      'monitor.upload': '上传',
+      'monitor.download': '下载',
+      'monitor.cpu.history': 'CPU 采样',
+      'monitor.memory.history': '内存采样',
+    }},
+    activeTab: 'monitor',
+    toast: null,
+    locale: 'zh-Hans',
+  };
+  return {
+    ...actual,
+    useAppState: () => state,
+    useAppStore: () => [state, () => {}],
+  };
+});
+
+import { Monitor } from './Monitor';
+
+describe('Monitor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('渲染五个指标标签', async () => {
+    render(<Monitor />);
+    expect(await screen.findByText('CPU使用率')).toBeInTheDocument();
+    expect(await screen.findByText('内存使用率')).toBeInTheDocument();
+    expect(await screen.findByText('磁盘使用率')).toBeInTheDocument();
+    expect(await screen.findByText('上传')).toBeInTheDocument();
+    expect(await screen.findByText('下载')).toBeInTheDocument();
+  });
+
+  it('按固定小数位展示数值', async () => {
+    render(<Monitor />);
+    expect(await screen.findByText('12.3%')).toBeInTheDocument();
+    expect(await screen.findByText('56.8%')).toBeInTheDocument();
+    expect(await screen.findByText('1.50 MB/s')).toBeInTheDocument();
+    expect(await screen.findByText('2.25 MB/s')).toBeInTheDocument();
+  });
+});
+```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7216,10 +7430,85 @@ export function Plugins() {
 
 - [ ] **Step 3: 写测试并提交**
 
-`frontend/src/pages/Plugins.test.tsx`：mock `api.listPlugins` 返回一条插件，断言插件名与版本出现；返回空数组时断言空态文案。
+`frontend/src/pages/Plugins.test.tsx`：
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../lib/bridge', () => ({
+  EVENT: {},
+  api: {
+    listPlugins: vi.fn().mockResolvedValue([
+      {
+        id: 'demo',
+        name: '示例插件',
+        version: '1.0.0',
+        author: 'Igigi',
+        description: null,
+        minimumAppVersion: null,
+        permissions: ['fs'],
+        main: null,
+        dir: '/tmp/plugins',
+      },
+    ]),
+    reloadPlugins: vi.fn().mockResolvedValue([]),
+    pluginsDir: vi.fn().mockResolvedValue('/tmp/plugins'),
+  },
+  onEvent: vi.fn().mockResolvedValue(() => {}),
+}));
+
+vi.mock('../lib/store', async () => {
+  const actual = await vi.importActual<typeof import('../lib/store')>('../lib/store');
+  const state = {
+    settings: null,
+    strings: {
+      'nav.plugins': '插件',
+      'settings.plugin.dir': '插件目录',
+      'settings.plugin.empty': '尚未安装插件',
+      'plugin.manifest': '清单信息',
+      'plugin.version': '版本',
+      'plugin.author': '作者',
+      'plugin.permissions': '权限',
+      'plugin.minVersion': '最低应用版本',
+      'process.refresh': '刷新',
+    }},
+    activeTab: 'plugins',
+    toast: null,
+    locale: 'zh-Hans',
+  };
+  return {
+    ...actual,
+    useAppState: () => state,
+    useAppStore: () => [state, () => {}],
+  };
+});
+
+import { Plugins } from './Plugins';
+
+describe('Plugins', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('展示插件目录与清单信息', async () => {
+    render(<Plugins />);
+    expect(await screen.findByText('/tmp/plugins')).toBeInTheDocument();
+    expect(await screen.findByText('示例插件')).toBeInTheDocument();
+    expect(await screen.findByText('1.0.0')).toBeInTheDocument();
+  });
+
+  it('没有插件时展示空态', async () => {
+    const { api } = await import('../lib/bridge');
+    vi.mocked(api.listPlugins).mockResolvedValueOnce([]);
+    render(<Plugins />);
+    expect(await screen.findByText('尚未安装插件')).toBeInTheDocument();
+  });
+});
+```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7451,10 +7740,118 @@ export function Settings() {
 
 - [ ] **Step 3: 写测试并提交**
 
-`frontend/src/pages/Settings.test.tsx`：mock `api.updateSettings` 与 `api.getSettings`，断言「外观」「性能」「启动项」「关于」四个卡片标题出现，且主题分段控件可渲染。
+`frontend/src/pages/Settings.test.tsx`：
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../lib/bridge', () => ({
+  EVENT: {},
+  api: {
+    updateSettings: vi.fn().mockResolvedValue({
+      showMenuBar: false,
+      autoRefreshInterval: 5,
+      processListLimit: 500,
+      enableNetworkMonitor: true,
+      themeMode: 'dark',
+      accent: 'signal',
+      launchAtLogin: false,
+      globalShortcutEnabled: true,
+      locale: 'zh-Hans',
+    }),
+    setAutoLaunch: vi.fn().mockResolvedValue(undefined),
+  },
+  onEvent: vi.fn().mockResolvedValue(() => {}),
+}));
+
+vi.mock('../lib/store', async () => {
+  const actual = await vi.importActual<typeof import('../lib/store')>('../lib/store');
+  const state = {
+    settings: {
+      showMenuBar: false,
+      autoRefreshInterval: 5,
+      processListLimit: 500,
+      enableNetworkMonitor: true,
+      themeMode: 'dark',
+      accent: 'signal',
+      launchAtLogin: false,
+      globalShortcutEnabled: true,
+      locale: 'zh-Hans',
+    },
+    strings: {
+      'settings.title': '设置',
+      'settings.appearance': '外观',
+      'settings.performance': '性能',
+      'settings.startup': '启动项',
+      'settings.about': '关于',
+      'settings.theme.mode': '主题模式',
+      'settings.theme.system': '跟随系统',
+      'settings.theme.light': '浅色模式',
+      'settings.theme.dark': '深色模式',
+      'settings.accent': '强调色',
+      'settings.accent.signal': '信号红',
+      'settings.accent.haze': '雾蓝',
+      'settings.accent.moss': '苔绿',
+      'settings.accent.amber': '琥珀',
+      'settings.locale': '界面语言',
+      'settings.refresh.interval': '自动刷新间隔',
+      'settings.processLimit': '进程列表上限',
+      'settings.noLimit': '无限制',
+      'settings.networkMonitor': '网络监控',
+      'settings.performance.hint': '降低刷新频率和限制可减少 CPU 占用',
+      'settings.enableMenuBar': '启用菜单栏模式',
+      'settings.menuBar.hint': '启用后，应用将在菜单栏显示图标',
+      'settings.autoLaunch': '开机自启动',
+      'settings.autoLaunch.hint': '启用后，应用将在登录时自动启动',
+      'settings.globalShortcut': '全局快捷键',
+      'settings.globalShortcut.hint': '启用后按 ⌘+L 可快速呼出应用',
+      'settings.version': '版本',
+      'settings.bundleId': 'Bundle ID',
+      'settings.copyright': '版权',
+    },
+    activeTab: 'settings',
+    toast: null,
+    locale: 'zh-Hans',
+  };
+  return {
+    ...actual,
+    useAppState: () => state,
+    useAppStore: () => [state, () => {}],
+  };
+});
+
+import { Settings } from './Settings';
+
+describe('Settings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('渲染四张设置卡片', async () => {
+    render(<Settings />);
+    expect(await screen.findByText('外观')).toBeInTheDocument();
+    expect(await screen.findByText('性能')).toBeInTheDocument();
+    expect(await screen.findByText('启动项')).toBeInTheDocument();
+    expect(await screen.findByText('关于')).toBeInTheDocument();
+  });
+
+  it('渲染主题分段控件的三个选项', async () => {
+    render(<Settings />);
+    expect(await screen.findByText('跟随系统')).toBeInTheDocument();
+    expect(await screen.findByText('浅色模式')).toBeInTheDocument();
+    expect(await screen.findByText('深色模式')).toBeInTheDocument();
+  });
+
+  it('渲染关于信息中的 bundle id', async () => {
+    render(<Settings />);
+    expect(await screen.findByText('com.igigi.chuaker7')).toBeInTheDocument();
+  });
+});
+```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7793,7 +8190,7 @@ fn notify(app: &AppHandle, kind: &str, message: &str) {
 - [ ] **Step 5: 验收并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 source ~/.nvm/nvm.sh && nvm use && npm run test && npm run typecheck
 npm run tauri dev
@@ -7896,106 +8293,61 @@ import { useDeferredValue } from 'react';
 
 `Files.tsx` 与 `Clipboard.tsx` 同样处理。
 
-- [ ] **Step 3: 进程页接入虚拟列表**
+- [ ] **Step 3: 进程页接入虚拟列表（已由 Task 19 落地，本任务只做行组件 memo 化）**
 
-`frontend/src/pages/Processes.tsx`：
+进程页在 Task 19 已经用 `VirtualList` 渲染，虚拟滚动与行高 26px / overscan 8
+在 Task 19 就已就位（满足「500 行 DOM 节点 ≤ 60」的性能红线）。
 
-1. 引入 `VirtualList`：`import { VirtualList } from '../components';`
-2. **删除** `columns` 的 `useMemo` 定义与 `DataTable` 的 import（改用虚拟列表后不再需要列定义，`tsconfig` 开了 `noUnusedLocals`，留着会直接报类型错误）。
-3. 把 `<DataTable ... />` 整段替换为：
+本任务只把行渲染抽成 memo 组件，避免无关行在 `rows` 变化时重复渲染：
 
-```tsx
-        <VirtualList
-          items={sorted}
-          height={420}
-          rowHeight={26}
-          overscan={8}
-          getKey={(row) => String(row.pid)}
-          renderRow={(row) => (
-            <div
-              className="vrow"
-              onContextMenu={(event) => {
-                event.preventDefault();
-                void api.popupContextMenu('process', {
-                  pid: row.pid,
-                  displayName: row.displayName,
-                  fullPath: row.fullPath,
-                });
-              }}
-            >
-              <span className="mono vrow__pid">{row.pid}</span>
-              <span className="vrow__name" title={row.fullPath}>
-                {row.displayName}
-              </span>
-              <span className="mono vrow__port">
-                {row.ports.length === 0
-                  ? '—'
-                  : row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
-              </span>
-            </div>
-          )}
-          empty={t('process.empty')}
-        />
-```
-
-> 虚拟列表的容器高度要跟着窗口自适应。把 `height={420}` 换成容器测量值：给 `.page__card .card__body` 加 `position: relative`，在 `Processes` 里用 `useRef` + `ResizeObserver` 测出可用高度并写入 state。实现方式：
+`frontend/src/pages/Processes.tsx` 顶部加 `import { memo } from 'react';`，
+并新增：
 
 ```tsx
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-  const [viewportHeight, setViewportHeight] = useState(420);
-
-  useEffect(() => {
-    const element = bodyRef.current;
-    if (!element) {
-      return;
-    }
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) {
-        setViewportHeight(entry.contentRect.height);
-      }
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
+const ProcessRowView = memo(function ProcessRowView({
+  row,
+  onSelect,
+}: {
+  row: ProcessRow;
+  onSelect: (row: ProcessRow) => void;
+}) {
+  return (
+    <div
+      className="vrow"
+      onClick={() => onSelect(row)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        void api.popupContextMenu('process', {
+          pid: row.pid,
+          displayName: row.displayName,
+          fullPath: row.fullPath,
+        });
+      }}
+    >
+      <span className="mono vrow__pid">{row.pid}</span>
+      <span className="vrow__name" title={row.fullPath}>
+        {row.displayName}
+      </span>
+      <span className="mono vrow__port">
+        {row.ports.length === 0
+          ? '—'
+          : row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
+      </span>
+    </div>
+  );
+});
 ```
 
-并在 `<Card ... className="page__card">` 内部包一层 `<div ref={bodyRef} style={{ height: '100%' }}>`，把 `height={viewportHeight}` 传给 `VirtualList`。
+然后把 `VirtualList` 的 `renderRow` 换成：
 
-配套样式：
-
-```css
-.vrow {
-  display: grid;
-  grid-template-columns: 72px 1fr 140px;
-  align-items: center;
-  height: var(--row-height);
-  padding: 0 10px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-}
-
-.vrow:hover {
-  background: var(--surface-alt);
-}
-
-.vrow__pid {
-  text-align: right;
-  padding-right: 10px;
-}
-
-.vrow__name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.vrow__port {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+```tsx
+            renderRow={(row) => (
+              <ProcessRowView row={row} onSelect={setPendingKill} />
+            )}
 ```
+
+> `onSelect` 传的是 `setPendingKill`（稳定引用），`row` 是数据引用——
+> `rows` 数组不变时行引用稳定，memo 才能真正生效。
 
 - [ ] **Step 4: 记录性能基线**
 
@@ -8038,7 +8390,7 @@ import { useDeferredValue } from 'react';
 - [ ] **Step 5: 跑全量质量门禁**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt --check
 cargo clippy --all-targets
 cargo test
@@ -8086,7 +8438,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 启动前端并截图**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run dev &
 sleep 4
@@ -8157,7 +8509,7 @@ src-tauri/gen/
 - [ ] **Step 5: 构建可分发包**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run tauri build
 ```
@@ -8180,13 +8532,13 @@ Expected：进程列表包含 `chuaker7`。
 
 ```bash
 cd src-tauri/target/release/bundle/macos
-zip -r /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react/release/chuaker7.zip chuaker7.app
+zip -r /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react/release/chuaker7.zip chuaker7.app
 ```
 
 - [ ] **Step 6: 提交并推送**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "docs: 更新 README 与界面预览，产出可分发 .app 包
 
@@ -8201,7 +8553,7 @@ AI-Tool: TophantAI"
 推送当前分支（用 `GIT_ASKPASS` 注入凭证，脚本用完即删）：
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cat > /tmp/k7-askpass.sh <<'EOF'
 #!/bin/sh
 case "$1" in
@@ -8220,7 +8572,7 @@ CHUAKER7_TOKEN="<从安全位置读取的 PAT>" GIT_ASKPASS=/tmp/k7-askpass.sh G
 - [ ] **Step 7: 收尾核对**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/chuaker7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git status --short          # 应为空
 git log --oneline -5        # 确认新提交
 git branch -a               # legacy-egui 仍在
