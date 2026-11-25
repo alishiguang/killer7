@@ -4638,7 +4638,7 @@ export function useAppStore(): [AppState, typeof setState] {
 /** 弹出顶部提示；3 秒后自动消失。 */
 export function pushToast(kind: Notice['kind'], message: string): void {
   const id = Date.now();
-  setState((prev) => ({ toast: { kind, message, id } }));
+  setState(() => ({ toast: { kind, message, id } }));
   window.setTimeout(() => {
     setState((prev) => (prev.toast?.id === id ? { toast: null } : {}));
   }, 3000);
@@ -7230,7 +7230,7 @@ vi.mock('../lib/store', async () => {
       'clipboard.copied': '已复制到剪贴板',
       'file.column.action': '操作',
       'common.more': '更多',
-    }},
+    },
     activeTab: 'clipboard',
     toast: null,
     locale: 'zh-Hans',
@@ -7437,7 +7437,7 @@ vi.mock('../lib/store', async () => {
       'monitor.download': '下载',
       'monitor.cpu.history': 'CPU 采样',
       'monitor.memory.history': '内存采样',
-    }},
+    },
     activeTab: 'monitor',
     toast: null,
     locale: 'zh-Hans',
@@ -7662,7 +7662,7 @@ vi.mock('../lib/store', async () => {
       'plugin.permissions': '权限',
       'plugin.minVersion': '最低应用版本',
       'process.refresh': '刷新',
-    }},
+    },
     activeTab: 'plugins',
     toast: null,
     locale: 'zh-Hans',
