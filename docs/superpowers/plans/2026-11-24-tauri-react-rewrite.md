@@ -3222,6 +3222,19 @@ pub fn run() {
                 }
             }
 
+            // Dock / 菜单栏模式必须在启动时按已保存的设置复现一次。
+            // 只在 `update_settings` / `set_menu_bar_mode` 里应用是不够的：
+            // 那两条路径只覆盖「本次运行中切换」的情况，用户开启菜单栏模式后
+            // 重启应用会重新变回常规 Dock 模式，设置形同虚设。
+            // 这里的顺序与 `commands::system::set_menu_bar_mode` 保持一致。
+            {
+                let show_menu_bar = state.settings.lock().expect("设置锁中毒").show_menu_bar;
+                if show_menu_bar {
+                    crate::system::activation::set_accessory_mode(true, &handle);
+                    let _ = app.get_webview_window("main").map(|w| w.hide());
+                }
+            }
+
             crate::system::tasks::spawn_process_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_clipboard_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_monitor_loop(
@@ -3247,7 +3260,8 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Ki6");
-}```
+}
+```
 
 > **实际落地**：后续任务给 lib.rs 追加了 system / commands / setup 装配。
 > 上文是当前文件的**完整内容**。
@@ -10266,9 +10280,15 @@ T27 为了做视觉验收与打包，动了 6 个前端文件，产生的漂移�
 | Task 21 | #0 | `frontend/src/pages/Clipboard.tsx` | 列头改用 `clipboard.column.type` / `clipboard.column.time`，kind 值走 `clipboard.type.*` 本地化 |
 | Task 22 | #0 | `frontend/src/pages/Monitor.tsx` | 去掉硬编码的 `width={420}`，改由 `Sparkline` 自适应 |
 | Task 27 | #0 / #1 | `frontend/src/app/AppShell.tsx` / `.gitignore` | 截图步骤改为「真实数据 + mock IPC + Chrome headless」；`.gitignore` 追加 `src-tauri/target/` 与 `src-tauri/gen/` |
+| Task 7 | #4 | `src-tauri/src/lib.rs` | 打包验证时发现 `show_menu_bar` 设置在启动时没被应用（只在设置变更时调 `set_accessory_mode`）→ `setup()` 里按已保存设置复现一次 |
 
 > `clipboard.column.type` / `clipboard.column.time` 是本轮新增的两个 locale key，
 > zh-Hans 与 en 两份 `Localizable.strings` 已同步。
+>
+> **打包验证时发现并修掉的真实缺陷**：`show_menu_bar`（菜单栏模式）只在设置**变更**时
+> 应用到激活策略，启动时没有复现 —— 用户开启菜单栏模式后重启应用，会重新变回常规
+> Dock 模式，设置项形同虚设。已在 `lib.rs` 的 `setup()` 里按已保存设置复现一次，
+> 顺序与 `commands::system::set_menu_bar_mode` 保持一致。
 
 > **单独说明**
 >
