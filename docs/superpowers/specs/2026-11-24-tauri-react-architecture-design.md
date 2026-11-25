@@ -283,7 +283,7 @@ Rust 侧类型用 `serde::Serialize` 直接导出给前端（`camelCase`），�
 
 ## 11. 仓库策略
 
-- 同一个 `chuaker7/chuaker7` 仓库继续演进，主分支 `main`。
+- 同一个 `chuaker7/Ki6` 仓库继续演进，主分支 `main`。（GitHub 仓库名是 `Ki6`；包名 / crate 名 / 类型名 / 数据目录 / LaunchAgent 标签等**一切标识符统一为 `chuaker7`**。两者刻意不同，不要"顺手统一"。）
 - 当前 egui 版保留在 `legacy-egui` 分支（指向 `b36b8dc`），随时可对照或回退。
 - 提交信息中文，结尾附 `AI-Coding: true` / `AI-Tool: TophantAI`。
 

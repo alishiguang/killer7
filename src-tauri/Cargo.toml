@@ -6,7 +6,7 @@ rust-version = "1.88"
 description = "chuaker7 — macOS 系统工具箱（Tauri v2 + React 重写版）"
 authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
 license = "MIT"
-repository = "https://github.com/chuaker7/chuaker7"
+repository = "https://github.com/chuaker7/Ki6"
 keywords = ["macos", "toolbox", "tauri", "system-monitor"]
 categories = ["gui", "os::macos-apis"]
 

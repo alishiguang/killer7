@@ -37,6 +37,7 @@
   - **任何 release 构建（`tauri build`）之前，必须确认 `frontend/dist/index.html` 是真实前端产物，而不是占位文件**——否则空白首页会被内嵌进二进制，直接违反「首帧不得出现空白」的性能红线。
   - 占位文件（若需要临时创建以让 Rust 侧先跑起来）必须位于被 gitignore 的路径下，不得提交。
 - **分支策略**：`main` 继续演进；egui 版永久存档在 `legacy-egui` 分支（指向 `b36b8dc`），**不得删除或改写该分支**。
+- **命名约定（重要）**：GitHub **仓库名是 `chuaker7/Ki6`**（远端 `https://github.com/chuaker7/Ki6.git`）；而**包名 / crate 名 / 类型名 / 数据目录 / LaunchAgent 标签 / 应用显示名（`productName`）/ 本地化 key 等一切标识符统一为 `chuaker7`**。两者**刻意不同**，任何任务都不得"顺手统一"或把 `chuaker7` 改成 `Ki6`（反之亦然）。**README 的标题与项目介绍用 `Ki6`**（Task 27 统一改写 README 时落实），但 README 正文描述"应用本体"时仍用 `chuaker7`。
 
 ---
 
@@ -261,7 +262,7 @@ rust-version = "1.88"
 description = "chuaker7 — macOS 系统工具箱（Tauri v2 + React 重写版）"
 authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
 license = "MIT"
-repository = "https://github.com/chuaker7/chuaker7"
+repository = "https://github.com/chuaker7/Ki6"
 keywords = ["macos", "toolbox", "tauri", "system-monitor"]
 categories = ["gui", "os::macos-apis"]
 
