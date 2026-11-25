@@ -11,6 +11,12 @@
 dist/
 build/
 
+# Tauri 生成的 ACL / 权限 schema（构建产物，可再生）
+src-tauri/gen/schemas/
+
+# 图标源图（由 scripts/make-icon.mjs 生成，可再生）
+scripts/icon-source.png
+
 # Superpowers 工作区（worktree 与 SDD 台账）
 .worktrees/
 .superpowers/
