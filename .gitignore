@@ -20,3 +20,8 @@ scripts/icon-source.png
 # Superpowers 工作区（worktree 与 SDD 台账）
 .worktrees/
 .superpowers/
+
+# Node / 前端
+node_modules/
+frontend/dist/
+.vite/
