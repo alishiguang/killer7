@@ -94,6 +94,16 @@ impl ProcessManager {
         fetch_all_processes(&port_map, limit)
     }
 
+    /// 采集一次进程列表并写回缓存。
+    ///
+    /// `collect()` 只更新端口缓存、**不写** `self.processes`；而 `list_processes`
+    /// 命令读的正是 `self.processes`。后台循环与手动刷新命令都需要「采集 → 回写」
+    /// 成对出现，收口到这里，避免两处各写一份而漏掉回写。
+    pub fn collect_and_store(&mut self, limit: usize) {
+        let list = self.collect(limit);
+        self.processes = list;
+    }
+
     /// 更新缓存的端口信息。
     pub fn set_port_cache(&mut self, map: HashMap<i32, Vec<PortInfo>>) {
         self.port_cache = map;
@@ -101,7 +111,14 @@ impl ProcessManager {
     }
 
     /// 结束指定进程，返回是否成功。
+    ///
+    /// `kill(1)` 把 `0` 解释为「调用者所在进程组」、把 `-1` 解释为「该用户的所有
+    /// 进程」，直接透传会造成误杀，因此非正 pid 一律拒绝。
     pub fn kill_process(pid: i32) -> bool {
+        if pid <= 0 {
+            return false;
+        }
+
         let status = Command::new("/bin/kill")
             .arg("-9")
             .arg(pid.to_string())
@@ -265,5 +282,21 @@ mod tests {
             ],
         };
         assert_eq!(p.min_port(), Some(300));
+    }
+
+    #[test]
+    fn collect_alone_does_not_fill_cache() {
+        let mut manager = ProcessManager::default();
+        let _ = manager.collect(4);
+        assert!(
+            manager.processes.is_empty(),
+            "collect() 不得写缓存，缓存只由 load_blocking / collect_and_store 写入"
+        );
+    }
+
+    #[test]
+    fn kill_process_rejects_non_positive_pid() {
+        assert!(!ProcessManager::kill_process(0));
+        assert!(!ProcessManager::kill_process(-1));
     }
 }

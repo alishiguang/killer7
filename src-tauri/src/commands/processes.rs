@@ -16,7 +16,10 @@ pub fn list_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
 }
 
 /// 触发一次进程列表刷新（同步采集后立即返回）。
-#[tauri::command]
+///
+/// 采集要跑 `ps` 与 `lsof`，几十毫秒起步；`async` 让它走线程池，
+/// 不占用 Tauri 主线程，窗口拖拽与动画不会被卡住。
+#[tauri::command(async)]
 pub fn refresh_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
     let limit = state
         .settings
@@ -24,16 +27,19 @@ pub fn refresh_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
         .expect("设置锁中毒")
         .process_list_limit;
     let mut processes = state.processes.lock().expect("进程锁中毒");
-    let list = processes.collect(limit);
-    let rows = list.iter().map(ProcessRow::from).collect();
-    // 回写缓存，随后的 `list_processes` 才能拿到同一份数据。
-    processes.processes = list;
-    rows
+    // 采集与回写由 core 的单一入口完成，命令侧只负责取数与映射。
+    processes.collect_and_store(limit);
+    processes.processes.iter().map(ProcessRow::from).collect()
 }
 
 /// 结束指定进程。
 #[tauri::command]
 pub fn kill_process(pid: i32) -> Result<bool, String> {
+    // `kill -1` 会广播到该用户的全部进程，`kill 0` 会打到进程组，
+    // 两者都不能透传。
+    if pid <= 0 {
+        return Err(format!("非法 pid {pid}"));
+    }
     if ProcessManager::kill_process(pid) {
         Ok(true)
     } else {

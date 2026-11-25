@@ -42,15 +42,14 @@ pub fn spawn_process_loop(app: AppHandle, state: Arc<AppState>) {
 
             let rows = {
                 let mut processes = state.processes.lock().expect("进程锁中毒");
-                let list = processes.collect(limit);
-                let rows = list
+                // 采集与回写由 core 的单一入口完成，漏掉回写会让
+                // `list_processes` 永远返回空列表。
+                processes.collect_and_store(limit);
+                processes
+                    .processes
                     .iter()
                     .map(crate::commands::dto::ProcessRow::from)
-                    .collect::<Vec<_>>();
-                // 回写缓存：`list_processes` 命令读的就是这个字段，
-                // 不回写的话那条命令永远返回空列表。
-                processes.processes = list;
-                rows
+                    .collect::<Vec<_>>()
             };
 
             let _ = app.emit(EV_PROCESSES, rows);

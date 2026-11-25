@@ -1939,7 +1939,63 @@ pub fn channel() -> (Sender<AppEvent>, Receiver<AppEvent>) {
     }
 ```
 
-3. 保留 `load_blocking`（首次启动同步采样一次，窗口打开即有数据）与 `kill_process`、`set_port_cache`；保留原有两个单元测试。
+3. 保留 `load_blocking`（首次启动同步采样一次，窗口打开即有数据）与 `set_port_cache`；保留原有两个单元测试。
+4. `kill_process` **必须加非正 pid 守卫**（`kill(1)` 把 `0` 解释为「调用者所在进程组」、把 `-1` 解释为「该用户的所有进程」，直接透传会造成误杀）：
+
+```rust
+    /// 结束指定进程，返回是否成功。
+    ///
+    /// `kill(1)` 把 `0` 解释为「调用者所在进程组」、把 `-1` 解释为「该用户的所有
+    /// 进程」，直接透传会造成误杀，因此非正 pid 一律拒绝。
+    pub fn kill_process(pid: i32) -> bool {
+        if pid <= 0 {
+            return false;
+        }
+
+        let status = Command::new("/bin/kill")
+            .arg("-9")
+            .arg(pid.to_string())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+
+        matches!(status, Ok(status) if status.success())
+    }
+```
+
+5. 新增 `collect_and_store`，把「采集 → 回写」收口到单一入口。`collect()` 只更新端口缓存、**不写** `self.processes`，而 `list_processes` 命令读的正是 `self.processes` —— 后台循环与手动刷新命令都需要这对操作，落在两处就容易漏掉回写：
+
+```rust
+    /// 采集一次进程列表并写回缓存。
+    ///
+    /// `collect()` 只更新端口缓存、**不写** `self.processes`；而 `list_processes`
+    /// 命令读的正是 `self.processes`。后台循环与手动刷新命令都需要「采集 → 回写」
+    /// 成对出现，收口到这里，避免两处各写一份而漏掉回写。
+    pub fn collect_and_store(&mut self, limit: usize) {
+        let list = self.collect(limit);
+        self.processes = list;
+    }
+```
+
+6. 补两条单元测试，把上面两条不变量钉死（`collect()` 单独调用不得写缓存；非正 pid 必须被拒）：
+
+```rust
+    #[test]
+    fn collect_alone_does_not_fill_cache() {
+        let mut manager = ProcessManager::default();
+        let _ = manager.collect(4);
+        assert!(
+            manager.processes.is_empty(),
+            "collect() 不得写缓存，缓存只由 load_blocking / collect_and_store 写入"
+        );
+    }
+
+    #[test]
+    fn kill_process_rejects_non_positive_pid() {
+        assert!(!ProcessManager::kill_process(0));
+        assert!(!ProcessManager::kill_process(-1));
+    }
+```
 
 - [ ] **Step 3: 迁移 `files.rs`**
 
@@ -2766,15 +2822,14 @@ pub fn spawn_process_loop(app: AppHandle, state: Arc<AppState>) {
 
             let rows = {
                 let mut processes = state.processes.lock().expect("进程锁中毒");
-                let list = processes.collect(limit);
-                let rows = list
+                // 采集与回写由 core 的单一入口完成，漏掉回写会让
+                // `list_processes` 永远返回空列表。
+                processes.collect_and_store(limit);
+                processes
+                    .processes
                     .iter()
                     .map(crate::commands::dto::ProcessRow::from)
-                    .collect::<Vec<_>>();
-                // 回写缓存：`list_processes` 命令读的就是这个字段，
-                // 不回写的话那条命令永远返回空列表。
-                processes.processes = list;
-                rows
+                    .collect::<Vec<_>>()
             };
 
             let _ = app.emit(EV_PROCESSES, rows);
@@ -3033,7 +3088,10 @@ pub fn list_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
 }
 
 /// 触发一次进程列表刷新（同步采集后立即返回）。
-#[tauri::command]
+///
+/// 采集要跑 `ps` 与 `lsof`，几十毫秒起步；`async` 让它走线程池，
+/// 不占用 Tauri 主线程，窗口拖拽与动画不会被卡住。
+#[tauri::command(async)]
 pub fn refresh_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
     let limit = state
         .settings
@@ -3041,16 +3099,19 @@ pub fn refresh_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
         .expect("设置锁中毒")
         .process_list_limit;
     let mut processes = state.processes.lock().expect("进程锁中毒");
-    let list = processes.collect(limit);
-    let rows = list.iter().map(ProcessRow::from).collect();
-    // 回写缓存，随后的 `list_processes` 才能拿到同一份数据。
-    processes.processes = list;
-    rows
+    // 采集与回写由 core 的单一入口完成，命令侧只负责取数与映射。
+    processes.collect_and_store(limit);
+    processes.processes.iter().map(ProcessRow::from).collect()
 }
 
 /// 结束指定进程。
 #[tauri::command]
 pub fn kill_process(pid: i32) -> Result<bool, String> {
+    // `kill -1` 会广播到该用户的全部进程，`kill 0` 会打到进程组，
+    // 两者都不能透传。
+    if pid <= 0 {
+        return Err(format!("非法 pid {pid}"));
+    }
     if ProcessManager::kill_process(pid) {
         Ok(true)
     } else {
