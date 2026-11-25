@@ -4,6 +4,7 @@
 //! 返回可序列化的结果。业务逻辑不写在这里。
 
 pub mod dto;
+pub mod files;
 pub mod processes;
 
 /// 汇总所有 command。
@@ -12,5 +13,15 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         processes::list_processes,
         processes::refresh_processes,
         processes::kill_process,
+        files::list_dir,
+        files::create_folder,
+        files::create_file,
+        files::rename_path,
+        files::delete_to_trash,
+        files::reveal_in_finder,
+        files::parent_dir,
+        files::copy_text,
+        files::home_dir,
+        files::watch_dir,
     ]
 }
