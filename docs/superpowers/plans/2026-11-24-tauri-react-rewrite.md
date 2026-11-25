@@ -3667,7 +3667,7 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
         i18n.t("menubar.title"),
         true,
         &[
-            &PredefinedMenuItem::about(app, Some("chuaker7"), None)?,
+            &PredefinedMenuItem::about(app, None, None)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(
                 app,
@@ -3677,11 +3677,13 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
                 Some("CmdOrCtrl+,"),
             )?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::hide(app, Some("隐藏 chuaker7"))?,
-            &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
-            &PredefinedMenuItem::show_all(app, Some("显示全部"))?,
+            // 预定义项传 None，交给 macOS 用系统语言渲染（「隐藏 / 隐藏其他 /
+            // 显示全部 / 退出」），不要自己写死中文。
+            &PredefinedMenuItem::hide(app, None)?,
+            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::show_all(app, None)?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some("退出 chuaker7"))?,
+            &PredefinedMenuItem::quit(app, None)?,
         ],
     )?;
 
@@ -3934,7 +3936,8 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
                 None::<&str>,
             )?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some(&i18n.t("menubar.quit")))?,
+            // 预定义项传 None，交给 macOS 用系统语言渲染「退出」。
+            &PredefinedMenuItem::quit(app, None)?,
         ],
     )?;
 
@@ -4450,10 +4453,12 @@ pub fn update_settings(
     let next = {
         let mut settings = state.settings.lock().expect("设置锁中毒");
         let next = patch.apply(&settings);
-        next.save();
         *settings = next.clone();
         next
     };
+
+    // 落盘放在锁外：磁盘 IO 不该占着设置锁（与剪贴板落盘同一原则）。
+    next.save();
 
     // 语言变了要换文案表。
     {
@@ -4533,8 +4538,9 @@ pub fn set_menu_bar_mode(app: AppHandle, state: State<'_, Arc<AppState>>, enable
     {
         let mut settings = state.settings.lock().expect("设置锁中毒");
         settings.show_menu_bar = enabled;
-        settings.save();
     }
+    // 落盘放在锁外：磁盘 IO 不该占着设置锁（与剪贴板落盘同一原则）。
+    state.settings.lock().expect("设置锁中毒").save();
 
     crate::system::activation::set_accessory_mode(enabled, &app);
 
@@ -4551,8 +4557,9 @@ pub fn set_shortcut_enabled(app: AppHandle, state: State<'_, Arc<AppState>>, ena
     {
         let mut settings = state.settings.lock().expect("设置锁中毒");
         settings.global_shortcut_enabled = enabled;
-        settings.save();
     }
+    // 落盘放在锁外：磁盘 IO 不该占着设置锁（与剪贴板落盘同一原则）。
+    state.settings.lock().expect("设置锁中毒").save();
 
     crate::system::shortcut::set_enabled(&app, enabled);
 }
