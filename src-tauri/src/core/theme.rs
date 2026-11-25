@@ -56,10 +56,7 @@ mod tests {
 
     #[test]
     fn serializes_in_stable_wire_format() {
-        assert_eq!(
-            serde_json::to_string(&ThemeMode::Dark).unwrap(),
-            "\"dark\""
-        );
+        assert_eq!(serde_json::to_string(&ThemeMode::Dark).unwrap(), "\"dark\"");
         assert_eq!(
             serde_json::to_string(&Accent::Signal).unwrap(),
             "\"signal\""
