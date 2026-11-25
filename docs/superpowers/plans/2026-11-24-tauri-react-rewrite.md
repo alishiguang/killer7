@@ -64,6 +64,8 @@
 | `PredefinedMenuItem` | 提供 `separator` / `copy` / `paste` / `select_all` / `minimize` / `fullscreen` / `hide` / `close_window` / `quit` / `about`，均签名 `(manager, Option<&str>) -> Result<Self>`。 |
 | 托盘构造器 | `TrayIconBuilder::new()` → `.menu(&menu)` / `.icon(Image)` / `.tooltip(s)` / `.menu_on_left_click(bool)` / `.icon_as_template(bool)` → `.build(manager) -> Result<TrayIcon>`。注意方法名是 `menu` 不是 `with_menu`，是 `icon` 不是 `with_icon`。 |
 | 托盘位图 | `tauri::image::Image::new_owned(rgba: Vec<u8>, width: u32, height: u32) -> Image<'static>`，可直接喂 `core::icon::bird_rgba(22)` 的输出。 |
+| **★ 托盘菜单事件也是全局监听** | Tauri 2.12.7 官方文档明写 `TrayIconBuilder::on_menu_event`「**not specific to this tray icon**… receives **each menu event of the application**」；实现层它 push 进 `manager.menu.global_event_listeners`，与 `Builder::on_menu_event` **是同一个 Vec**，分发时每个菜单事件遍历全部监听器。**限定范围只能靠按 id 的 `match` 门控**，绝不能把未知 id 转发给 `system::menu::on_menu_event`（会让应用菜单点击被处理两次）。 |
+| **`app.manage()` 重复调用是静默 no-op** | Tauri 2.12.7 `Manager::manage` 返回 `bool`；`StateManager::set` 在类型已存在时保留旧值并返回 false，**不 panic**。新增托盘必须用**新的托管类型**，否则新托盘的菜单项永远不会被刷新且无任何日志。 |
 | 激活策略 | `objc2-app-kit 0.3`：`NSApplication::sharedApplication(mtm: MainThreadMarker) -> Retained<NSApplication>`；`app.setActivationPolicy(policy) -> bool`；策略常量 `NSApplicationActivationPolicy::Regular`（0）/ `::Accessory`（1）。 |
 | Node 版本 | nvm 已装 v22.23.2 / v24.14.0 / v24.17.0；默认 v22.11.0 不满足 Vite 7。 |
 | 前端截图验收 | 本机 Google Chrome 可用：`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --screenshot=out.png --window-size=1080,720 http://localhost:1420` |
@@ -4098,8 +4100,13 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
         .tooltip(&app_name)
         .show_menu_on_left_click(false)
         .menu(&menu)
-        // 托盘菜单的点击必须自己接：`Builder::on_menu_event` 是**全局**监听，
-        // 会和应用菜单的监听一起触发；而这里要的是「只认托盘菜单里的项」。
+        // Tauri 2.12.7 的 `TrayIconBuilder::on_menu_event` **同样是全局监听器**：
+        // 它与 `Builder::on_menu_event` 共用 `manager.menu.global_event_listeners`，
+        // 会收到应用菜单、窗口菜单与所有托盘菜单的事件（Tauri 官方文档明写
+        // "This handler is not specific to this tray icon"）。真正把范围限定在
+        // 托盘菜单的，靠的是下面 `on_tray_menu_event` 里按 id 的 `match` 门控。
+        // **不要把未知 id 转发给 `system::menu::on_menu_event`** —— 那会让每一次
+        // 应用菜单点击都被处理两次（Tauri 文档警告的重复处理）。
         .on_menu_event(|app, event| {
             on_tray_menu_event(app, event.id().as_ref());
         })

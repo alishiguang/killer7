@@ -103,8 +103,13 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()
         .tooltip(&app_name)
         .show_menu_on_left_click(false)
         .menu(&menu)
-        // 托盘菜单的点击必须自己接：`Builder::on_menu_event` 是**全局**监听，
-        // 会和应用菜单的监听一起触发；而这里要的是「只认托盘菜单里的项」。
+        // Tauri 2.12.7 的 `TrayIconBuilder::on_menu_event` **同样是全局监听器**：
+        // 它与 `Builder::on_menu_event` 共用 `manager.menu.global_event_listeners`，
+        // 会收到应用菜单、窗口菜单与所有托盘菜单的事件（Tauri 官方文档明写
+        // "This handler is not specific to this tray icon"）。真正把范围限定在
+        // 托盘菜单的，靠的是下面 `on_tray_menu_event` 里按 id 的 `match` 门控。
+        // **不要把未知 id 转发给 `system::menu::on_menu_event`** —— 那会让每一次
+        // 应用菜单点击都被处理两次（Tauri 文档警告的重复处理）。
         .on_menu_event(|app, event| {
             on_tray_menu_event(app, event.id().as_ref());
         })
