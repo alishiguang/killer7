@@ -1878,7 +1878,7 @@ pub fn channel() -> (Sender<AppEvent>, Receiver<AppEvent>) {
 
 `src-tauri/src/core/process.rs` —— 以 egui 版为蓝本，**改动三处**：
 
-1. `use crate::events::AppEvent;` 保留（`AppEvent` 仍在 crate 级）。
+1. **删除** `use std::sync::mpsc::Sender;` 与 `use crate::events::AppEvent;`——egui 版里这两个 import 只服务于 `refresh`（它 `tx.send(AppEvent::…)`），而 `refresh` 已被下面的同步 `collect` 取代。留着就是**未使用 import**，clippy 会告警，与 Step 7 的「clippy 0 warning」冲突。
 2. `ProcessManager::refresh` 由「内部 spawn 线程 + 发事件」改为**同步采集并直接返回结果**：
 
 ```rust
@@ -2056,6 +2056,12 @@ pub struct ClipboardManager {
 
 **删除** egui 版里的 `pub fn spawn_monitor(tx: Sender<AppEvent>)`（线程归 `system::tasks` 管），改为在 `core::clipboard` 里只留纯读取：
 
+同时**删除** `use std::sync::mpsc::Sender;` 与 `use crate::events::AppEvent;`——它们只服务于被删掉的 `spawn_monitor`，留着就是未使用 import（clippy 告警）。`use crate::settings::clipboard_history_path;` 改成 `use crate::core::settings::clipboard_history_path;`。
+
+`spawn_monitor` 用到的 `Duration` 也只服务于它，`use std::time::{Duration, SystemTime, UNIX_EPOCH};` 要改成 `use std::time::{SystemTime, UNIX_EPOCH};`（`SystemTime` / `UNIX_EPOCH` 仍被 `HistoryEntry::now()` 使用）。
+
+`ClipboardManager::copy_to_clipboard` 里那一处 `crate::platform::copy_to_clipboard(content)` 也要改成 `crate::core::platform::copy_to_clipboard(content)`。
+
 ```rust
 /// 读取系统剪贴板文本。
 pub fn read_current() -> Option<String> {
@@ -2165,7 +2171,17 @@ pub struct SystemInfo {
 }
 ```
 
-`SystemMonitor` 保留 `push_sample` 与 120 点上限逻辑。删除 `use std::sync::mpsc::Sender;` 与 `use crate::events::AppEvent;`。
+`SystemMonitor` 保留 `push_sample` 与 120 点上限逻辑。
+
+删除 `spawn_monitor` 后，egui 版里**只服务于它**的 import 全部变成未使用，必须一并删掉，否则 clippy 报 unused import、违反 Step 7 的「clippy 0 warning」：
+
+- `use std::sync::mpsc::Sender;`
+- `use crate::events::AppEvent;`
+- `use std::sync::Arc;`
+- `use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};`
+- `use std::time::Duration;`
+
+`use sysinfo::System;` **保留**——`average_cpu_usage` / `memory_usage` 与新的 `sample()` 都要用。线程与采样间隔的共享原子变量改由 `system::tasks` 持有。
 
 - [ ] **Step 6: 补齐 `core/mod.rs` 与 `lib.rs`**
 
