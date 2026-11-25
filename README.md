@@ -103,8 +103,8 @@ target/release/bundle/dmg/Ki6_1.2.0_*.dmg   # 磁盘映像
 open target/release/bundle/macos/Ki6.app
 ```
 
-应用默认以**菜单栏模式**启动（不占 Dock 位置，只在菜单栏常驻）；
-可在「设置 → 外观」里切换成常规 Dock 模式。
+应用默认以**常规 Dock 模式**启动；在「设置 → 启动项」里可切换成**菜单栏模式**
+（不占 Dock 位置，只在菜单栏常驻）。该选择会被记住，重启后依然生效。
 
 > 标识符说明：应用**展示名**是 `Ki6`，但 crate 名、bundle identifier、数据目录
 > （`~/Library/Application Support/chuaker7`）一律是 `chuaker7` —— 它们是技术标识，
