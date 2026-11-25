@@ -2,6 +2,7 @@
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
+pub mod commands;
 pub mod core;
 pub mod events;
 
