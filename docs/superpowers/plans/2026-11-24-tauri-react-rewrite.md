@@ -1466,6 +1466,10 @@ mod tests {
 
 - [ ] **Step 5: 迁移 `settings.rs`，改 camelCase 并兼容旧配置**
 
+> `migrate_data_dir` 里用 **let-chain**（`if let ... && ...`）而不是嵌套 `if`：嵌套写法会触发
+> `clippy::collapsible_if`，与本任务 Step 7「clippy 0 warning」的 Expected 直接冲突。
+> let-chain 需要 edition 2024 + Rust 1.88，本项目 `edition = "2024"`、本机 rustc 1.90，满足条件。
+
 `src-tauri/src/core/settings.rs`：
 
 ```rust
@@ -1527,10 +1531,10 @@ fn migrate_data_dir(from: &Path, to: &Path) -> bool {
     if !from.exists() || to.exists() {
         return false;
     }
-    if let Some(parent) = to.parent() {
-        if std::fs::create_dir_all(parent).is_err() {
-            return false;
-        }
+    if let Some(parent) = to.parent()
+        && std::fs::create_dir_all(parent).is_err()
+    {
+        return false;
     }
     std::fs::rename(from, to).is_ok()
 }
