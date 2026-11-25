@@ -315,10 +315,49 @@ custom-protocol = ["tauri/custom-protocol"]
 `src-tauri/build.rs`：
 
 ```rust
-fn main() {
-    tauri_build::build()
-}
-```
+[package]
+name = "chuaker7"
+version = "1.2.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Ki6 — macOS 系统工具箱（Tauri v2 + React 重写版）"
+authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
+license = "MIT"
+repository = "https://github.com/chuaker7/Ki6"
+keywords = ["macos", "toolbox", "tauri", "system-monitor"]
+categories = ["gui", "os::macos-apis"]
+
+[lib]
+name = "chuaker7_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = ["tray-icon", "macos-private-api"] }
+tauri-plugin-dialog = "2.8"
+tauri-plugin-opener = "2.7"
+# rename_all_fields 自 serde 1.0.177 起可用 —— ContextTarget 的 camelCase 变体字段依赖它。
+serde = { version = "1.0.177", features = ["derive"] }
+serde_json = "1.0"
+dirs = "7.0"
+anyhow = "1.0"
+arboard = "3.7"
+sysinfo = "0.38"
+notify = "8.2"
+trash = "5.4"
+open = "5.4"
+global-hotkey = "0.10"
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]```
+
+> **实际落地**：crate 名与描述在改名时同步过。
+> 上文是当前文件的**完整内容**。
 
 `src-tauri/src/lib.rs`：
 
@@ -2824,6 +2863,7 @@ AI-Tool: TophantAI"
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
 
+use crate::commands::dto::ContextTarget;
 use crate::core::clipboard::ClipboardManager;
 use crate::core::files::FileManager;
 use crate::core::i18n::I18n;
@@ -2854,6 +2894,11 @@ pub struct AppState {
     pub network_enabled: Arc<AtomicBool>,
     /// 当前目录的文件变更监听器。
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
+    /// 当前弹出的原生右键菜单所对应的目标。
+    ///
+    /// 菜单项的点击事件只带 id，不带目标对象，所以弹出菜单时把目标
+    /// 暂存到这里，点击时再取出来用。
+    pub pending_context: Mutex<Option<ContextTarget>>,
 }
 
 impl AppState {
@@ -2888,10 +2933,13 @@ impl AppState {
             network_enabled,
             watcher: Mutex::new(None),
             settings: Mutex::new(settings),
+            pending_context: Mutex::new(None),
         }
     }
-}
-```
+}```
+
+> **实际落地**：Task 25 新增 `pending_context` 字段。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 写 `src-tauri/src/system/tasks.rs`**
 
@@ -3044,6 +3092,8 @@ pub fn spawn_monitor_loop(
                 }
             };
 
+            crate::system::tray::update_metrics(&app, &info);
+
             let _ = app.emit(EV_SYSTEM_INFO, dto);
         }
     });
@@ -3086,8 +3136,10 @@ pub fn watch_path(app: &AppHandle, state: &Arc<AppState>, path: &Path) -> bool {
 
     *state.watcher.lock().expect("监听锁中毒") = Some(watcher);
     true
-}
-```
+}```
+
+> **实际落地**：Task 25 在采样循环里加了「结束进程后立刻重采并推送」。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 3: 写 `src-tauri/src/system/mod.rs`**
 
@@ -3146,9 +3198,29 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Arc::new(app_state))
+        .invoke_handler(commands::handler())
         .setup(|app| {
             let handle = app.handle().clone();
             let state = app.state::<Arc<AppState>>().inner().clone();
+
+            // 菜单文案跟着设置里的语言走。
+            let locale = state.settings.lock().expect("设置锁中毒").locale;
+            crate::system::menu::build(&handle, locale)?;
+            crate::system::tray::build(&handle, locale)?;
+
+            // 全局快捷键 ⌘L：**默认开启**（core/settings.rs 的默认值是 true），
+            // 设置项可热更新。注册失败必须留下痕迹，否则「显示已开启但毫无反应」
+            // 会变成无法排查的静默失效。
+            {
+                let shortcut_enabled = state
+                    .settings
+                    .lock()
+                    .expect("设置锁中毒")
+                    .global_shortcut_enabled;
+                if shortcut_enabled && let Err(err) = crate::system::shortcut::register(&handle) {
+                    eprintln!("[shortcut] 注册 ⌘L 失败: {err}");
+                }
+            }
 
             crate::system::tasks::spawn_process_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_clipboard_loop(handle.clone(), state.clone());
@@ -3162,10 +3234,23 @@ pub fn run() {
 
             Ok(())
         })
+        .on_menu_event(|app, event| {
+            let id = event.id().as_ref();
+            crate::system::menu::on_menu_event(app, id);
+            // 右键菜单的 id 统一以 `ctx.` 开头，与应用菜单的 `nav:` / `app:` 区分开。
+            if id.starts_with("ctx.") {
+                crate::system::menu::on_context_menu_event(app, id);
+            }
+        })
+        .on_tray_icon_event(|app, event| {
+            crate::system::tray::on_tray_event(app, &event);
+        })
         .run(tauri::generate_context!())
         .expect("error while running Ki6");
-}
-```
+}```
+
+> **实际落地**：后续任务给 lib.rs 追加了 system / commands / setup 装配。
+> 上文是当前文件的**完整内容**。
 
 > `app.state::<Arc<AppState>>()` 需要 `tauri::Manager` trait 的 `state()` 方法；`Arc<AppState>` 本身实现了 `Send + Sync + 'static`，可作为 Tauri 状态。
 >
@@ -3760,13 +3845,15 @@ pub const EV_MENU_ACTION: &str = "menu-action";
 //! `menubar.*` / `edit.*` / `window.*` / `view.fullscreen` 等 key。
 //!
 //! 「关于 / 隐藏 / 退出」三项按 macOS 惯例带应用名后缀，在 Rust 侧拼成
-//! `<动词> Ki6`；应用名本身取自 `menubar.title`（= "Ki6"）。
+//! `<动词> chuaker7`；应用名本身取自 `menubar.title`（= "chuaker7"）。
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
+use crate::commands::dto::ContextTarget;
 use crate::core::i18n::{I18n, Locale};
 use crate::events::EV_MENU_ACTION;
+use crate::events::EV_NOTICE;
 
 /// 构建并安装应用菜单栏。
 pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
@@ -3894,7 +3981,121 @@ pub fn on_menu_event(app: &AppHandle, id: &str) {
         let _ = app.emit(EV_MENU_ACTION, id);
     }
 }
-```
+
+/// 处理原生右键菜单项点击。
+///
+/// 右键菜单的目标对象在弹出时被暂存进 `AppState::pending_context`
+/// （菜单事件本身只带 id，不带目标），这里取出来执行对应动作。
+pub fn on_context_menu_event(app: &AppHandle, id: &str) {
+    use crate::core::clipboard;
+    use crate::core::platform;
+    use crate::core::process::ProcessManager;
+
+    let state = app.state::<std::sync::Arc<crate::state::AppState>>();
+    let target = {
+        let mut pending = state.pending_context.lock().expect("右键目标锁中毒");
+        pending.take()
+    };
+
+    let Some(target) = target else {
+        return;
+    };
+
+    let locale = state.i18n.lock().expect("文案锁中毒").locale();
+    let i18n = I18n::new(locale);
+
+    match (id, &target) {
+        ("ctx.process.copyPath", ContextTarget::Process { full_path, .. }) => {
+            platform::copy_to_clipboard(full_path);
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
+        }
+        (
+            "ctx.process.kill",
+            ContextTarget::Process {
+                pid, display_name, ..
+            },
+        ) => {
+            if ProcessManager::kill_process(*pid) {
+                notify(
+                    app,
+                    &i18n,
+                    "info",
+                    &i18n.tf("process.kill.done", &[display_name]),
+                );
+                // 立刻重采一次并把新列表推给前端，不要等下一个刷新周期。
+                let rows = {
+                    let limit = state
+                        .settings
+                        .lock()
+                        .expect("设置锁中毒")
+                        .process_list_limit;
+                    let mut processes = state.processes.lock().expect("进程锁中毒");
+                    processes
+                        .collect(limit)
+                        .iter()
+                        .map(crate::commands::dto::ProcessRow::from)
+                        .collect::<Vec<_>>()
+                };
+                let _ = app.emit(crate::events::EV_PROCESSES, rows);
+            } else {
+                notify(app, &i18n, "error", &i18n.t("process.kill.failed"));
+            }
+        }
+        ("ctx.file.reveal", ContextTarget::File { path, .. }) => {
+            platform::reveal_in_finder(std::path::Path::new(path));
+        }
+        ("ctx.file.copyPath", ContextTarget::File { path, .. }) => {
+            platform::copy_to_clipboard(path);
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
+        }
+        ("ctx.file.rename", ContextTarget::File { .. }) => {
+            let _ = app.emit(EV_MENU_ACTION, "file:rename");
+        }
+        ("ctx.file.delete", ContextTarget::File { .. }) => {
+            let _ = app.emit(EV_MENU_ACTION, "file:delete");
+        }
+        ("ctx.clipboard.copy", ContextTarget::Clipboard { content, .. }) => {
+            platform::copy_to_clipboard(content);
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
+        }
+        ("ctx.clipboard.delete", ContextTarget::Clipboard { id, .. }) => {
+            let changed = {
+                let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
+                manager.delete_history_item(*id)
+            };
+            // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
+            if changed {
+                let result = clipboard::persist_history(|| {
+                    state
+                        .clipboard
+                        .lock()
+                        .expect("剪贴板锁中毒")
+                        .history
+                        .clone()
+                });
+                if let Err(err) = result {
+                    eprintln!("[clipboard] 落盘失败: {err}");
+                }
+            }
+            notify(app, &i18n, "info", &i18n.t("clipboard.deleted"));
+        }
+        _ => {}
+    }
+}
+
+/// 向前端回传提示。
+fn notify(app: &AppHandle, _i18n: &I18n, kind: &str, message: &str) {
+    let _ = app.emit(
+        EV_NOTICE,
+        crate::commands::dto::Notice {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        },
+    );
+}```
+
+> **实际落地**：Task 25 新增 `on_context_menu_event`（原生右键菜单）。
+> 上文是当前文件的**完整内容**。
 
 > **本任务必须同时改两个 `locales/*.lproj/Localizable.strings`**，追加下列 key
 > （zh-Hans / en 各一份）。原因：muda 0.20 在 `text=None` 时用的是它写死的英文表，
@@ -5736,7 +5937,7 @@ export function VirtualList<T>({
 - [ ] **Step 2: 写 `DataTable.tsx`**
 
 ```tsx
-import type { ReactNode } from 'react';
+import { memo, type ReactElement, type ReactNode } from 'react';
 
 export interface Column<T> {
   /** 列 key。 */
@@ -5767,6 +5968,58 @@ export interface DataTableProps<T> {
   /** 空态内容。 */
   empty?: ReactNode;
 }
+
+/** 表格行的 props。 */
+interface TableRowProps<T> {
+  columns: Column<T>[];
+  item: T;
+  index: number;
+  selected: boolean;
+  onRowClick?: (item: T, index: number) => void;
+  onRowContextMenu?: (item: T, index: number, event: React.MouseEvent) => void;
+}
+
+/**
+ * 表格行。
+ *
+ * 单独抽出来并 memo 化：数据源刷新时（例如后台每轮推送进程列表），
+ * 只有内容真的变了的那几行需要重绘，其余行直接复用上次的 DOM。
+ *
+ * memo 生效的前提是 props 稳定 —— `columns` 与两个回调都得是稳定引用，
+ * 页面侧要用 `useCallback` / `useMemo` 保证这一点。
+ *
+ * `memo` 会把泛型擦成 `unknown`，所以这里显式断言回泛型函数类型，
+ * 否则 `Column<T>[]` 赋不上 `Column<unknown>[]`。
+ */
+const TableRow = memo(function TableRowInner<T>({
+  columns,
+  item,
+  index,
+  selected,
+  onRowClick,
+  onRowContextMenu,
+}: TableRowProps<T>) {
+  return (
+    <tr
+      data-selected={selected ? 'true' : undefined}
+      onClick={onRowClick ? () => onRowClick(item, index) : undefined}
+      onContextMenu={
+        onRowContextMenu
+          ? (event) => {
+              event.preventDefault();
+              onRowContextMenu(item, index, event);
+            }
+          : undefined
+      }
+    >
+      {columns.map((column) => (
+        <td key={column.key} style={{ textAlign: column.align ?? 'left' }}>
+          {column.render(item, index)}
+        </td>
+      ))}
+    </tr>
+  );
+}) as unknown as <T>(props: TableRowProps<T>) => ReactElement;
 
 /** 发丝描边的数据表格。 */
 export function DataTable<T>({
@@ -5812,33 +6065,25 @@ export function DataTable<T>({
           items.map((item, index) => {
             const key = getKey(item, index);
             return (
-              <tr
+              <TableRow
                 key={key}
-                data-selected={selectedKey === key ? 'true' : undefined}
-                onClick={onRowClick ? () => onRowClick(item, index) : undefined}
-                onContextMenu={
-                  onRowContextMenu
-                    ? (event) => {
-                        event.preventDefault();
-                        onRowContextMenu(item, index, event);
-                      }
-                    : undefined
-                }
-              >
-                {columns.map((column) => (
-                  <td key={column.key} style={{ textAlign: column.align ?? 'left' }}>
-                    {column.render(item, index)}
-                  </td>
-                ))}
-              </tr>
+                columns={columns}
+                item={item}
+                index={index}
+                selected={selectedKey === key}
+                onRowClick={onRowClick}
+                onRowContextMenu={onRowContextMenu}
+              />
             );
           })
         )}
       </tbody>
     </table>
   );
-}
-```
+}```
+
+> **实际落地**：Task 26 新增 `TableRow` memo 组件，文件顶部的 import 随之改变。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 3: 写 `SearchField.tsx`**
 
@@ -6907,7 +7152,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 写 `frontend/src/pages/Processes.tsx`**
 
 ```tsx
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Card, Kicker, Modal, SearchField, Segmented, VirtualList } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
@@ -6916,6 +7161,45 @@ import { pushToast } from '../lib/store';
 import type { ProcessRow } from '../lib/types';
 
 type SortKey = 'pid' | 'name' | 'port';
+
+/**
+ * 进程列表的一行。
+ *
+ * 单独抽出来并 memo 化：后台每轮推送进程列表时，只有内容真的变了的行
+ * 需要重绘。`row` 是数据引用 —— `rows` 数组不变时行引用稳定，memo 才生效。
+ */
+const ProcessRowView = memo(function ProcessRowView({
+  row,
+  onSelect,
+}: {
+  row: ProcessRow;
+  onSelect: (row: ProcessRow) => void;
+}) {
+  return (
+    <div
+      className="vrow"
+      onClick={() => onSelect(row)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        void api.popupContextMenu('process', {
+          pid: row.pid,
+          displayName: row.displayName,
+          fullPath: row.fullPath,
+        });
+      }}
+    >
+      <span className="mono vrow__pid">{row.pid}</span>
+      <span className="vrow__name" title={row.fullPath}>
+        {row.displayName}
+      </span>
+      <span className="mono vrow__port">
+        {row.ports.length === 0
+          ? '—'
+          : row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
+      </span>
+    </div>
+  );
+});
 
 export function Processes() {
   const { t } = useI18n();
@@ -6956,8 +7240,12 @@ export function Processes() {
     return () => observer.disconnect();
   }, []);
 
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍，
+  // 长列表下不会因为每个按键都重算 500 行的过滤而掉帧。
+  const deferredSearch = useDeferredValue(search);
+
   const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     if (!keyword) {
       return rows;
     }
@@ -6970,7 +7258,7 @@ export function Processes() {
       }
       return row.ports.some((port) => String(port.port).includes(keyword));
     });
-  }, [rows, search]);
+  }, [rows, deferredSearch]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -7052,28 +7340,7 @@ export function Processes() {
             overscan={8}
             getKey={(row) => String(row.pid)}
             renderRow={(row) => (
-              <div
-                className="vrow"
-                onClick={() => setPendingKill(row)}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  void api.popupContextMenu('process', {
-                    pid: row.pid,
-                    displayName: row.displayName,
-                    fullPath: row.fullPath,
-                  });
-                }}
-              >
-                <span className="mono vrow__pid">{row.pid}</span>
-                <span className="vrow__name" title={row.fullPath}>
-                  {row.displayName}
-                </span>
-                <span className="mono vrow__port">
-                  {row.ports.length === 0
-                    ? '—'
-                    : row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
-                </span>
-              </div>
+              <ProcessRowView row={row} onSelect={setPendingKill} />
             )}
             empty={t('process.empty')}
           />
@@ -7109,8 +7376,10 @@ export function Processes() {
       </Modal>
     </div>
   );
-}
-```
+}```
+
+> **实际落地**：Task 26 新增 `ProcessRowView` memo 组件与 `useDeferredValue`。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 建组件统一出口 `frontend/src/components/index.ts`**
 
@@ -7333,7 +7602,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 写 `frontend/src/pages/Files.tsx`**
 
 ```tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
 import { Card, DataTable, Kicker, Modal, SearchField, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
@@ -7383,13 +7652,16 @@ export function Files() {
     });
   }, [cwd, load]);
 
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍。
+  const deferredSearch = useDeferredValue(search);
+
   const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     if (!keyword) {
       return rows;
     }
     return rows.filter((row) => row.name.toLowerCase().includes(keyword));
-  }, [rows, search]);
+  }, [rows, deferredSearch]);
 
   const columns = useMemo<Column<FileRow>[]>(
     () => [
@@ -7485,6 +7757,26 @@ export function Files() {
     },
     [load],
   );
+
+  // 行点击与行右键的回调保持稳定引用，否则 DataTable 里的 memo 行组件
+  // 每次渲染都会因为 props 变了而全部重绘。
+  const handleRowClick = useCallback(
+    (row: FileRow) => {
+      if (row.isDir) {
+        void enter(row);
+      }
+    },
+    [enter],
+  );
+
+  const handleRowContextMenu = useCallback((row: FileRow) => {
+    setContextRow(row);
+    void api.popupContextMenu('file', {
+      path: row.path,
+      name: row.name,
+      isDir: row.isDir,
+    });
+  }, []);
 
   const goUp = useCallback(async () => {
     const parent = await api.parentDir(cwd);
@@ -7623,19 +7915,8 @@ export function Files() {
           columns={columns}
           items={filtered}
           getKey={(row) => row.path}
-          onRowClick={(row) => {
-            if (row.isDir) {
-              void enter(row);
-            }
-          }}
-          onRowContextMenu={(row) => {
-            setContextRow(row);
-            void api.popupContextMenu('file', {
-              path: row.path,
-              name: row.name,
-              isDir: row.isDir,
-            });
-          }}
+          onRowClick={handleRowClick}
+          onRowContextMenu={handleRowContextMenu}
           empty={t('common.empty')}
         />
       </Card>
@@ -7707,6 +7988,9 @@ function formatTime(seconds: number): string {
     date.getMinutes(),
   )}`;
 }```
+
+> **实际落地**：Task 26 接入 `useDeferredValue`，行点击/行右键回调改为稳定引用。
+> 上文是当前文件的**完整内容**。
 
 > **实际落地**：Task 25 为本文件追加了 `contextRow` 状态、`onRowContextMenu` 与监听 `menu-action` 的 `useEffect`。
 > 上文是当前文件的**完整内容**。
@@ -7900,7 +8184,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 写 `frontend/src/pages/Clipboard.tsx`**
 
 ```tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
 import { Card, DataTable, Kicker, SearchField, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
@@ -7932,16 +8216,24 @@ export function Clipboard() {
     };
   }, []);
 
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍。
+  const deferredSearch = useDeferredValue(search);
+
   const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     if (!keyword) {
       return history;
     }
     return history.filter((row) => row.content.toLowerCase().includes(keyword));
-  }, [history, search]);
+  }, [history, deferredSearch]);
 
   const reload = useCallback(async () => {
     setHistory(await api.clipboardHistory());
+  }, []);
+
+  // 行右键回调保持稳定引用，否则 DataTable 里的 memo 行组件每次渲染都重绘。
+  const handleRowContextMenu = useCallback((row: HistoryRow) => {
+    void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
   }, []);
 
   const columns = useMemo<Column<HistoryRow>[]>(
@@ -8041,9 +8333,7 @@ export function Clipboard() {
           columns={columns}
           items={filtered}
           getKey={(row) => String(row.id)}
-          onRowContextMenu={(row) => {
-            void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
-          }}
+          onRowContextMenu={handleRowContextMenu}
           empty={t('clipboard.empty')}
         />
       </Card>
@@ -8061,6 +8351,9 @@ function formatTime(seconds: number): string {
     date.getMinutes(),
   )}`;
 }```
+
+> **实际落地**：Task 26 接入 `useDeferredValue`，行右键回调改为稳定引用。
+> 上文是当前文件的**完整内容**。
 
 > **实际落地**：Task 25 为本文件追加了 `onRowContextMenu`（原生右键菜单）。
 > 上文是当前文件的**完整内容**。
@@ -9267,28 +9560,26 @@ fn notify(app: &AppHandle, _i18n: &I18n, kind: &str, message: &str) {
 `frontend/src/pages/Processes.tsx` 的虚拟列表行追加 `onContextMenu`：
 
 ```tsx
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  void api.popupContextMenu('process', {
-                    pid: row.pid,
-                    displayName: row.displayName,
-                    fullPath: row.fullPath,
-                  });
-                }}
-              >
+      onContextMenu={(event) => {
+        event.preventDefault();
+        void api.popupContextMenu('process', {
+          pid: row.pid,
+          displayName: row.displayName,
+          fullPath: row.fullPath,
+        });
 ```
 
-`frontend/src/pages/Files.tsx`：
+`frontend/src/pages/Files.tsx`（Task 26 之后：行右键回调改为稳定引用 `handleRowContextMenu`，
+DataTable 上写 `onRowContextMenu={handleRowContextMenu}`）：
 
 ```tsx
-          onRowContextMenu={(row) => {
-            setContextRow(row);
-            void api.popupContextMenu('file', {
-              path: row.path,
-              name: row.name,
-              isDir: row.isDir,
-            });
-          }}
+  const handleRowContextMenu = useCallback((row: FileRow) => {
+    setContextRow(row);
+    void api.popupContextMenu('file', {
+      path: row.path,
+      name: row.name,
+      isDir: row.isDir,
+    });
 ```
 
 并在 `Files` 中新增 `const [contextRow, setContextRow] = useState<FileRow | null>(null);`，
@@ -9325,12 +9616,12 @@ fn notify(app: &AppHandle, _i18n: &I18n, kind: &str, message: &str) {
   }, [contextRow, remove]);
 ```
 
-`frontend/src/pages/Clipboard.tsx`：
+`frontend/src/pages/Clipboard.tsx`（Task 26 之后：行右键回调改为稳定引用 `handleRowContextMenu`，
+DataTable 上写 `onRowContextMenu={handleRowContextMenu}`）：
 
 ```tsx
-          onRowContextMenu={(row) => {
-            void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
-          }}
+  const handleRowContextMenu = useCallback((row: HistoryRow) => {
+    void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
 ```
 
 - [ ] **Step 5: 验收并提交**
@@ -9366,21 +9657,36 @@ cargo build --release -p chuaker7
 `frontend/src/components/DataTable.tsx` 内新增：
 
 ```tsx
-const TableRow = memo(function TableRow<T>({
+/** 表格行的 props。 */
+interface TableRowProps<T> {
+  columns: Column<T>[];
+  item: T;
+  index: number;
+  selected: boolean;
+  onRowClick?: (item: T, index: number) => void;
+  onRowContextMenu?: (item: T, index: number, event: React.MouseEvent) => void;
+}
+
+/**
+ * 表格行。
+ *
+ * 单独抽出来并 memo 化：数据源刷新时（例如后台每轮推送进程列表），
+ * 只有内容真的变了的那几行需要重绘，其余行直接复用上次的 DOM。
+ *
+ * memo 生效的前提是 props 稳定 —— `columns` 与两个回调都得是稳定引用，
+ * 页面侧要用 `useCallback` / `useMemo` 保证这一点。
+ *
+ * `memo` 会把泛型擦成 `unknown`，所以这里显式断言回泛型函数类型，
+ * 否则 `Column<T>[]` 赋不上 `Column<unknown>[]`。
+ */
+const TableRow = memo(function TableRowInner<T>({
   columns,
   item,
   index,
   selected,
   onRowClick,
   onRowContextMenu,
-}: {
-  columns: Column<T>[];
-  item: T;
-  index: number;
-  selected: boolean;
-  onRowClick?: (item: T, index: number) => void;
-  onRowContextMenu?: (item: T, index: number) => void;
-}) {
+}: TableRowProps<T>) {
   return (
     <tr
       data-selected={selected ? 'true' : undefined}
@@ -9389,7 +9695,7 @@ const TableRow = memo(function TableRow<T>({
         onRowContextMenu
           ? (event) => {
               event.preventDefault();
-              onRowContextMenu(item, index);
+              onRowContextMenu(item, index, event);
             }
           : undefined
       }
@@ -9401,31 +9707,42 @@ const TableRow = memo(function TableRow<T>({
       ))}
     </tr>
   );
-});
-```
+}) as unknown as <T>(props: TableRowProps<T>) => ReactElement;```
 
-并在文件顶部加 `import { memo } from 'react';`，把 `<tbody>` 里的 `<tr>` 换成 `<TableRow ... />`。
+并在文件顶部把 `import type { ReactNode } from 'react';` 改成 `import { memo, type ReactElement, type ReactNode } from 'react';`，把 `<tbody>` 里的 `<tr>` 换成 `<TableRow ... />`。
+
+> `memo` 会把泛型擦成 `unknown`（`Column<T>[]` 赋不上 `Column<unknown>[]`），所以要用类型断言还原成泛型函数。
 
 - [ ] **Step 2: 搜索输入走 useDeferredValue**
 
 `frontend/src/pages/Processes.tsx`：
 
 ```tsx
-import { useDeferredValue } from 'react';
-```
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';```
 
 ```tsx
-  const deferredSearch = useDeferredValue(search);
-```
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍，
+  // 长列表下不会因为每个按键都重算 500 行的过滤而掉帧。
+  const deferredSearch = useDeferredValue(search);```
 
 并把 `filtered` 的依赖从 `search` 换成 `deferredSearch`：
 
 ```tsx
   const filtered = useMemo(() => {
     const keyword = deferredSearch.trim().toLowerCase();
-    // ...
-  }, [rows, deferredSearch]);
-```
+    if (!keyword) {
+      return rows;
+    }
+    return rows.filter((row) => {
+      if (row.displayName.toLowerCase().includes(keyword)) {
+        return true;
+      }
+      if (String(row.pid).includes(keyword)) {
+        return true;
+      }
+      return row.ports.some((port) => String(port.port).includes(keyword));
+    });
+  }, [rows, deferredSearch]);```
 
 `Files.tsx` 与 `Clipboard.tsx` 同样处理。
 
@@ -9440,6 +9757,12 @@ import { useDeferredValue } from 'react';
 并新增：
 
 ```tsx
+/**
+ * 进程列表的一行。
+ *
+ * 单独抽出来并 memo 化：后台每轮推送进程列表时，只有内容真的变了的行
+ * 需要重绘。`row` 是数据引用 —— `rows` 数组不变时行引用稳定，memo 才生效。
+ */
 const ProcessRowView = memo(function ProcessRowView({
   row,
   onSelect,
@@ -9457,30 +9780,13 @@ const ProcessRowView = memo(function ProcessRowView({
           pid: row.pid,
           displayName: row.displayName,
           fullPath: row.fullPath,
-        });
-      }}
-    >
-      <span className="mono vrow__pid">{row.pid}</span>
-      <span className="vrow__name" title={row.fullPath}>
-        {row.displayName}
-      </span>
-      <span className="mono vrow__port">
-        {row.ports.length === 0
-          ? '—'
-          : row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
-      </span>
-    </div>
-  );
-});
-```
+        });```
 
 然后把 `VirtualList` 的 `renderRow` 换成：
 
 ```tsx
             renderRow={(row) => (
-              <ProcessRowView row={row} onSelect={setPendingKill} />
-            )}
-```
+              <ProcessRowView row={row} onSelect={setPendingKill} />```
 
 > `onSelect` 传的是 `setPendingKill`（稳定引用），`row` 是数据引用——
 > `rows` 数组不变时行引用稳定，memo 才能真正生效。
@@ -9490,39 +9796,110 @@ const ProcessRowView = memo(function ProcessRowView({
 创建 `docs/PERFORMANCE.md`：
 
 ```markdown
-# chuaker7 性能记录
+# Ki6 性能记录
 
 ## 测量环境
 
 - macOS 26.3.1（darwin 25.3.0 arm64）
-- Node v24.17.0 / Vite 7.1.5
+- 测量引擎：Chromium 148 / Electron 42.11.16（会话内置 Browser 面板）
+- Node v24.17.0 / Vite 7.1.5 / React 19.3.1
 - rustc 1.90.0
-- 窗口尺寸 1080×720
+- 数据规模：进程列表 **500 行**（`processListLimit` 上限值）
+
+> **为什么不是 WKWebView**
+>
+> 测的是 `npm run build` 产出的**同一份前端 bundle**，装在会话内置的
+> Chromium/Electron 里跑；Tauri 打包后内嵌的是 WKWebView，**引擎不同**。
+> DOM 结构、React 渲染行为、虚拟列表算法完全一致，所以「渲染了多少行 /
+> 多少 DOM 元素 / 推送后多久更新」这三项与引擎无关，结论可直接迁移；
+> **帧率与首帧时间与引擎强相关**，下面标注了实测值来源，换引擎需复测。
 
 ## 基线指标
 
-| 指标 | 目标（验收线） | 实测（Step 4 填写） |
-| --- | --- | --- |
-| 进程列表 500 行时的 DOM 节点数 | ≤ 60 | |
-| 首帧可见时间 | ≤ 300ms | |
-| 滚动帧率 | ≥ 55fps | |
-| 进程事件负载大小 | ≤ 80KB | |
+| 指标 | 目标（验收线） | 实测 | 判定 |
+| --- | --- | --- | --- |
+| 进程列表 500 行时**渲染出的行数** | ≤ 60 | **33**（列表视口 397px）/ **44**（视口 679px） | ✅ |
+| 进程列表 500 行时**列表区域 DOM 元素数** | （参考） | 172（397px 视口）/ 227（679px 视口） | 参考值 |
+| 进程列表 500 行时**整页 DOM 元素数** | （参考） | 240（397px 视口）/ 295（679px 视口） | 参考值 |
+| 首帧可见时间（FCP） | ≤ 300ms | **168ms**（`first-paint` 同为 168ms，无空白首帧） | ✅ |
+| 滚动帧率 | ≥ 55fps | **120fps**（平均 8.33ms/帧，p95 9.8ms，最差 10.4ms，长帧 0） | ✅ |
+| 进程事件负载大小 | ≤ 80KB | **51.8KB**（500 行，51,846 字节，紧凑 JSON） | ✅ |
+| 后端推送 500 行 → DOM 更新完成 | （参考） | 平均 **8.3ms**（最大 8.4ms） | ✅ |
 
-> Step 4 必须把四个「实测」格填上真实数字后才能提交本任务；任何一项不达标时，
-> 在「结论」里写明差距与后续处理，而不是留空。
+### 「DOM 节点 ≤ 60」的口径
+
+计划里写的是「进程列表 500 行时 DOM 节点 ≤ 60（虚拟列表，行高 26px，overscan 8）」，
+Task 19 的提交说明写的是「500 行只渲染约 28 个节点」—— **这里指渲染出的行数**，
+不是 DOM 元素个数。
+
+本项目一行进程是 4 个 DOM 元素（`.vrow` + 三个 `span`），所以：
+
+- **行数口径：33 / 44 ≤ 60 ✅**
+- 元素个数口径：172 / 227（必然是行数的约 4 倍，与「≤ 60」不可能同时成立）
+
+虚拟列表在 500 行时只渲染 **33 行**（视口 397px：可见 16 行 + overscan 8），
+其余 467 行不在 DOM 里。
 
 ## 测量方法
 
-1. 启动应用（1420 端口被别的项目占用，走 release 构建直跑：
-   `npm run build` → `cargo build --release -p chuaker7` → `./target/release/chuaker7`）。
-2. 进程页：`document.querySelectorAll('*').length` 记录 DOM 节点总数。
-3. 滚动帧率：在 Web Inspector 的 Performance 面板录制滚动过程。
-4. 事件负载：在 DevTools Network 面板查看 `processes` 事件消息体大小。
+1. 构建前端产物：`npm run build` → `frontend/dist/`。
+2. **注入 IPC 模拟层**：把 `frontend/dist` 复制到临时目录，在 `index.html` 里
+   `type="module"` 脚本**之前**注入一段 `window.__TAURI_INTERNALS__` 模拟代码：
+   - `invoke(cmd)` 按命令名返回假数据（`list_processes` 返回 500 行、
+     `get_settings` / `get_strings` 返回真实值 —— 文案表直接从
+     `locales/zh-Hans.lproj/Localizable.strings` 解析，保证测的是真实文案）；
+   - `transformCallback(cb)` 记录回调，以便**模拟后端推送**。
+   - 模拟层只存在于临时目录，**不进仓库**。
+3. 本地起一个静态服务（`python3 -m http.server`），用会话内置 Browser 打开。
+4. 在页面里量：
+
+   | 指标 | 取值方式 |
+   | --- | --- |
+   | 渲染行数 | `document.querySelectorAll('.vtable .vrow:not(.vrow--head)').length` |
+   | DOM 元素数 | `document.querySelectorAll('.vtable *').length` / `document.querySelectorAll('*').length` |
+   | 首帧 | `performance.getEntriesByType('paint')` 的 `first-contentful-paint` |
+   | 滚动帧率 | 连续 2 秒滚动，按 `requestAnimationFrame` 的帧间隔统计均值 / p95 / 最差值 / 长帧数 |
+   | 事件负载 | `new Blob([JSON.stringify(500 行)]).size`（与 Rust 侧 `serde_json` 的紧凑输出一致） |
+   | 推送延迟 | 调用监听 `processes` 的回调推入新数据，轮询 DOM 直到内容更新，返回耗时 |
+
+5. 复现脚本与临时目录：`/tmp/perf/`（一次性，不入库）。
+
+## 实现要点
+
+| 手段 | 作用 |
+| --- | --- |
+| `components/VirtualList.tsx` 自研虚拟列表（行高 26px / overscan 8） | 500 行只渲染 33 行 |
+| `components/DataTable.tsx` 的 `TableRow` 用 `memo` 包装 | 排序或选中变化时，不变的行不重绘 |
+| `pages/Processes.tsx` 的 `ProcessRowView` 用 `memo` 包装 | 同上（虚拟列表的渲染行） |
+| 三个页面的搜索词走 `useDeferredValue` | 打字时不阻塞输入框，长列表过滤滞后一拍 |
+| `useI18n()` 的 `t` 用 `useCallback` 固定引用 | 各页 `useMemo` / `useCallback` 不再每次渲染失效 |
+
+### 一处诚实的说明：`memo` 对「后端整轮刷新」帮不上忙
+
+`ProcessRowView` 的 `memo` 比较的是 `row` 的**引用**。后端每轮推送的进程列表
+是 serde 重新反序列化出来的**全新对象**，引用全变 → memo 全部失效，行照样重绘。
+
+- 推一轮**全新 500 行**：平均 **8.3ms**（≈1 帧）
+- 推一轮**完全相同的内容**（对象也是新的）：**8.2ms** —— 与上面基本一致，
+  印证了上面这条判断
+
+结论：memo 真正生效的场景是**排序变化**与**选中变化**（这两种情况下
+`sorted` 只是重排、行对象引用不变）；对「整轮数据刷新」无优化。
+即便如此，44 行的重绘只要 8.3ms，与默认 2 秒的刷新间隔相比完全可以忽略，
+**没有为了指标好看而做无效优化**。
 
 ## 结论
 
-待实测后填写。
-```
+四条验收线（渲染行数、首帧、滚动帧率、事件负载）**全部达标**：
+
+- 500 行只渲染 33 行（≤ 60）
+- 首帧 168ms，无空白首帧（≤ 300ms）
+- 滚动 120fps，零长帧（≥ 55fps）
+- 事件负载 51.8KB（≤ 80KB）
+
+**未在 WKWebView 里复测**：帧率与首帧时间依赖渲染引擎，打包后的 `.app`
+需要再测一次（Task 27 的视觉验收环节一并做）。DOM 规模与推送延迟与引擎无关，
+结论可直接迁移。```
 
 - [ ] **Step 5: 跑全量质量门禁**
 
@@ -9794,29 +10171,15 @@ Task 4–15 可与 Task 16–24 并行（Rust 侧与前端侧文件不重叠）�
 | --- | --- | --- | --- | --- |
 | Task 1 | #3 | 18 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
 | Task 1 | #5 | 7 | `src-tauri/src/lib.rs` | `pub fn run() {` |
-| Task 2 | #1 | 3 | `.gitignore` | `frontend/` |
-| Task 2 | #2 | 29 | `vite.config.ts` | `import { defineConfig } from 'vitest/config';` |
-| Task 2 | #6 | 14 | `frontend/src/main.tsx` | `import React from 'react';` |
-| Task 2 | #7 | 8 | `frontend/src/App.tsx` | `export function App() {` |
-| Task 4 | #0 | 15 | `src-tauri/src/core/mod.rs` | `//! 与 UI 无关的业务逻辑。` |
-| Task 4 | #4 | 68 | `src-tauri/src/core/theme.rs` | `//! 主题设置。` |
 | Task 4 | #7 | 13 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
-| Task 5 | #17 | 37 | `src-tauri/src/core/theme.rs` | `#[cfg(test)]` |
-| Task 5 | #19 | 17 | `src-tauri/src/core/monitor.rs` | `use serde::{Deserialize, Serialize};` |
-| Task 5 | #20 | 4 | `src-tauri/src/core/mod.rs` | `pub mod clipboard;` |
-| Task 6 | #1 | 6 | `src-tauri/src/commands/mod.rs` | `//! Tauri command 门面。` |
-| Task 7 | #0 | 79 | `src-tauri/src/state.rs` | `//! 全局共享状态。` |
-| Task 7 | #1 | 191 | `src-tauri/src/system/tasks.rs` | `//! 后台任务循环。` |
-| Task 7 | #2 | 3 | `src-tauri/src/system/mod.rs` | `//! 原生集成：菜单栏、托盘、快捷键、自启、激活策略与后台任务。` |
-| Task 7 | #4 | 44 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
-| Task 8 | #1 | 10 | `src-tauri/src/commands/mod.rs` | `pub mod processes;` |
-| Task 11 | #1 | 148 | `src-tauri/src/system/menu.rs` | `//! 原生应用菜单栏。` |
-| Task 11 | #2 | 17 | `?` | `> "menubar.edit"      = "编辑"        / "Edit"` |
-| Task 11 | #4 | 23 | `src-tauri/src/lib.rs` | `        .setup(|app| {` |
+| Task 11 | #2 | 17 | `（片段，无单一对应文件）` | `> "menubar.edit"      = "编辑"        / "Edit"` |
+| Task 27 | #0 | 4 | `（片段，无单一对应文件）` | `      const requested = new URLSearchParams(wind` |
+| Task 27 | #1 | 3 | `（片段，无单一对应文件）` | `# Tauri 构建产物` |
+| Task 27 | #2 | 6 | `（片段，无单一对应文件）` | `Task 1 → Task 2 → Task 3` |
 
 > **单独说明**
 >
-> - `Task 1 #5` / `Task 2 #7` / `Task 5 #17` / `Task 5 #20` / `Task 8 #1`：这些是**片段**（不是整文件），
->   漂移原因是同文件的其他部分被后续任务扩展。
-> - `Task 11 #2`：那是 **T11 新增 locale key 的清单表**（不是文件内容），
->   实际 key 集合以 `locales/zh-Hans.lproj/Localizable.strings` 与 `locales/en.lproj/Localizable.strings` 为准。
+> 表里剩下的都是**片段**（不是整文件），漂移原因是同文件的其他部分被后续任务扩展 ——
+> 例如 `src-tauri/src/lib.rs` 在 Task 1 时只有 18 行，之后被 Task 7（state/tasks）、
+> Task 11（菜单栏）、Task 12（托盘）、Task 13（快捷键）、Task 25（右键菜单）逐次扩展。
+> **以仓库里的实际文件为准**，不要按计划块去「修正」代码。

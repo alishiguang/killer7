@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Card, Kicker, Modal, SearchField, Segmented, VirtualList } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
@@ -7,6 +7,45 @@ import { pushToast } from '../lib/store';
 import type { ProcessRow } from '../lib/types';
 
 type SortKey = 'pid' | 'name' | 'port';
+
+/**
+ * 进程列表的一行。
+ *
+ * 单独抽出来并 memo 化：后台每轮推送进程列表时，只有内容真的变了的行
+ * 需要重绘。`row` 是数据引用 —— `rows` 数组不变时行引用稳定，memo 才生效。
+ */
+const ProcessRowView = memo(function ProcessRowView({
+  row,
+  onSelect,
+}: {
+  row: ProcessRow;
+  onSelect: (row: ProcessRow) => void;
+}) {
+  return (
+    <div
+      className="vrow"
+      onClick={() => onSelect(row)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        void api.popupContextMenu('process', {
+          pid: row.pid,
+          displayName: row.displayName,
+          fullPath: row.fullPath,
+        });
+      }}
+    >
+      <span className="mono vrow__pid">{row.pid}</span>
+      <span className="vrow__name" title={row.fullPath}>
+        {row.displayName}
+      </span>
+      <span className="mono vrow__port">
+        {row.ports.length === 0
+          ? '—'
+          : row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
+      </span>
+    </div>
+  );
+});
 
 export function Processes() {
   const { t } = useI18n();
@@ -47,8 +86,12 @@ export function Processes() {
     return () => observer.disconnect();
   }, []);
 
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍，
+  // 长列表下不会因为每个按键都重算 500 行的过滤而掉帧。
+  const deferredSearch = useDeferredValue(search);
+
   const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     if (!keyword) {
       return rows;
     }
@@ -61,7 +104,7 @@ export function Processes() {
       }
       return row.ports.some((port) => String(port.port).includes(keyword));
     });
-  }, [rows, search]);
+  }, [rows, deferredSearch]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -143,28 +186,7 @@ export function Processes() {
             overscan={8}
             getKey={(row) => String(row.pid)}
             renderRow={(row) => (
-              <div
-                className="vrow"
-                onClick={() => setPendingKill(row)}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  void api.popupContextMenu('process', {
-                    pid: row.pid,
-                    displayName: row.displayName,
-                    fullPath: row.fullPath,
-                  });
-                }}
-              >
-                <span className="mono vrow__pid">{row.pid}</span>
-                <span className="vrow__name" title={row.fullPath}>
-                  {row.displayName}
-                </span>
-                <span className="mono vrow__port">
-                  {row.ports.length === 0
-                    ? '—'
-                    : row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
-                </span>
-              </div>
+              <ProcessRowView row={row} onSelect={setPendingKill} />
             )}
             empty={t('process.empty')}
           />

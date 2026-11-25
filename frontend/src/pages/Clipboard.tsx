@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
 import { Card, DataTable, Kicker, SearchField, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
@@ -30,16 +30,24 @@ export function Clipboard() {
     };
   }, []);
 
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍。
+  const deferredSearch = useDeferredValue(search);
+
   const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     if (!keyword) {
       return history;
     }
     return history.filter((row) => row.content.toLowerCase().includes(keyword));
-  }, [history, search]);
+  }, [history, deferredSearch]);
 
   const reload = useCallback(async () => {
     setHistory(await api.clipboardHistory());
+  }, []);
+
+  // 行右键回调保持稳定引用，否则 DataTable 里的 memo 行组件每次渲染都重绘。
+  const handleRowContextMenu = useCallback((row: HistoryRow) => {
+    void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
   }, []);
 
   const columns = useMemo<Column<HistoryRow>[]>(
@@ -139,9 +147,7 @@ export function Clipboard() {
           columns={columns}
           items={filtered}
           getKey={(row) => String(row.id)}
-          onRowContextMenu={(row) => {
-            void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
-          }}
+          onRowContextMenu={handleRowContextMenu}
           empty={t('clipboard.empty')}
         />
       </Card>

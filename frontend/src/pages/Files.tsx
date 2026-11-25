@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
 import { Card, DataTable, Kicker, Modal, SearchField, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
@@ -48,13 +48,16 @@ export function Files() {
     });
   }, [cwd, load]);
 
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍。
+  const deferredSearch = useDeferredValue(search);
+
   const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     if (!keyword) {
       return rows;
     }
     return rows.filter((row) => row.name.toLowerCase().includes(keyword));
-  }, [rows, search]);
+  }, [rows, deferredSearch]);
 
   const columns = useMemo<Column<FileRow>[]>(
     () => [
@@ -150,6 +153,26 @@ export function Files() {
     },
     [load],
   );
+
+  // 行点击与行右键的回调保持稳定引用，否则 DataTable 里的 memo 行组件
+  // 每次渲染都会因为 props 变了而全部重绘。
+  const handleRowClick = useCallback(
+    (row: FileRow) => {
+      if (row.isDir) {
+        void enter(row);
+      }
+    },
+    [enter],
+  );
+
+  const handleRowContextMenu = useCallback((row: FileRow) => {
+    setContextRow(row);
+    void api.popupContextMenu('file', {
+      path: row.path,
+      name: row.name,
+      isDir: row.isDir,
+    });
+  }, []);
 
   const goUp = useCallback(async () => {
     const parent = await api.parentDir(cwd);
@@ -288,19 +311,8 @@ export function Files() {
           columns={columns}
           items={filtered}
           getKey={(row) => row.path}
-          onRowClick={(row) => {
-            if (row.isDir) {
-              void enter(row);
-            }
-          }}
-          onRowContextMenu={(row) => {
-            setContextRow(row);
-            void api.popupContextMenu('file', {
-              path: row.path,
-              name: row.name,
-              isDir: row.isDir,
-            });
-          }}
+          onRowClick={handleRowClick}
+          onRowContextMenu={handleRowContextMenu}
           empty={t('common.empty')}
         />
       </Card>
