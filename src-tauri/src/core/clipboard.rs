@@ -3,6 +3,7 @@
 //! Swift 版每秒比对 `NSPasteboard.changeCount` 判断剪贴板是否变化；Rust 版没有直接
 //! 的 changeCount 接口，改为每秒读取一次剪贴板文本并与上次内容比较，效果等价。
 
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -70,11 +71,6 @@ impl ClipboardManager {
         self.history = history;
     }
 
-    /// 把历史记录写回磁盘。
-    pub fn save_history(&self) {
-        persist_history(&self.history);
-    }
-
     /// 向历史记录头部插入一条内容，并裁剪到上限。
     ///
     /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]，
@@ -135,18 +131,29 @@ pub fn read_current() -> Option<String> {
     crate::core::platform::read_clipboard()
 }
 
-/// 把历史记录写到磁盘。
+/// 落盘的串行锁：保证同一时刻只有一个写者在改写历史文件。
+static PERSIST_LOCK: Mutex<()> = Mutex::new(());
+
+/// 把当前历史写到磁盘，返回失败原因。
 ///
-/// 单独拆成自由函数，是为了让调用方能在**释放剪贴板锁之后**再落盘：
-/// 磁盘 IO 可能耗时几十毫秒，持锁期间会把剪贴板轮询与所有剪贴板命令一起堵住。
-pub fn persist_history(history: &[HistoryEntry]) {
+/// `snapshot` 在**落盘锁内**被调用：快照必须取自「即将写入的那一刻」的内存状态。
+/// 否则两个写者（后台轮询 / 命令层）各自取快照再各自写，后写的旧快照会把先写的
+/// 新数据盖掉 —— 刚删掉的剪贴板条目会复活，新复制的条目会丢失。
+///
+/// 锁顺序固定为「落盘锁 → 剪贴板锁」，且任何路径都不会在持有剪贴板锁时去拿
+/// 落盘锁，因此不会死锁。
+pub fn persist_history<F>(snapshot: F) -> Result<(), String>
+where
+    F: FnOnce() -> Vec<HistoryEntry>,
+{
+    let _guard = PERSIST_LOCK.lock().map_err(|_| "落盘锁中毒".to_string())?;
+    let history = snapshot();
+    let text = serde_json::to_string_pretty(&history).map_err(|err| err.to_string())?;
     let path = clipboard_history_path();
     if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    if let Ok(text) = serde_json::to_string_pretty(history) {
-        let _ = std::fs::write(path, text);
-    }
+    std::fs::write(path, text).map_err(|err| err.to_string())
 }
 
 /// 规范化历史条目的 id：缺失（为 0）或重复时按顺序重排为 `1..=n`。
@@ -194,6 +201,28 @@ mod tests {
         normalize_ids(&mut history);
         assert_eq!(history[0].id, 1);
         assert_eq!(history[1].id, 2);
+    }
+
+    #[test]
+    fn add_to_history_reports_whether_it_changed() {
+        let mut manager = ClipboardManager::default();
+        assert!(manager.add_to_history("hello", "text"));
+        assert!(
+            !manager.add_to_history("hello", "text"),
+            "与上一条相同的内容不应重复记录"
+        );
+    }
+
+    #[test]
+    fn delete_history_item_reports_whether_it_changed() {
+        let mut manager = ClipboardManager::default();
+        assert!(manager.add_to_history("hello", "text"));
+        let id = manager.history[0].id;
+        assert!(manager.delete_history_item(id));
+        assert!(
+            !manager.delete_history_item(id),
+            "已经删掉的 id 再删一次应返回 false"
+        );
     }
 
     #[test]

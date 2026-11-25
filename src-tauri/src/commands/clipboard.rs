@@ -23,31 +23,43 @@ pub fn clipboard_history(state: State<'_, Arc<AppState>>) -> Vec<HistoryRow> {
 
 /// 删除一条历史（按稳定 id）。
 ///
-/// 只在锁内改内存，快照出来之后**在锁外落盘** —— 磁盘 IO 不该占着剪贴板锁。
+/// 只在锁内改内存，落盘在锁外 —— 磁盘 IO 不该占着剪贴板锁。
+/// 落盘失败会把错误回给前端：静默失败会让用户以为删掉了，重启后条目原样回来。
 #[tauri::command]
-pub fn remove_history_item(state: State<'_, Arc<AppState>>, id: u64) {
-    let snapshot = {
+pub fn remove_history_item(state: State<'_, Arc<AppState>>, id: u64) -> Result<(), String> {
+    let changed = {
         let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-        if manager.delete_history_item(id) {
-            Some(manager.history.clone())
-        } else {
-            None
-        }
+        manager.delete_history_item(id)
     };
-    if let Some(history) = snapshot {
-        clipboard::persist_history(&history);
+    if !changed {
+        return Ok(());
     }
+    clipboard::persist_history(|| {
+        state
+            .clipboard
+            .lock()
+            .expect("剪贴板锁中毒")
+            .history
+            .clone()
+    })
 }
 
 /// 清空历史。
 ///
-/// 只在锁内改内存，快照出来之后**在锁外落盘** —— 磁盘 IO 不该占着剪贴板锁。
+/// 只在锁内改内存，落盘在锁外 —— 磁盘 IO 不该占着剪贴板锁。
+/// 落盘失败会把错误回给前端。
 #[tauri::command]
-pub fn clear_history(state: State<'_, Arc<AppState>>) {
-    let snapshot = {
+pub fn clear_history(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    {
         let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
         manager.clear_history();
-        manager.history.clone()
-    };
-    clipboard::persist_history(&snapshot);
+    }
+    clipboard::persist_history(|| {
+        state
+            .clipboard
+            .lock()
+            .expect("剪贴板锁中毒")
+            .history
+            .clone()
+    })
 }

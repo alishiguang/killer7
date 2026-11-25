@@ -146,8 +146,8 @@ chuaker7/
 | | `watch_dir` | `path: String` | `()` |
 | 剪贴板 | `clipboard_current` | — | `String` |
 | | `clipboard_history` | — | `Vec<HistoryRow>` |
-| | `remove_history_item` | `id: u64` | `()` |
-| | `clear_history` | — | `()` |
+| | `remove_history_item` | `id: u64` | `Result<(), String>` |
+| | `clear_history` | — | `Result<(), String>` |
 | 监控 | `system_snapshot` | — | `SystemInfoDto` |
 | 插件 | `list_plugins` | — | `Vec<PluginRow>` |
 | | `reload_plugins` | — | `Vec<PluginRow>` |
@@ -1861,7 +1861,7 @@ AI-Tool: TophantAI"
 - Produces:
   - `core::process::{PortInfo, ProcessInfo, ProcessManager}`，`ProcessManager::collect(&mut self, limit) -> Vec<ProcessInfo>`（同步）、`ProcessManager::load_blocking(&mut self, limit)`
   - `core::files::{FileItem, FileManager, format_bytes}`，`FileManager::{load_files, navigate_to, go_up, create_folder, create_file, delete_file, rename_file}`
-  - `core::clipboard::{HistoryEntry, ClipboardManager}`，`HistoryEntry { id: u64, content: String, timestamp: i64, kind: String }`，`ClipboardManager::{load_history, save_history, add_to_history, delete_history_item(id), clear_history, copy_to_clipboard}`；`add_to_history` / `delete_history_item` **只改内存并返回 bool**，落盘走自由函数 `clipboard::persist_history(&history)`
+  - `core::clipboard::{HistoryEntry, ClipboardManager}`，`HistoryEntry { id: u64, content: String, timestamp: i64, kind: String }`，`ClipboardManager::{load_history, add_to_history, delete_history_item(id), clear_history, copy_to_clipboard}`；`add_to_history` / `delete_history_item` **只改内存并返回 bool**，落盘走自由函数 `clipboard::persist_history(|| …) -> Result<(), String>`（快照在落盘锁内取，错误回传前端）
   - `core::monitor::{SystemInfo, SystemMonitor}`，`SystemMonitor::push_sample`，`core::monitor::sample(...) -> SystemInfo`
   - `events::AppEvent`（crate 级枚举，线程与 UI 之间传递用）
 
@@ -2123,19 +2123,72 @@ pub struct HistoryEntry {
 调用方在释放锁之后把历史快照交给它：
 
 ```rust
-/// 把历史记录写到磁盘。
+/// 落盘的串行锁：保证同一时刻只有一个写者在改写历史文件。
+static PERSIST_LOCK: Mutex<()> = Mutex::new(());
+
+/// 把当前历史写到磁盘，返回失败原因。
 ///
-/// 单独拆成自由函数，是为了让调用方能在**释放剪贴板锁之后**再落盘：
-/// 磁盘 IO 可能耗时几十毫秒，持锁期间会把剪贴板轮询与所有剪贴板命令一起堵住。
-pub fn persist_history(history: &[HistoryEntry]) {
+/// `snapshot` 在**落盘锁内**被调用：快照必须取自「即将写入的那一刻」的内存状态。
+/// 否则两个写者（后台轮询 / 命令层）各自取快照再各自写，后写的旧快照会把先写的
+/// 新数据盖掉 —— 刚删掉的剪贴板条目会复活，新复制的条目会丢失。
+///
+/// 锁顺序固定为「落盘锁 → 剪贴板锁」，且任何路径都不会在持有剪贴板锁时去拿
+/// 落盘锁，因此不会死锁。
+pub fn persist_history<F>(snapshot: F) -> Result<(), String>
+where
+    F: FnOnce() -> Vec<HistoryEntry>,
+{
+    let _guard = PERSIST_LOCK.lock().map_err(|_| "落盘锁中毒".to_string())?;
+    let history = snapshot();
+    let text = serde_json::to_string_pretty(&history).map_err(|err| err.to_string())?;
     let path = clipboard_history_path();
     if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    if let Ok(text) = serde_json::to_string_pretty(history) {
-        let _ = std::fs::write(path, text);
-    }
+    std::fs::write(path, text).map_err(|err| err.to_string())
 }
+```
+
+> `snapshot` 是个闭包而不是切片：快照必须在**落盘锁内、写入之前**才取，
+> 这样「后写者」写的一定是最新状态，两个写者不会互相覆盖。
+> 落盘失败**要回传错误**（返回 `Result`），不能静默吞掉 ——
+> 磁盘满 / 权限不足时静默失败会让用户以为删掉了，重启后条目原样回来。
+
+`ClipboardManager` 的三个改内存方法都要返回「有没有真的改动」，
+调用方据此决定要不要落盘：
+
+```rust
+    /// 向历史记录头部插入一条内容，并裁剪到上限。
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]，
+    /// 避免磁盘 IO 期间占着剪贴板锁。返回是否真的插入了一条。
+    pub fn add_to_history(&mut self, content: &str, kind: &str) -> bool {
+```
+
+补两条单元测试，把「有没有真的改动」这个语义钉死：
+
+```rust
+    #[test]
+    fn add_to_history_reports_whether_it_changed() {
+        let mut manager = ClipboardManager::default();
+        assert!(manager.add_to_history("hello", "text"));
+        assert!(
+            !manager.add_to_history("hello", "text"),
+            "与上一条相同的内容不应重复记录"
+        );
+    }
+
+    #[test]
+    fn delete_history_item_reports_whether_it_changed() {
+        let mut manager = ClipboardManager::default();
+        assert!(manager.add_to_history("hello", "text"));
+        let id = manager.history[0].id;
+        assert!(manager.delete_history_item(id));
+        assert!(
+            !manager.delete_history_item(id),
+            "已经删掉的 id 再删一次应返回 false"
+        );
+    }
 ```
 
 > 参数用 `&mut [HistoryEntry]` 而不是 `&mut Vec<HistoryEntry>`：后者会触发 `clippy::ptr_arg`，
@@ -2891,18 +2944,24 @@ pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<AppState>) {
             }
             last = text.clone();
 
-            let snapshot = {
+            let changed = {
                 let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-                if manager.add_to_history(&text, "text") {
-                    Some(manager.history.clone())
-                } else {
-                    None
-                }
+                manager.add_to_history(&text, "text")
             };
 
             // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
-            if let Some(history) = snapshot {
-                clipboard::persist_history(&history);
+            if changed {
+                let result = clipboard::persist_history(|| {
+                    state
+                        .clipboard
+                        .lock()
+                        .expect("剪贴板锁中毒")
+                        .history
+                        .clone()
+                });
+                if let Err(err) = result {
+                    eprintln!("[clipboard] 落盘失败: {err}");
+                }
             }
 
             let _ = app.emit(EV_CLIPBOARD, text);
@@ -3471,33 +3530,45 @@ pub fn clipboard_history(state: State<'_, Arc<AppState>>) -> Vec<HistoryRow> {
 
 /// 删除一条历史（按稳定 id）。
 ///
-/// 只在锁内改内存，快照出来之后**在锁外落盘** —— 磁盘 IO 不该占着剪贴板锁。
+/// 只在锁内改内存，落盘在锁外 —— 磁盘 IO 不该占着剪贴板锁。
+/// 落盘失败会把错误回给前端：静默失败会让用户以为删掉了，重启后条目原样回来。
 #[tauri::command]
-pub fn remove_history_item(state: State<'_, Arc<AppState>>, id: u64) {
-    let snapshot = {
+pub fn remove_history_item(state: State<'_, Arc<AppState>>, id: u64) -> Result<(), String> {
+    let changed = {
         let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-        if manager.delete_history_item(id) {
-            Some(manager.history.clone())
-        } else {
-            None
-        }
+        manager.delete_history_item(id)
     };
-    if let Some(history) = snapshot {
-        clipboard::persist_history(&history);
+    if !changed {
+        return Ok(());
     }
+    clipboard::persist_history(|| {
+        state
+            .clipboard
+            .lock()
+            .expect("剪贴板锁中毒")
+            .history
+            .clone()
+    })
 }
 
 /// 清空历史。
 ///
-/// 只在锁内改内存，快照出来之后**在锁外落盘** —— 磁盘 IO 不该占着剪贴板锁。
+/// 只在锁内改内存，落盘在锁外 —— 磁盘 IO 不该占着剪贴板锁。
+/// 落盘失败会把错误回给前端。
 #[tauri::command]
-pub fn clear_history(state: State<'_, Arc<AppState>>) {
-    let snapshot = {
+pub fn clear_history(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    {
         let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
         manager.clear_history();
-        manager.history.clone()
-    };
-    clipboard::persist_history(&snapshot);
+    }
+    clipboard::persist_history(|| {
+        state
+            .clipboard
+            .lock()
+            .expect("剪贴板锁中毒")
+            .history
+            .clone()
+    })
 }
 ```
 
@@ -3542,10 +3613,8 @@ use crate::commands::dto::PluginRow;
 use crate::core::plugin::PluginManager;
 use crate::state::AppState;
 
-/// 列出已加载的插件。
-#[tauri::command]
-pub fn list_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
-    let plugins = state.plugins.lock().expect("插件锁中毒");
+/// 把插件清单映射成 DTO 行，并补上插件根目录。
+fn to_rows(plugins: &PluginManager) -> Vec<PluginRow> {
     let dir = plugins.plugins_dir().to_string_lossy().to_string();
     plugins
         .loaded_plugins
@@ -3558,21 +3627,19 @@ pub fn list_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
         .collect()
 }
 
+/// 列出已加载的插件。
+#[tauri::command]
+pub fn list_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
+    let plugins = state.plugins.lock().expect("插件锁中毒");
+    to_rows(&plugins)
+}
+
 /// 重新扫描插件目录。
 #[tauri::command]
 pub fn reload_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
     let mut plugins = state.plugins.lock().expect("插件锁中毒");
     plugins.load_plugins();
-    let dir = plugins.plugins_dir().to_string_lossy().to_string();
-    plugins
-        .loaded_plugins
-        .iter()
-        .map(|manifest| {
-            let mut row = PluginRow::from(manifest);
-            row.dir = dir.clone();
-            row
-        })
-        .collect()
+    to_rows(&plugins)
 }
 
 /// 插件目录路径。
@@ -7338,8 +7405,12 @@ export function Clipboard() {
               className="native-button"
               onClick={async (event) => {
                 event.stopPropagation();
-                await api.removeHistoryItem(row.id);
-                await reload();
+                try {
+                  await api.removeHistoryItem(row.id);
+                  await reload();
+                } catch (error) {
+                  pushToast('error', String(error));
+                }
               }}
             >
               {t('clipboard.delete')}
@@ -7365,8 +7436,12 @@ export function Clipboard() {
             type="button"
             className="native-button"
             onClick={async () => {
-              await api.clearHistory();
-              await reload();
+              try {
+                await api.clearHistory();
+                await reload();
+              } catch (error) {
+                pushToast('error', String(error));
+              }
             }}
           >
             {t('clipboard.clearHistory')}
@@ -8524,17 +8599,18 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
             notify(app, "info", "已复制到剪贴板");
         }
         ("ctx.clipboard.delete", ContextTarget::Clipboard { id, .. }) => {
-            let snapshot = {
+            let changed = {
                 let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-                if manager.delete_history_item(*id) {
-                    Some(manager.history.clone())
-                } else {
-                    None
-                }
+                manager.delete_history_item(*id)
             };
             // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
-            if let Some(history) = snapshot {
-                clipboard::persist_history(&history);
+            if changed {
+                let result = clipboard::persist_history(|| {
+                    state.clipboard.lock().expect("剪贴板锁中毒").history.clone()
+                });
+                if let Err(err) = result {
+                    eprintln!("[clipboard] 落盘失败: {err}");
+                }
             }
             notify(app, "info", "已删除");
         }

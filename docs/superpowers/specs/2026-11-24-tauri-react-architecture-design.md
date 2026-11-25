@@ -186,8 +186,8 @@ process 定时刷新 ─┘
 | | `watch_dir` | `path: String` | `()` |
 | 剪贴板 | `clipboard_current` | — | `String` |
 | | `clipboard_history` | — | `Vec<HistoryRow>` |
-| | `remove_history_item` | `id: u64` | `()` |
-| | `clear_history` | — | `()` |
+| | `remove_history_item` | `id: u64` | `Result<(), String>` |
+| | `clear_history` | — | `Result<(), String>` |
 | 监控 | `system_snapshot` | — | `SystemInfoDto` |
 | 插件 | `list_plugins` | — | `Vec<PluginRow>` |
 | | `reload_plugins` | — | `Vec<PluginRow>` |

@@ -75,18 +75,24 @@ pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<AppState>) {
             }
             last = text.clone();
 
-            let snapshot = {
+            let changed = {
                 let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-                if manager.add_to_history(&text, "text") {
-                    Some(manager.history.clone())
-                } else {
-                    None
-                }
+                manager.add_to_history(&text, "text")
             };
 
             // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
-            if let Some(history) = snapshot {
-                clipboard::persist_history(&history);
+            if changed {
+                let result = clipboard::persist_history(|| {
+                    state
+                        .clipboard
+                        .lock()
+                        .expect("剪贴板锁中毒")
+                        .history
+                        .clone()
+                });
+                if let Err(err) = result {
+                    eprintln!("[clipboard] 落盘失败: {err}");
+                }
             }
 
             let _ = app.emit(EV_CLIPBOARD, text);
