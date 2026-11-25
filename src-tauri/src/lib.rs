@@ -23,6 +23,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Arc::new(app_state))
+        .invoke_handler(commands::handler())
         .setup(|app| {
             let handle = app.handle().clone();
             let state = app.state::<Arc<AppState>>().inner().clone();

@@ -1,0 +1,42 @@
+//! 进程管理命令。
+
+use std::sync::Arc;
+
+use tauri::State;
+
+use crate::commands::dto::ProcessRow;
+use crate::core::process::ProcessManager;
+use crate::state::AppState;
+
+/// 列出当前进程列表。
+#[tauri::command]
+pub fn list_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
+    let processes = state.processes.lock().expect("进程锁中毒");
+    processes.processes.iter().map(ProcessRow::from).collect()
+}
+
+/// 触发一次进程列表刷新（同步采集后立即返回）。
+#[tauri::command]
+pub fn refresh_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
+    let limit = state
+        .settings
+        .lock()
+        .expect("设置锁中毒")
+        .process_list_limit;
+    let mut processes = state.processes.lock().expect("进程锁中毒");
+    let list = processes.collect(limit);
+    let rows = list.iter().map(ProcessRow::from).collect();
+    // 回写缓存，随后的 `list_processes` 才能拿到同一份数据。
+    processes.processes = list;
+    rows
+}
+
+/// 结束指定进程。
+#[tauri::command]
+pub fn kill_process(pid: i32) -> Result<bool, String> {
+    if ProcessManager::kill_process(pid) {
+        Ok(true)
+    } else {
+        Err(format!("结束进程 {pid} 失败，可能需要管理员权限"))
+    }
+}
