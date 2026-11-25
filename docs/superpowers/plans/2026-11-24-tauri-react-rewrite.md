@@ -3697,10 +3697,12 @@ AI-Tool: TophantAI"
 - Modify: `src-tauri/src/system/mod.rs`
 - Modify: `src-tauri/src/lib.rs`
 - Modify: `src-tauri/src/events.rs`
+- Modify: `locales/zh-Hans.lproj/Localizable.strings`
+- Modify: `locales/en.lproj/Localizable.strings`
 
 **Interfaces:**
 - Consumes: `core::i18n`（菜单文案）、`tauri::menu::*`
-- Produces: `system::menu::build(app: &AppHandle) -> tauri::Result<()>`；事件 `menu-action`（负载 `String`）
+- Produces: `system::menu::build(app: &AppHandle, locale: Locale) -> tauri::Result<()>`；事件 `menu-action`（负载 `String`）
 
 - [ ] **Step 1: 追加事件常量**
 
@@ -3720,9 +3722,15 @@ pub const EV_MENU_ACTION: &str = "menu-action";
 //! 关于、设置、隐藏、退出走 `PredefinedMenuItem`（系统原生行为），
 //! 视图切换走带 `Cmd+数字` 加速器的自定义项。
 //!
-//! 菜单文案走 `core::i18n`：`nav.*` / `menubar.*` 都有现成的 key。
-//! 「编辑 / 视图 / 窗口」三个下拉的标题**没有**对应 key，而 `locales/*.strings`
-//! 约定「不新增 key」，因此这三个标题保持硬编码中文。
+//! 菜单文案全部走 `core::i18n`。muda 0.20 在 `text=None` 时用的是它自己写死的
+//! 英文表（`muda-0.20.0/src/items/predefined.rs:305-308,434-487`），而 macOS 后端
+//! 用 `initWithTitle:` 显式设标题，AppKit 不再本地化 —— 实测本机 AppleLocale=zh_CN，
+//! 菜单仍然显示英文的 Hide / Hide Others / Show All / Undo / Cut / Minimize。
+//! 因此**每一个**预定义项都必须显式传文案，`locales/*.strings` 里为此备了
+//! `menubar.*` / `edit.*` / `window.*` / `view.fullscreen` 等 key。
+//!
+//! 「关于 / 隐藏 / 退出」三项按 macOS 惯例带应用名后缀，在 Rust 侧拼成
+//! `<动词> chuaker7`；应用名本身取自 `menubar.title`（= "chuaker7"）。
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter};
@@ -3734,12 +3742,18 @@ use crate::events::EV_MENU_ACTION;
 pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
     let i18n = I18n::new(locale);
 
+    // 应用名（"chuaker7"），用于拼「关于 / 隐藏 / 退出」三项。
+    let app_name = i18n.t("menubar.title");
+    let about_text = format!("{} {}", i18n.t("settings.about"), app_name);
+    let hide_text = format!("{} {}", i18n.t("menubar.hide"), app_name);
+    let quit_text = format!("{} {}", i18n.t("menubar.quitApp"), app_name);
+
     let app_menu = Submenu::with_items(
         app,
         i18n.t("menubar.title"),
         true,
         &[
-            &PredefinedMenuItem::about(app, Some("chuaker7"), None)?,
+            &PredefinedMenuItem::about(app, Some(about_text.as_str()), None)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(
                 app,
@@ -3749,33 +3763,26 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
                 Some("CmdOrCtrl+,"),
             )?,
             &PredefinedMenuItem::separator(app)?,
-            // 这三项**不能**传 None：muda 0.20.0 在 text=None 时用的是它自己写死的
-            // 英文表（`muda-0.20.0/src/items/predefined.rs:305-308,434-487`），而 macOS
-            // 后端用 `initWithTitle:` 显式设标题，AppKit 不再本地化 —— 实测本机
-            // AppleLocale=zh_CN，菜单仍然显示英文的 Hide / Hide Others / Show All。
-            // `locales/*.strings` 与 Swift 版共用、约定不新增 key，而这三项没有对应
-            // key，所以只能写死中文（应用以简体中文为主）；英文版会在这三处不一致，
-            // 属已知取舍。退出项有 `menubar.quit` key，走 i18n。
-            &PredefinedMenuItem::hide(app, Some("隐藏 chuaker7"))?,
-            &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
-            &PredefinedMenuItem::show_all(app, Some("显示全部"))?,
+            &PredefinedMenuItem::hide(app, Some(hide_text.as_str()))?,
+            &PredefinedMenuItem::hide_others(app, Some(&i18n.t("menubar.hideOthers")))?,
+            &PredefinedMenuItem::show_all(app, Some(&i18n.t("menubar.showAll")))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some(&i18n.t("menubar.quit")))?,
+            &PredefinedMenuItem::quit(app, Some(quit_text.as_str()))?,
         ],
     )?;
 
     let edit_menu = Submenu::with_items(
         app,
-        "编辑",
+        i18n.t("menubar.edit"),
         true,
         &[
-            &PredefinedMenuItem::undo(app, None)?,
-            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::undo(app, Some(&i18n.t("edit.undo")))?,
+            &PredefinedMenuItem::redo(app, Some(&i18n.t("edit.redo")))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::cut(app, None)?,
-            &PredefinedMenuItem::copy(app, None)?,
-            &PredefinedMenuItem::paste(app, None)?,
-            &PredefinedMenuItem::select_all(app, None)?,
+            &PredefinedMenuItem::cut(app, Some(&i18n.t("edit.cut")))?,
+            &PredefinedMenuItem::copy(app, Some(&i18n.t("edit.copy")))?,
+            &PredefinedMenuItem::paste(app, Some(&i18n.t("edit.paste")))?,
+            &PredefinedMenuItem::select_all(app, Some(&i18n.t("edit.selectAll")))?,
         ],
     )?;
 
@@ -3783,7 +3790,7 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
     // 会让同一个快捷键指向两个菜单项，macOS 只能二选一。
     let view_menu = Submenu::with_items(
         app,
-        "视图",
+        i18n.t("menubar.view"),
         true,
         &[
             &MenuItem::with_id(
@@ -3830,18 +3837,18 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
                 None::<&str>,
             )?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::fullscreen(app, None)?,
+            &PredefinedMenuItem::fullscreen(app, Some(&i18n.t("view.fullscreen")))?,
         ],
     )?;
 
     let window_menu = Submenu::with_items(
         app,
-        "窗口",
+        i18n.t("menubar.window"),
         true,
         &[
-            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::minimize(app, Some(&i18n.t("window.minimize")))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(app, None)?,
+            &PredefinedMenuItem::close_window(app, Some(&i18n.t("window.close")))?,
         ],
     )?;
 
@@ -3858,6 +3865,35 @@ pub fn on_menu_event(app: &AppHandle, id: &str) {
     }
 }
 ```
+
+> **本任务必须同时改两个 `locales/*.lproj/Localizable.strings`**，追加下列 key
+> （zh-Hans / en 各一份）。原因：muda 0.20 在 `text=None` 时用的是它写死的英文表，
+> 而 macOS 后端用 `initWithTitle:` 显式设标题 —— **预定义项永远不会是系统语言**，
+> 只有我们自己显式传文案才能本地化。
+>
+> ```
+> "menubar.edit"      = "编辑"        / "Edit"
+> "menubar.view"      = "视图"        / "View"
+> "menubar.window"    = "窗口"        / "Window"
+> "menubar.hide"      = "隐藏"        / "Hide"
+> "menubar.hideOthers"= "隐藏其他"    / "Hide Others"
+> "menubar.showAll"   = "显示全部"    / "Show All"
+> "menubar.quitApp"   = "退出"        / "Quit"
+> "edit.undo"         = "撤销"        / "Undo"
+> "edit.redo"         = "重做"        / "Redo"
+> "edit.cut"          = "剪切"        / "Cut"
+> "edit.copy"         = "拷贝"        / "Copy"
+> "edit.paste"        = "粘贴"        / "Paste"
+> "edit.selectAll"    = "全选"        / "Select All"
+> "window.minimize"   = "最小化"      / "Minimize"
+> "window.close"      = "关闭窗口"    / "Close Window"
+> "view.fullscreen"   = "全屏"        / "Toggle Full Screen"
+> ```
+>
+> 「关于 / 隐藏 / 退出」三项按 macOS 惯例带应用名后缀，在 Rust 侧拼成
+> `<动词> chuaker7`：关于用**已存在**的 `settings.about`（"关于" / "About"），
+> 应用名取 `menubar.title`（= "chuaker7"）。托盘菜单的「退出」继续用
+> `menubar.quit`（不带应用名，托盘里更自然）。
 
 `src-tauri/src/system/mod.rs` 追加模块声明：
 
@@ -4241,7 +4277,7 @@ AI-Tool: TophantAI"
 //! macOS 上 `GlobalHotKeyManager` 必须在主线程创建，否则注册会失败，
 //! 因此注册放在 Tauri 的 `setup()` 里（setup 运行在主线程）。
 
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
@@ -4251,9 +4287,19 @@ use tauri::{AppHandle, Runtime};
 static MANAGER: Mutex<Option<GlobalHotKeyManager>> = Mutex::new(None);
 /// 已注册的热键。
 static HOTKEY: Mutex<Option<HotKey>> = Mutex::new(None);
+/// 监听线程的启动闸门（全局只允许拉起一次）。
+static LISTENER: Once = Once::new();
 
 /// 注册 ⌘+L 并启动监听线程。
+///
+/// 幂等：已经注册过就直接返回成功。macOS 的 `RegisterEventHotKey` 对重复注册返回
+/// `eventHotKeyExistsErr`（`global_hotkey::Error::AlreadyRegistered`），不挡住的话，
+/// 每次「启用」都会再建一个管理器、并多拉起一个监听线程。
 pub fn register<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    if HOTKEY.lock().expect("快捷键锁中毒").is_some() {
+        return Ok(());
+    }
+
     let manager =
         GlobalHotKeyManager::new().map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!(e)))?;
     let hotkey = HotKey::new(Some(Modifiers::META), Code::KeyL);
@@ -4265,14 +4311,16 @@ pub fn register<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     *MANAGER.lock().expect("快捷键锁中毒") = Some(manager);
     *HOTKEY.lock().expect("快捷键锁中毒") = Some(hotkey);
 
-    let handle = app.clone();
-    std::thread::spawn(move || {
-        let receiver = GlobalHotKeyEvent::receiver();
-        while let Ok(event) = receiver.recv() {
-            if event.id == id && event.state == global_hotkey::HotKeyState::Pressed {
-                crate::system::tray::show_main_window(&handle);
+    LISTENER.call_once(|| {
+        let handle = app.clone();
+        std::thread::spawn(move || {
+            let receiver = GlobalHotKeyEvent::receiver();
+            while let Ok(event) = receiver.recv() {
+                if event.id == id && event.state == global_hotkey::HotKeyState::Pressed {
+                    crate::system::tray::show_main_window(&handle);
+                }
             }
-        }
+        });
     });
 
     Ok(())
@@ -4283,13 +4331,12 @@ pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) {
     if enabled {
         let _ = register(app);
     } else {
+        // 先把两者从静态槽里取出来，再做注销，避免持锁调用原生 API。
         let hotkey = HOTKEY.lock().expect("快捷键锁中毒").take();
-        if let (Some(hotkey), Some(manager)) =
-            (hotkey, MANAGER.lock().expect("快捷键锁中毒").as_ref())
-        {
+        let manager = MANAGER.lock().expect("快捷键锁中毒").take();
+        if let (Some(hotkey), Some(manager)) = (hotkey, manager) {
             let _ = manager.unregister(hotkey);
         }
-        *MANAGER.lock().expect("快捷键锁中毒") = None;
     }
 }
 ```
@@ -4366,14 +4413,15 @@ cargo build --release -p chuaker7
 ```
 
 Expected：
-- ⌘L 能把窗口从后台唤到前台。
-- 在设置里打开「菜单栏模式」后，Dock 图标消失，菜单栏仍有托盘图标；关掉后 Dock 图标回来。
+- ⌘L 能把窗口从后台唤到前台（这是本任务**唯一**可在本任务内验收的原生行为）。
+- 「菜单栏模式」的开关命令 `set_menu_bar_mode` 属于 **Task 15**，本任务只提供
+  `system::activation::set_accessory_mode` 能力，不在本任务内验收 Dock 图标消失。
 
 - [ ] **Step 5: 提交**
 
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
-git add -A
+git add src-tauri/src/system/shortcut.rs src-tauri/src/system/activation.rs src-tauri/src/system/mod.rs src-tauri/src/lib.rs
 git commit -m "feat: 全局快捷键 ⌘L 与 Dock/菜单栏模式切换
 
 - global-hotkey 在主线程注册，⌘L 唤起主窗口
