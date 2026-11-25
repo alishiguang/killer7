@@ -221,7 +221,7 @@ type Notice = { kind: 'info' | 'error'; message: string };
 - [ ] **Step 1: 用 mavis-trash 归档 egui 源码，保留可回退能力**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 "/Users/lishiguang/.minimax/bin/mavis-trash" -- "src" "build.rs"
 ```
 
@@ -538,7 +538,7 @@ console.log(`wrote ${out} (${SIZE}x${SIZE}, ${png.length} bytes)`);
 - [ ] **Step 8: 生成图标并跑通构建**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 node scripts/make-icon.mjs scripts/icon-source.png
 npx --yes @tauri-apps/cli@2.12.6 icon scripts/icon-source.png
 cargo build -p killer7
@@ -554,7 +554,7 @@ Expected：
 - [ ] **Step 9: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移到 Tauri v2 workspace 骨架
 
@@ -589,7 +589,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 固定 Node 版本并写 `.nvmrc`**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 printf '24.17.0\n' > .nvmrc
 source ~/.nvm/nvm.sh && nvm use
 node -v
@@ -785,7 +785,7 @@ frontend/dist/
 - [ ] **Step 8: 安装依赖并验证**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm install
 npm run typecheck
@@ -801,7 +801,7 @@ Expected：
 - [ ] **Step 9: 端到端验证 Tauri 窗口**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run tauri dev
 ```
@@ -811,7 +811,7 @@ Expected：弹出名为 killer7 的窗口，尺寸 1080×720，窗口内显示�
 - [ ] **Step 10: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 前端脚手架 —— Vite 7 + React 19 + TypeScript 5.9
 
@@ -955,7 +955,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 3: 暴露字体静态资源**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 mkdir -p frontend/public/fonts
 cp assets/fonts/Anton-Regular.ttf assets/fonts/GeistMono-Variable.ttf frontend/public/fonts/
 ```
@@ -1271,7 +1271,7 @@ describe('cindy.cn 设计令牌', () => {
 - [ ] **Step 7: 跑测试与类型检查**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test
 npm run typecheck
@@ -1282,7 +1282,7 @@ Expected：`tokens.test.ts` 3 个用例全 PASS；`typecheck` 退出码 0。
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 设计令牌与 macOS 化基础样式
 
@@ -1718,7 +1718,7 @@ pub fn run() {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo test -p killer7
 cargo clippy -p killer7 --all-targets
 ```
@@ -1728,7 +1728,7 @@ Expected：所有测试 PASS，`clippy` **0 warning**。
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移 core 纯逻辑模块（平台/图标/本地化/设置/主题/插件）
 
@@ -2118,7 +2118,7 @@ pub mod events;
 - [ ] **Step 7: 跑测试与静态检查**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt
 cargo test -p killer7
 cargo clippy -p killer7 --all-targets
@@ -2129,7 +2129,7 @@ Expected：测试数 ≥ 19（egui 版基线）且全 PASS；`clippy` 0 warning�
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移 core 取数模块并解耦线程调度
 
@@ -2458,7 +2458,7 @@ pub mod dto;
 `src-tauri/src/lib.rs` 追加 `pub mod commands;`。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo test -p killer7 && cargo clippy -p killer7 --all-targets
 ```
 
@@ -2467,7 +2467,7 @@ Expected：DTO 三个测试 PASS；`clippy` 0 warning。
 - [ ] **Step 4: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 新增前后端 DTO 契约层
 
@@ -2815,7 +2815,7 @@ pub fn run() {
 - [ ] **Step 6: 编译验证**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
 ```
 
@@ -2826,7 +2826,7 @@ Expected：编译通过，0 warning。
 - [ ] **Step 7: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 引入 AppState 与后台任务循环
 
@@ -2930,7 +2930,7 @@ pub fn handler() -> InvokeHandler {
 - [ ] **Step 3: 编译并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
 git add -A
 git commit -m "feat: 进程管理命令
@@ -3159,7 +3159,7 @@ pub fn watch_dir(
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
 git add -A
 git commit -m "feat: 文件管理命令与目录监听重建
@@ -3335,7 +3335,7 @@ pub fn plugins_dir() -> String {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
 git add -A
 git commit -m "feat: 剪贴板 / 监控 / 插件命令
@@ -3551,7 +3551,7 @@ pub fn popup_context_menu(app: AppHandle, kind: String, payload: serde_json::Val
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
 git add -A
 git commit -m "feat: 设置、文案与系统命令
@@ -3722,7 +3722,7 @@ Builder 追加：
 - [ ] **Step 4: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p killer7
 npm run tauri dev
 ```
@@ -3732,7 +3732,7 @@ Expected：窗口出现后，屏幕顶部出现 macOS 菜单栏，含「killer7 
 - [ ] **Step 5: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 原生 macOS 应用菜单栏
 
@@ -3909,7 +3909,7 @@ Builder 追加：
 - [ ] **Step 3: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p killer7
 npm run tauri dev
 ```
@@ -3919,7 +3919,7 @@ Expected：菜单栏右侧出现小鸟图标；左键点击弹出菜单，显示
 - [ ] **Step 4: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 托盘图标与原生托盘菜单
 
@@ -4059,7 +4059,7 @@ pub fn set_accessory_mode<R: Runtime>(enabled: bool, _app: &AppHandle<R>) {
 - [ ] **Step 4: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
 npm run tauri dev
 ```
@@ -4071,7 +4071,7 @@ Expected：
 - [ ] **Step 5: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 全局快捷键 ⌘L 与 Dock/菜单栏模式切换
 
@@ -4229,7 +4229,7 @@ pub mod tray;
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p killer7 && cargo test -p killer7 && cargo clippy -p killer7 --all-targets
 git add -A
 git commit -m "feat: 开机自启（LaunchAgent）
@@ -4695,7 +4695,7 @@ describe('translate', () => {
 - [ ] **Step 8: 跑测试并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -5429,7 +5429,7 @@ describe('Modal', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -5918,7 +5918,7 @@ describe('AppShell', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6262,7 +6262,7 @@ describe('Processes', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6731,7 +6731,7 @@ describe('Files', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6935,7 +6935,7 @@ function formatTime(seconds: number): string {
 `frontend/src/pages/Clipboard.test.tsx`：mock `api.clipboardCurrent` / `api.clipboardHistory` / `onEvent`，断言「当前剪贴板」「历史记录」两个卡片标题出现，以及历史条目文本出现。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7072,7 +7072,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 `frontend/src/pages/Monitor.test.tsx`：mock `api.systemSnapshot` 返回固定数值，断言四个指标标签与数值出现。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7219,7 +7219,7 @@ export function Plugins() {
 `frontend/src/pages/Plugins.test.tsx`：mock `api.listPlugins` 返回一条插件，断言插件名与版本出现；返回空数组时断言空态文案。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7454,7 +7454,7 @@ export function Settings() {
 `frontend/src/pages/Settings.test.tsx`：mock `api.updateSettings` 与 `api.getSettings`，断言「外观」「性能」「启动项」「关于」四个卡片标题出现，且主题分段控件可渲染。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7793,7 +7793,7 @@ fn notify(app: &AppHandle, kind: &str, message: &str) {
 - [ ] **Step 5: 验收并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
 source ~/.nvm/nvm.sh && nvm use && npm run test && npm run typecheck
 npm run tauri dev
@@ -8038,7 +8038,7 @@ import { useDeferredValue } from 'react';
 - [ ] **Step 5: 跑全量质量门禁**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cargo fmt --check
 cargo clippy --all-targets
 cargo test
@@ -8086,7 +8086,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 启动前端并截图**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run dev &
 sleep 4
@@ -8157,7 +8157,7 @@ src-tauri/gen/
 - [ ] **Step 5: 构建可分发包**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run tauri build
 ```
@@ -8180,13 +8180,13 @@ Expected：进程列表包含 `killer7`。
 
 ```bash
 cd src-tauri/target/release/bundle/macos
-zip -r /Users/lishiguang/aiworkspace/killer7/release/killer7.zip killer7.app
+zip -r /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react/release/killer7.zip killer7.app
 ```
 
 - [ ] **Step 6: 提交并推送**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git add -A
 git commit -m "docs: 更新 README 与界面预览，产出可分发 .app 包
 
@@ -8198,10 +8198,10 @@ AI-Coding: true
 AI-Tool: TophantAI"
 ```
 
-推送（用 `GIT_ASKPASS` 注入凭证，脚本用完即删）：
+推送当前分支（用 `GIT_ASKPASS` 注入凭证，脚本用完即删）：
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 cat > /tmp/k7-askpass.sh <<'EOF'
 #!/bin/sh
 case "$1" in
@@ -8210,16 +8210,17 @@ case "$1" in
 esac
 EOF
 chmod +x /tmp/k7-askpass.sh
-KILLER7_TOKEN="<从安全位置读取的 PAT>" GIT_ASKPASS=/tmp/k7-askpass.sh GIT_TERMINAL_PROMPT=0 git push origin main
+KILLER7_TOKEN="<从安全位置读取的 PAT>" GIT_ASKPASS=/tmp/k7-askpass.sh GIT_TERMINAL_PROMPT=0 git push -u origin feat/tauri-react-rewrite
 "/Users/lishiguang/.minimax/bin/mavis-trash" -- "/tmp/k7-askpass.sh"
 ```
 
 > PAT 不得写进脚本、提交或日志。执行前从密码管理器 / 密钥链读取并只放进环境变量；脚本用完立刻用 `mavis-trash` 删除。
+> 合并回 `main` 由 `superpowers:finishing-a-development-branch` 收尾时处理（合并 → 跑测试 → 推送 main）。
 
 - [ ] **Step 7: 收尾核对**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7
+cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
 git status --short          # 应为空
 git log --oneline -5        # 确认新提交
 git branch -a               # legacy-egui 仍在
