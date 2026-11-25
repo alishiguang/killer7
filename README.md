@@ -13,6 +13,22 @@ Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保�
 
 ---
 
+## 下载
+
+仓库内已附带构建好的产物（Apple Silicon）：
+
+| 文件 | 说明 |
+| --- | --- |
+| [`release/Ki6_1.2.0_aarch64.dmg`](release/Ki6_1.2.0_aarch64.dmg) | 磁盘映像，双击后拖进「应用程序」 |
+| [`release/Ki6.zip`](release/Ki6.zip) | `Ki6.app` 的压缩包，解压即用 |
+
+首次运行是未签名的（ad-hoc 签名），Gatekeeper 会拦截 —— 在「系统设置 → 隐私与安全性」
+里点「仍要打开」，或右键点「打开」。
+
+> 最低系统版本 macOS 12.0。
+
+---
+
 ## 界面预览
 
 | 进程管理 | 文件管理 | 剪贴板 |
@@ -23,8 +39,9 @@ Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保�
 | --- | --- | --- |
 | ![系统监控](docs/screenshots/tauri-monitor.png) | ![插件](docs/screenshots/tauri-plugins.png) | ![设置](docs/screenshots/tauri-settings.png) |
 
-> 截图取自真实运行数据（真实进程、真实目录、真实剪贴板内容），
-> 渲染引擎为 Chromium / WKWebView 等价的 Blink 排版路径。
+> 截图取自真实运行数据（真实进程、真实目录、真实剪贴板内容）。
+> 截图在 Chromium headless 里渲染 —— CSS、字体、布局与 WKWebView 同源，
+> 但不是 WKWebView 实拍。
 
 ---
 
