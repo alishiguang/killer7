@@ -2013,15 +2013,17 @@ pub struct HistoryEntry {
 
 在文件末尾（`#[cfg(test)]` 之前）加自由函数：
 
+> 参数用 `&mut [HistoryEntry]` 而不是 `&mut Vec<HistoryEntry>`：后者会触发 `clippy::ptr_arg`，
+> 与本任务 Step 7「clippy 0 warning」的 Expected 冲突。调用点传 `&mut history`（`history` 是 `Vec`）
+> 靠 deref coercion 即可，无需改动。
+>
+> 语义提醒：只有在 id **缺失或重复**时才重排。已经是稀疏但唯一的 id 会原样保留，
+> 因此 id **不保证连续**——命令层不要假设 id 连续，`next_id` 取现有最大值。
+> 另外 `load_history` 规范化后**不写回磁盘**，磁盘上仍是旧 id，
+> 直到下一次 `add_to_history` / `delete_history_item` 才落盘（规范化是幂等的，无数据丢失）。
+
 ```rust
 /// 规范化历史条目的 id：缺失（为 0）或重复时按顺序重排为 `1..=n`。
-///
-/// 参数用 `&mut [HistoryEntry]` 而不是 `&mut Vec<HistoryEntry>`：后者会触发
-/// `clippy::ptr_arg`，与本任务 Step 7「clippy 0 warning」的 Expected 冲突。
-/// 调用点传 `&mut history`（`history` 是 `Vec`）靠 deref coercion 即可，无需改动。
-///
-/// 注意：只有在 id **缺失或重复**时才重排。已经是稀疏但唯一的 id 会原样保留，
-/// 因此 id **不保证连续**——命令层不要假设 id 连续。
 pub fn normalize_ids(history: &mut [HistoryEntry]) {
     let mut seen: Vec<u64> = Vec::with_capacity(history.len());
     let mut needs_rewrite = false;
@@ -2045,7 +2047,6 @@ pub fn normalize_ids(history: &mut [HistoryEntry]) {
 ```
 
 `ClipboardManager` 结构体加字段：
-
 ```rust
 pub struct ClipboardManager {
     /// 当前剪贴板文本。
