@@ -4379,8 +4379,14 @@ pub fn set_accessory_mode<R: Runtime>(enabled: bool, _app: &AppHandle<R>) {
 
 ```rust
 pub mod activation;
+pub mod menu;
 pub mod shortcut;
+pub mod tasks;
+pub mod tray;
 ```
+
+> `rustfmt` 的 `reorder_modules` 默认开启，`mod` 声明会按字母序重排 ——
+> 补完这两行后整个文件的**全文**就是上面这五行，不要按追加顺序写。
 
 > 同理：不写这两行，`shortcut.rs` 与 `activation.rs` 都不会被编译。
 - [ ] **Step 3: 接入 setup**
@@ -4388,6 +4394,7 @@ pub mod shortcut;
 `src-tauri/src/lib.rs` setup 内追加：
 
 ```rust
+            // 全局快捷键 ⌘L：默认关闭，开了才注册（设置项可热更新）。
             {
                 let shortcut_enabled = state
                     .settings

@@ -33,6 +33,18 @@ pub fn run() {
             crate::system::menu::build(&handle, locale)?;
             crate::system::tray::build(&handle, locale)?;
 
+            // 全局快捷键 ⌘L：默认关闭，开了才注册（设置项可热更新）。
+            {
+                let shortcut_enabled = state
+                    .settings
+                    .lock()
+                    .expect("设置锁中毒")
+                    .global_shortcut_enabled;
+                if shortcut_enabled {
+                    let _ = crate::system::shortcut::register(&handle);
+                }
+            }
+
             crate::system::tasks::spawn_process_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_clipboard_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_monitor_loop(
