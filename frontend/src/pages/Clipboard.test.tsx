@@ -65,6 +65,7 @@ describe('Clipboard', () => {
 
   it('渲染清空历史按钮', async () => {
     render(<Clipboard />);
-    expect(await screen.findByText('清空历史')).toBeInTheDocument();
+    // 按钮改成图标后，文字只存在于 aria-label 里，按无障碍名称断言。
+    expect(await screen.findByRole('button', { name: '清空历史' })).toBeInTheDocument();
   });
 });

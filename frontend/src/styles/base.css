@@ -532,7 +532,7 @@ figure {
 
 .row-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
 }
 
 .clipboard-current {

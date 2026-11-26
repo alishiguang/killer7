@@ -91,8 +91,8 @@ describe('Files', () => {
 
   it('显示新建文件夹与新建文件按钮', async () => {
     render(<Files />);
-    expect(await screen.findByText('新建文件夹')).toBeInTheDocument();
-    expect(await screen.findByText('新建文件')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '新建文件夹' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '新建文件' })).toBeInTheDocument();
   });
 
   it('右键一行时弹出原生菜单并带上行数据', async () => {

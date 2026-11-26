@@ -1,6 +1,7 @@
 export { Card } from './Card';
 export { Checkbox } from './Checkbox';
 export { DataTable, type Column } from './DataTable';
+export { Icon, type IconName } from './Icon';
 export { Kicker } from './Kicker';
 export { Modal } from './Modal';
 export { SearchField } from './SearchField';

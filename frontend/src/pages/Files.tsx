@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
-import { Card, DataTable, Kicker, Modal, type Column } from '../components';
+import { Card, DataTable, Icon, Kicker, Modal, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
 import { pushToast, useAppStore } from '../lib/store';
@@ -93,53 +93,62 @@ export function Files() {
       {
         key: 'action',
         title: t('file.column.action'),
-        // 三个操作按钮（进入文件夹 / 重命名 / 删除）挤在 180px 里会溢出卡片右边界。
-        width: 230,
+        // 三个操作按钮（进入文件夹 / 重命名 / 删除）改成图标后，
+        // 原来为文字按钮准备的 230px 就富余了，收窄到 96px。
+        width: 96,
         render: (row) => (
           <div className="row-actions">
             {row.isDir ? (
               <button
                 type="button"
-                className="native-button"
+                className="native-button native-button--icon"
+                title={t('file.openFolder')}
+                aria-label={t('file.openFolder')}
                 onClick={(event) => {
                   event.stopPropagation();
                   void enter(row);
                 }}
               >
-                {t('file.openFolder')}
+                <Icon name="folder-open" />
               </button>
             ) : (
               <button
                 type="button"
-                className="native-button"
+                className="native-button native-button--icon"
+                title={t('file.reveal')}
+                aria-label={t('file.reveal')}
                 onClick={(event) => {
                   event.stopPropagation();
                   void api.revealInFinder(row.path);
                 }}
               >
-                {t('file.reveal')}
+                <Icon name="external-link" />
               </button>
             )}
             <button
               type="button"
-              className="native-button"
+              className="native-button native-button--icon"
+              title={t('file.rename')}
+              aria-label={t('file.rename')}
               onClick={(event) => {
                 event.stopPropagation();
                 setRenaming(row);
                 setRenameValue(row.name);
               }}
             >
-              {t('file.rename')}
+              <Icon name="pencil" />
             </button>
             <button
               type="button"
-              className="native-button"
+              className="native-button native-button--icon"
+              title={t('file.delete')}
+              aria-label={t('file.delete')}
               onClick={(event) => {
                 event.stopPropagation();
                 void remove(row);
               }}
             >
-              {t('file.delete')}
+              <Icon name="trash" />
             </button>
           </div>
         ),
@@ -270,7 +279,9 @@ export function Files() {
         <div className="page__tools">
           <button
             type="button"
-            className="native-button"
+            className="native-button native-button--icon"
+            title={t('file.openFolder')}
+            aria-label={t('file.openFolder')}
             onClick={async () => {
               const picked = await api.pickDirectory();
               if (!picked) {
@@ -281,30 +292,40 @@ export function Files() {
               await api.watchDir(picked);
             }}
           >
-            {t('file.openFolder')}
-          </button>
-          <button type="button" className="native-button" onClick={() => void goUp()}>
-            {t('common.back')}
+            <Icon name="folder" />
           </button>
           <button
             type="button"
-            className="native-button"
+            className="native-button native-button--icon"
+            title={t('common.back')}
+            aria-label={t('common.back')}
+            onClick={() => void goUp()}
+          >
+            <Icon name="arrow-up" />
+          </button>
+          <button
+            type="button"
+            className="native-button native-button--icon"
+            title={t('file.newFile')}
+            aria-label={t('file.newFile')}
             onClick={() => {
               setCreating('file');
               setCreateValue('');
             }}
           >
-            {t('file.newFile')}
+            <Icon name="file-plus" />
           </button>
           <button
             type="button"
-            className="native-button"
+            className="native-button native-button--icon"
+            title={t('file.newFolder')}
+            aria-label={t('file.newFolder')}
             onClick={() => {
               setCreating('folder');
               setCreateValue('');
             }}
           >
-            {t('file.newFolder')}
+            <Icon name="folder-plus" />
           </button>
         </div>
       </div>

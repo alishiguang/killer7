@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
-import { Card, DataTable, Kicker, type Column } from '../components';
+import { Card, DataTable, Icon, Kicker, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
 import { pushToast, useAppStore } from '../lib/store';
@@ -88,18 +88,22 @@ export function Clipboard() {
           <div className="row-actions">
             <button
               type="button"
-              className="native-button"
+              className="native-button native-button--icon"
+              title={t('clipboard.copy')}
+              aria-label={t('clipboard.copy')}
               onClick={async (event) => {
                 event.stopPropagation();
                 await api.copyText(row.content);
                 pushToast('info', t('clipboard.copied'));
               }}
             >
-              {t('clipboard.copy')}
+              <Icon name="copy" />
             </button>
             <button
               type="button"
-              className="native-button"
+              className="native-button native-button--icon"
+              title={t('clipboard.delete')}
+              aria-label={t('clipboard.delete')}
               onClick={async (event) => {
                 event.stopPropagation();
                 try {
@@ -110,7 +114,7 @@ export function Clipboard() {
                 }
               }}
             >
-              {t('clipboard.delete')}
+              <Icon name="trash" />
             </button>
           </div>
         ),
@@ -126,7 +130,9 @@ export function Clipboard() {
         <div className="page__tools">
           <button
             type="button"
-            className="native-button"
+            className="native-button native-button--icon"
+            title={t('clipboard.clearHistory')}
+            aria-label={t('clipboard.clearHistory')}
             onClick={async () => {
               try {
                 await api.clearHistory();
@@ -136,7 +142,7 @@ export function Clipboard() {
               }
             }}
           >
-            {t('clipboard.clearHistory')}
+            <Icon name="x-circle" />
           </button>
         </div>
       </div>

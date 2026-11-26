@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 
-import { Card, Kicker, Modal, Segmented, VirtualList } from '../components';
+import { Card, Icon, Kicker, Modal, Segmented, VirtualList } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
 import { pushToast, useAppStore } from '../lib/store';
@@ -173,8 +173,14 @@ export function Processes() {
       <div className="page__head">
         <Kicker index="01">{t('process.title')}</Kicker>
         <div className="page__tools">
-          <button type="button" className="native-button" onClick={() => void onRefresh()}>
-            {t('process.refresh')}
+          <button
+            type="button"
+            className="native-button native-button--icon"
+            title={t('process.refresh')}
+            aria-label={t('process.refresh')}
+            onClick={() => void onRefresh()}
+          >
+            <Icon name="refresh" />
           </button>
         </div>
       </div>

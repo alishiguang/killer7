@@ -120,6 +120,25 @@
   background: color-mix(in srgb, var(--accent) 86%, var(--bg));
 }
 
+/* 图标按钮：只画图标，文字留给 tooltip 与 aria-label */
+.native-button--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  color: var(--text-muted);
+}
+
+.native-button--icon:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.native-button--icon .icon {
+  display: block;
+}
+
 /* 分段控件 */
 .segmented {
   display: inline-flex;
