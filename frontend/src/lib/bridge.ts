@@ -7,7 +7,6 @@ import { open } from '@tauri-apps/plugin-dialog';
 import type {
   FileRow,
   HistoryRow,
-  PluginRow,
   ProcessRow,
   Settings,
   SettingsPatch,
@@ -50,10 +49,6 @@ export const api = {
   clearHistory: () => invoke<void>('clear_history'),
 
   systemSnapshot: () => invoke<SystemInfoDto>('system_snapshot'),
-
-  listPlugins: () => invoke<PluginRow[]>('list_plugins'),
-  reloadPlugins: () => invoke<PluginRow[]>('reload_plugins'),
-  pluginsDir: () => invoke<string>('plugins_dir'),
 
   getSettings: () => invoke<Settings>('get_settings'),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>('update_settings', { patch }),

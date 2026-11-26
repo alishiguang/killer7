@@ -137,7 +137,6 @@
 "nav.clipboard" = "剪贴板";
 "nav.monitor" = "系统监控";
 "nav.settings" = "设置";
-"nav.plugins" = "插件";
 
 "common.search" = "搜索";
 "common.all" = "全部";
@@ -193,15 +192,7 @@
 "settings.theme.light" = "浅色模式";
 "settings.theme.dark" = "深色模式";
 "settings.general" = "通用";
-"settings.plugin.dir" = "插件目录";
-"settings.plugin.empty" = "尚未安装插件";
-"settings.plugin.hint" = "把插件目录放进 %@ 即可被识别";
 
-"plugin.manifest" = "清单信息";
-"plugin.author" = "作者";
-"plugin.version" = "版本";
-"plugin.permissions" = "权限";
-"plugin.minVersion" = "最低应用版本";
 
 "menubar.open" = "打开 Ki6";
 "menubar.quit" = "退出";

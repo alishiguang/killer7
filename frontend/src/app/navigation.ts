@@ -8,13 +8,12 @@ export interface TabDef {
   group: 'tools' | 'system';
 }
 
-/** 六个标签页的定义，顺序即标签条顺序。 */
+/** 五个标签页的定义，顺序即标签条顺序。 */
 export const TABS: TabDef[] = [
   { id: 'processes', labelKey: 'nav.process', group: 'tools' },
   { id: 'files', labelKey: 'nav.file', group: 'tools' },
   { id: 'clipboard', labelKey: 'nav.clipboard', group: 'tools' },
   { id: 'monitor', labelKey: 'nav.monitor', group: 'tools' },
-  { id: 'plugins', labelKey: 'nav.plugins', group: 'system' },
   { id: 'settings', labelKey: 'nav.settings', group: 'system' },
 ];
 

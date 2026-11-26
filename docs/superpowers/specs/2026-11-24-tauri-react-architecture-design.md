@@ -30,7 +30,10 @@ egui 版功能对等移植完成，但实际使用感受不佳，用户明确指
 
 - 不做跨平台（只服务 macOS）。
 - 不做前端 E2E 测试框架。
-- 不重构主题系统与插件系统。
+- 不重构主题系统。
+- **插件系统已下线**（见 Task 30）：本设计原本包含一个「插件页」
+  —— 扫描插件目录、解析 `manifest.json`，但**从不加载插件代码**，实质只是个目录浏览器。
+  实现阶段按用户要求整体删除，下文所有插件相关条目均已移除。
 - 不引入第三方状态管理库、虚拟列表库、UI 组件库。
 
 ## 3. 技术选型
@@ -71,7 +74,6 @@ Ki6/
 │       │   ├── files.rs
 │       │   ├── clipboard.rs
 │       │   ├── monitor.rs
-│       │   ├── plugins.rs
 │       │   └── settings.rs
 │       ├── events.rs          # 事件名与负载定义
 │       ├── core/              # 与 UI 无关的业务逻辑（原样迁移）
@@ -79,7 +81,6 @@ Ki6/
 │       │   ├── files.rs       # 目录浏览与文件操作
 │       │   ├── clipboard.rs   # 历史记录
 │       │   ├── monitor.rs     # sysinfo 采样
-│       │   ├── plugin.rs      # manifest 解析
 │       │   ├── i18n.rs        # .strings 解析 + 占位符填充
 │       │   ├── settings.rs    # settings.json 持久化
 │       │   ├── platform.rs    # Finder / 剪贴板 / 打开路径
@@ -118,7 +119,6 @@ Ki6/
 │       │   ├── Files.tsx
 │       │   ├── Clipboard.tsx
 │       │   ├── Monitor.tsx
-│       │   ├── Plugins.tsx
 │       │   └── Settings.tsx
 │       ├── lib/
 │       │   ├── bridge.ts      # invoke / listen 封装
@@ -139,7 +139,7 @@ Ki6/
 
 | 现有位置 | 新位置 | 处理方式 |
 | --- | --- | --- |
-| `src/process.rs` `files.rs` `clipboard.rs` `monitor.rs` `plugin.rs` `i18n.rs` `settings.rs` `platform.rs` `icon.rs` | `src-tauri/src/core/` | **原样搬运**，仅调整 crate 内引用路径；保留全部单元测试 |
+| `src/process.rs` `files.rs` `clipboard.rs` `monitor.rs` `i18n.rs` `settings.rs` `platform.rs` `icon.rs` | `src-tauri/src/core/` | **原样搬运**，仅调整 crate 内引用路径；保留全部单元测试 |
 | `src/menubar.rs` `shortcut.rs` `autolaunch.rs` | `src-tauri/src/system/` | 改写为 Tauri 原生 API（`TrayIconBuilder` / 菜单加速器 / LaunchAgent） |
 | `src/app.rs` `ui_kit.rs` `theme.rs` `fonts.rs` `views/*` | `frontend/` + `src-tauri/src/styles` | **整体废弃**，由前端重写 |
 | `src/events.rs` | `src-tauri/src/events.rs` | 改为 Tauri 事件定义 |
@@ -189,9 +189,6 @@ process 定时刷新 ─┘
 | | `remove_history_item` | `id: u64` | `Result<(), String>` |
 | | `clear_history` | — | `Result<(), String>` |
 | 监控 | `system_snapshot` | — | `SystemInfoDto` |
-| 插件 | `list_plugins` | — | `Vec<PluginRow>` |
-| | `reload_plugins` | — | `Vec<PluginRow>` |
-| | `plugins_dir` | — | `String` |
 | 设置 | `get_settings` | — | `Settings` |
 | | `update_settings` | `patch: SettingsPatch` | `Settings` |
 | | `get_strings` | `locale: String` | `HashMap<String, String>` |

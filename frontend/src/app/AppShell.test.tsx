@@ -29,7 +29,6 @@ vi.mock('../lib/bridge', () => ({
       'nav.file': '文件管理',
       'nav.clipboard': '剪贴板',
       'nav.monitor': '系统监控',
-      'nav.plugins': '插件',
       'nav.settings': '设置',
       'nav.section.tools': '工具',
       'nav.section.system': '系统',
@@ -58,8 +57,6 @@ vi.mock('../lib/bridge', () => ({
       cpuHistory: [],
       memoryHistory: [],
     }),
-    listPlugins: vi.fn().mockResolvedValue([]),
-    pluginsDir: vi.fn().mockResolvedValue('/tmp/plugins'),
   },
   onEvent: vi.fn().mockResolvedValue(() => {}),
 }));
@@ -73,7 +70,6 @@ vi.mock('../lib/store', async () => {
       'nav.file': '文件管理',
       'nav.clipboard': '剪贴板',
       'nav.monitor': '系统监控',
-      'nav.plugins': '插件',
       'nav.settings': '设置',
       'nav.section.tools': '工具',
       'nav.section.system': '系统',
@@ -106,13 +102,13 @@ describe('AppShell', () => {
     vi.clearAllMocks();
   });
 
-  it('渲染品牌与六个标签页', async () => {
+  it('渲染品牌与五个标签页', async () => {
     render(<AppShell />);
     expect(await screen.findByText('KI6')).toBeInTheDocument();
 
-    // 六个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
+    // 五个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
     const tabs = screen.getByRole('tablist');
-    for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控', '插件', '设置']) {
+    for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控', '设置']) {
       expect(await within(tabs).findByRole('tab', { name: label })).toBeInTheDocument();
     }
   });

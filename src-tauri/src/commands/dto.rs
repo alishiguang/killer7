@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use crate::core::clipboard::HistoryEntry;
 use crate::core::files::FileItem;
 use crate::core::monitor::SystemInfo;
-use crate::core::plugin::PluginManifest;
 use crate::core::process::ProcessInfo;
 
 /// 端口信息。
@@ -87,30 +86,6 @@ pub struct SystemInfoDto {
     pub memory_history: Vec<f64>,
     /// 当前进程总数（取自进程缓存，不额外采集）。
     pub process_count: usize,
-}
-
-/// 插件列表的一行。
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PluginRow {
-    /// 插件唯一标识。
-    pub id: String,
-    /// 插件名称。
-    pub name: String,
-    /// 插件版本。
-    pub version: String,
-    /// 作者。
-    pub author: Option<String>,
-    /// 描述。
-    pub description: Option<String>,
-    /// 最低兼容的应用版本。
-    pub minimum_app_version: Option<String>,
-    /// 申请的权限。
-    pub permissions: Vec<String>,
-    /// 入口文件。
-    pub main: Option<String>,
-    /// 插件所在目录。
-    pub dir: String,
 }
 
 /// 界面提示。
@@ -225,22 +200,6 @@ impl From<&SystemInfo> for SystemInfoDto {
             cpu_history: Vec::new(),
             memory_history: Vec::new(),
             process_count: 0,
-        }
-    }
-}
-
-impl From<&PluginManifest> for PluginRow {
-    fn from(value: &PluginManifest) -> Self {
-        Self {
-            id: value.id.clone(),
-            name: value.name.clone(),
-            version: value.version.clone(),
-            author: value.author.clone(),
-            description: value.description.clone(),
-            minimum_app_version: value.minimum_app_version.clone(),
-            permissions: value.permissions.clone().unwrap_or_default(),
-            main: value.main.clone(),
-            dir: String::new(),
         }
     }
 }

@@ -7,7 +7,6 @@ pub mod clipboard;
 pub mod dto;
 pub mod files;
 pub mod monitor;
-pub mod plugins;
 pub mod processes;
 pub mod settings;
 pub mod system;
@@ -33,9 +32,6 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         clipboard::remove_history_item,
         clipboard::clear_history,
         monitor::system_snapshot,
-        plugins::list_plugins,
-        plugins::reload_plugins,
-        plugins::plugins_dir,
         settings::get_settings,
         settings::update_settings,
         settings::get_strings,

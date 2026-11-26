@@ -31,16 +31,11 @@ pub fn clipboard_history_path() -> PathBuf {
     data_dir().join("clipboard_history.json")
 }
 
-/// 插件目录（对应 Swift 版的 `Application Support/LuciBox/Plugins`）。
-pub fn plugins_dir() -> PathBuf {
-    data_dir().join("Plugins")
-}
-
 /// 旧版（egui 时代）数据目录：`~/Library/Application Support/killer7`。
 ///
 /// 项目全局改名为 `chuaker7` 后，新旧版本的配置落在**不同目录**。
 /// `Settings` 里的 `alias` 只解决**字段名**的兼容，解决不了**文件路径**——
-/// 若不迁移，egui 版用户的设置、剪贴板历史与插件目录都会静默"消失"。
+/// 若不迁移，egui 版用户的设置与剪贴板历史都会静默"消失"。
 ///
 /// > 这是整个代码库里**唯一**允许出现旧名 `killer7` 的地方，且只用于一次性迁移。
 pub fn legacy_data_dir() -> PathBuf {

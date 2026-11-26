@@ -9,7 +9,6 @@ pub mod i18n;
 pub mod icon;
 pub mod monitor;
 pub mod platform;
-pub mod plugin;
 pub mod process;
 pub mod settings;
 pub mod theme;

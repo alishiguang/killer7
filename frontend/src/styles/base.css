@@ -597,27 +597,8 @@ figure {
   min-height: 0;
 }
 
-.plugin-dir {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-muted);
-  padding-bottom: 8px;
-}
-
-.plugin-item {
-  border-top: 1px solid var(--border);
-  padding: 10px 0;
-}
-
-.plugin-item__name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  margin-bottom: 6px;
-}
-
-.plugin-item__meta {
+/* 「关于」卡片里的键值对列表 */
+.about-meta {
   display: grid;
   grid-template-columns: 90px 1fr;
   gap: 2px 12px;
@@ -625,7 +606,7 @@ figure {
   font-size: 11px;
 }
 
-.plugin-item__meta dt {
+.about-meta dt {
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.16em;
@@ -633,7 +614,7 @@ figure {
   color: var(--text-muted);
 }
 
-.plugin-item__meta dd {
+.about-meta dd {
   margin: 0;
   font-family: var(--font-mono);
 }

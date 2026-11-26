@@ -15,7 +15,6 @@ use crate::core::clipboard::ClipboardManager;
 use crate::core::files::FileManager;
 use crate::core::i18n::I18n;
 use crate::core::monitor::SystemMonitor;
-use crate::core::plugin::PluginManager;
 use crate::core::process::ProcessManager;
 use crate::core::settings::Settings;
 
@@ -33,8 +32,6 @@ pub struct AppState {
     pub clipboard: Mutex<ClipboardManager>,
     /// 系统监控。
     pub monitor: Mutex<SystemMonitor>,
-    /// 插件管理器。
-    pub plugins: Mutex<PluginManager>,
     /// 采样间隔（毫秒），可在设置里实时调整。
     pub sample_interval_ms: Arc<AtomicU64>,
     /// 是否统计网络流量。
@@ -60,9 +57,6 @@ impl AppState {
         let mut clipboard = ClipboardManager::default();
         clipboard.load_history();
 
-        let mut plugins = PluginManager::default();
-        plugins.load_plugins();
-
         // 启动时同步采一次进程列表：窗口一打开就有数据，不必等后台循环的第一轮。
         // 实测 `ps` 约 30ms、`lsof` 约 55ms，这个代价可以接受；
         // 不这么做的话 `list_processes` 会拿到空列表，进程页要空好几秒。
@@ -75,7 +69,6 @@ impl AppState {
             files: Mutex::new(FileManager::default()),
             clipboard: Mutex::new(clipboard),
             monitor: Mutex::new(SystemMonitor::default()),
-            plugins: Mutex::new(plugins),
             sample_interval_ms,
             network_enabled,
             watcher: Mutex::new(None),

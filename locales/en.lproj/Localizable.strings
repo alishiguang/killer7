@@ -137,7 +137,6 @@
 "nav.clipboard" = "Clipboard";
 "nav.monitor" = "Monitor";
 "nav.settings" = "Settings";
-"nav.plugins" = "Plugins";
 
 "common.search" = "Search";
 "common.all" = "All";
@@ -193,15 +192,7 @@
 "settings.theme.light" = "Light Mode";
 "settings.theme.dark" = "Dark Mode";
 "settings.general" = "General";
-"settings.plugin.dir" = "Plugin Directory";
-"settings.plugin.empty" = "No plugins installed";
-"settings.plugin.hint" = "Drop plugins into %@ to have them detected";
 
-"plugin.manifest" = "Manifest";
-"plugin.author" = "Author";
-"plugin.version" = "Version";
-"plugin.permissions" = "Permissions";
-"plugin.minVersion" = "Minimum App Version";
 
 "menubar.open" = "Open Ki6";
 "menubar.quit" = "Quit";

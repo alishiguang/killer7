@@ -27,7 +27,7 @@ export function Settings() {
   if (!settings) {
     return (
       <div className="page">
-        <Kicker index="06">{t('settings.title')}</Kicker>
+        <Kicker index="05">{t('settings.title')}</Kicker>
         <div className="empty-state">{t('common.loading')}</div>
       </div>
     );
@@ -36,7 +36,7 @@ export function Settings() {
   return (
     <div className="page">
       <div className="page__head">
-        <Kicker index="06">{t('settings.title')}</Kicker>
+        <Kicker index="05">{t('settings.title')}</Kicker>
       </div>
 
       <div className="settings-grid">
@@ -156,7 +156,7 @@ export function Settings() {
         </Card>
 
         <Card title={t('settings.about')}>
-          <dl className="plugin-item__meta">
+          <dl className="about-meta">
             <dt>{t('settings.version')}</dt>
             <dd>1.2.0</dd>
             <dt>{t('settings.bundleId')}</dt>

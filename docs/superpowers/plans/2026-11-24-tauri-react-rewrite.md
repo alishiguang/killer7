@@ -742,9 +742,11 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // Vitest 默认 css:false，会把所有 .css 模块替换成空字符串；
+    // tokens.test.ts 需要用 `?raw` 读到 CSS 原文，这里只为 ?raw 放行，其余 CSS 仍然打桩。
+    css: { include: [/\?raw\b/] },
   },
-});
-```
+});```
 
 > `defineConfig` 从 `vitest/config` 引入，这样 `test` 字段才有类型定义，`tsc --noEmit` 才不会报错。
 > `root: 'frontend'` 时 `build.outDir: 'dist'` 解析为 `frontend/dist`，与 `tauri.conf.json` 的 `"frontendDist": "../frontend/dist"` 对应（后者相对 `src-tauri/` 解析，已实测）。
@@ -807,6 +809,10 @@ export default defineConfig({
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
+import './styles/tokens.css';
+import './styles/fonts.css';
+import './styles/base.css';
+import './styles/native.css';
 
 const container = document.getElementById('root');
 if (!container) {
@@ -817,21 +823,16 @@ ReactDOM.createRoot(container).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
-);
-```
+);```
 
 `frontend/src/App.tsx`：
 
 ```tsx
+import { AppShell } from './app/AppShell';
+
 export function App() {
-  return (
-    <main style={{ padding: 24, fontFamily: 'system-ui' }}>
-      <h1>chuaker7</h1>
-      <p>Tauri v2 + React 脚手架已就绪。</p>
-    </main>
-  );
-}
-```
+  return <AppShell />;
+}```
 
 - [ ] **Step 7: 更新 `.gitignore`**
 
@@ -952,8 +953,7 @@ AI-Tool: TophantAI"
   --row-height: 26px;
   --radius-sm: 3px;
   --radius-md: 5px;
-  --sidebar-width: 196px;
-  --topbar-height: 38px;
+  --toolbar-height: 46px;
 }
 
 /* 深色（ink）为默认，浅色（paper）按需覆盖 */
@@ -992,8 +992,7 @@ AI-Tool: TophantAI"
 [data-accent='signal'] { --accent: var(--accent-signal); }
 [data-accent='haze'] { --accent: var(--accent-haze); }
 [data-accent='moss'] { --accent: var(--accent-moss); }
-[data-accent='amber'] { --accent: var(--accent-amber); }
-```
+[data-accent='amber'] { --accent: var(--accent-amber); }```
 
 - [ ] **Step 2: 写 `frontend/src/styles/fonts.css`**
 
@@ -1434,12 +1433,10 @@ pub mod files;
 pub mod i18n;
 pub mod icon;
 pub mod monitor;
-pub mod plugin;
 pub mod platform;
 pub mod process;
 pub mod settings;
-pub mod theme;
-```
+pub mod theme;```
 
 > 本任务先只创建本步骤列出的 6 个文件，`clipboard/files/monitor/process` 四个模块在 Task 5 创建。若此刻 `mod.rs` 引用了尚不存在的文件会导致编译失败，因此 **Step 1 只写 `pub mod i18n; pub mod icon; pub mod platform; pub mod plugin; pub mod settings; pub mod theme;`**，Task 5 再补齐另外四行。
 
@@ -1541,17 +1538,13 @@ mod tests {
 
     #[test]
     fn serializes_in_stable_wire_format() {
-        assert_eq!(
-            serde_json::to_string(&ThemeMode::Dark).unwrap(),
-            "\"dark\""
-        );
+        assert_eq!(serde_json::to_string(&ThemeMode::Dark).unwrap(), "\"dark\"");
         assert_eq!(
             serde_json::to_string(&Accent::Signal).unwrap(),
             "\"signal\""
         );
     }
-}
-```
+}```
 
 > `serde_json` 在 dev-dependencies 中已可用（它是常规依赖，直接用即可）。
 
@@ -1597,16 +1590,11 @@ pub fn clipboard_history_path() -> PathBuf {
     data_dir().join("clipboard_history.json")
 }
 
-/// 插件目录（对应 Swift 版的 `Application Support/LuciBox/Plugins`）。
-pub fn plugins_dir() -> PathBuf {
-    data_dir().join("Plugins")
-}
-
 /// 旧版（egui 时代）数据目录：`~/Library/Application Support/killer7`。
 ///
 /// 项目全局改名为 `chuaker7` 后，新旧版本的配置落在**不同目录**。
 /// `Settings` 里的 `alias` 只解决**字段名**的兼容，解决不了**文件路径**——
-/// 若不迁移，egui 版用户的设置、剪贴板历史与插件目录都会静默"消失"。
+/// 若不迁移，egui 版用户的设置与剪贴板历史都会静默"消失"。
 ///
 /// > 这是整个代码库里**唯一**允许出现旧名 `killer7` 的地方，且只用于一次性迁移。
 pub fn legacy_data_dir() -> PathBuf {
@@ -1842,19 +1830,16 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&base);
     }
-}
-```
+}```
 
 - [ ] **Step 6: 迁移 `plugin.rs`**
 
 `src-tauri/src/core/plugin.rs` —— 与 egui 版一致，把 `use crate::settings::plugins_dir;` 改成 `use crate::core::settings::plugins_dir;`，并追加 `PluginManifest` 的 `#[serde(default)]` 保持不变。额外为 `PluginManager` 追加一个只读目录查询，供 `PluginRow.dir` 使用：
 
-```rust
-    /// 插件目录路径。
-    pub fn plugins_dir(&self) -> PathBuf {
-        plugins_dir()
-    }
-```
+
+> **本块已随 Task 30 移除**：`src-tauri/src/core/plugin.rs` 整个文件已删除（插件子系统下线），
+> 其中的 `plugins_dir()` 不再有对应实现。
+
 
 - [ ] **Step 7: 注册模块并跑测试**
 
@@ -2326,8 +2311,18 @@ mod tests {
     #[test]
     fn normalizes_missing_ids() {
         let mut history = vec![
-            HistoryEntry { id: 0, content: "a".into(), timestamp: 1, kind: "text".into() },
-            HistoryEntry { id: 0, content: "b".into(), timestamp: 2, kind: "text".into() },
+            HistoryEntry {
+                id: 0,
+                content: "a".into(),
+                timestamp: 1,
+                kind: "text".into(),
+            },
+            HistoryEntry {
+                id: 0,
+                content: "b".into(),
+                timestamp: 2,
+                kind: "text".into(),
+            },
         ];
         normalize_ids(&mut history);
         assert_eq!(history[0].id, 1);
@@ -2335,10 +2330,42 @@ mod tests {
     }
 
     #[test]
+    fn add_to_history_reports_whether_it_changed() {
+        let mut manager = ClipboardManager::default();
+        assert!(manager.add_to_history("hello", "text"));
+        assert!(
+            !manager.add_to_history("hello", "text"),
+            "与上一条相同的内容不应重复记录"
+        );
+    }
+
+    #[test]
+    fn delete_history_item_reports_whether_it_changed() {
+        let mut manager = ClipboardManager::default();
+        assert!(manager.add_to_history("hello", "text"));
+        let id = manager.history[0].id;
+        assert!(manager.delete_history_item(id));
+        assert!(
+            !manager.delete_history_item(id),
+            "已经删掉的 id 再删一次应返回 false"
+        );
+    }
+
+    #[test]
     fn keeps_unique_ids() {
         let mut history = vec![
-            HistoryEntry { id: 7, content: "a".into(), timestamp: 1, kind: "text".into() },
-            HistoryEntry { id: 9, content: "b".into(), timestamp: 2, kind: "text".into() },
+            HistoryEntry {
+                id: 7,
+                content: "a".into(),
+                timestamp: 1,
+                kind: "text".into(),
+            },
+            HistoryEntry {
+                id: 9,
+                content: "b".into(),
+                timestamp: 2,
+                kind: "text".into(),
+            },
         ];
         normalize_ids(&mut history);
         assert_eq!(history[0].id, 7);
@@ -2348,15 +2375,24 @@ mod tests {
     #[test]
     fn duplicate_ids_are_rewritten() {
         let mut history = vec![
-            HistoryEntry { id: 3, content: "a".into(), timestamp: 1, kind: "text".into() },
-            HistoryEntry { id: 3, content: "b".into(), timestamp: 2, kind: "text".into() },
+            HistoryEntry {
+                id: 3,
+                content: "a".into(),
+                timestamp: 1,
+                kind: "text".into(),
+            },
+            HistoryEntry {
+                id: 3,
+                content: "b".into(),
+                timestamp: 2,
+                kind: "text".into(),
+            },
         ];
         normalize_ids(&mut history);
         assert_eq!(history[0].id, 1);
         assert_eq!(history[1].id, 2);
     }
-}
-```
+}```
 
 - [ ] **Step 5: 迁移 `monitor.rs`，把采样线程改为纯函数**
 
@@ -2400,6 +2436,7 @@ pub fn sample(
 
 ```rust
 use serde::{Deserialize, Serialize};
+use sysinfo::System;
 
 /// 一次系统指标快照。
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
@@ -2415,8 +2452,7 @@ pub struct SystemInfo {
     pub network_upload: f64,
     /// 下载速度（MB/s）。
     pub network_download: f64,
-}
-```
+}```
 
 `SystemMonitor` 保留 `push_sample` 与 120 点上限逻辑。
 
@@ -2437,9 +2473,13 @@ pub struct SystemInfo {
 ```rust
 pub mod clipboard;
 pub mod files;
+pub mod i18n;
+pub mod icon;
 pub mod monitor;
+pub mod platform;
 pub mod process;
-```
+pub mod settings;
+pub mod theme;```
 
 `src-tauri/src/lib.rs` 追加：
 
@@ -2506,7 +2546,6 @@ use serde::{Deserialize, Serialize};
 use crate::core::clipboard::HistoryEntry;
 use crate::core::files::FileItem;
 use crate::core::monitor::SystemInfo;
-use crate::core::plugin::PluginManifest;
 use crate::core::process::ProcessInfo;
 
 /// 端口信息。
@@ -2585,30 +2624,6 @@ pub struct SystemInfoDto {
     pub memory_history: Vec<f64>,
     /// 当前进程总数（取自进程缓存，不额外采集）。
     pub process_count: usize,
-}
-
-/// 插件列表的一行。
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PluginRow {
-    /// 插件唯一标识。
-    pub id: String,
-    /// 插件名称。
-    pub name: String,
-    /// 插件版本。
-    pub version: String,
-    /// 作者。
-    pub author: Option<String>,
-    /// 描述。
-    pub description: Option<String>,
-    /// 最低兼容的应用版本。
-    pub minimum_app_version: Option<String>,
-    /// 申请的权限。
-    pub permissions: Vec<String>,
-    /// 入口文件。
-    pub main: Option<String>,
-    /// 插件所在目录。
-    pub dir: String,
 }
 
 /// 界面提示。
@@ -2727,22 +2742,6 @@ impl From<&SystemInfo> for SystemInfoDto {
     }
 }
 
-impl From<&PluginManifest> for PluginRow {
-    fn from(value: &PluginManifest) -> Self {
-        Self {
-            id: value.id.clone(),
-            name: value.name.clone(),
-            version: value.version.clone(),
-            author: value.author.clone(),
-            description: value.description.clone(),
-            minimum_app_version: value.minimum_app_version.clone(),
-            permissions: value.permissions.clone().unwrap_or_default(),
-            main: value.main.clone(),
-            dir: String::new(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2800,8 +2799,8 @@ mod tests {
 //! 这一层只做「编解码 + 转发」：参数来自前端，调用 core 或 system，
 //! 返回可序列化的结果。业务逻辑不写在这里。
 
-pub mod dto;
-```
+pub mod clipboard;
+pub mod dto;```
 
 - [ ] **Step 3: 注册模块并跑测试**
 
@@ -2869,7 +2868,6 @@ use crate::core::clipboard::ClipboardManager;
 use crate::core::files::FileManager;
 use crate::core::i18n::I18n;
 use crate::core::monitor::SystemMonitor;
-use crate::core::plugin::PluginManager;
 use crate::core::process::ProcessManager;
 use crate::core::settings::Settings;
 
@@ -2887,8 +2885,6 @@ pub struct AppState {
     pub clipboard: Mutex<ClipboardManager>,
     /// 系统监控。
     pub monitor: Mutex<SystemMonitor>,
-    /// 插件管理器。
-    pub plugins: Mutex<PluginManager>,
     /// 采样间隔（毫秒），可在设置里实时调整。
     pub sample_interval_ms: Arc<AtomicU64>,
     /// 是否统计网络流量。
@@ -2914,9 +2910,6 @@ impl AppState {
         let mut clipboard = ClipboardManager::default();
         clipboard.load_history();
 
-        let mut plugins = PluginManager::default();
-        plugins.load_plugins();
-
         // 启动时同步采一次进程列表：窗口一打开就有数据，不必等后台循环的第一轮。
         // 实测 `ps` 约 30ms、`lsof` 约 55ms，这个代价可以接受；
         // 不这么做的话 `list_processes` 会拿到空列表，进程页要空好几秒。
@@ -2929,7 +2922,6 @@ impl AppState {
             files: Mutex::new(FileManager::default()),
             clipboard: Mutex::new(clipboard),
             monitor: Mutex::new(SystemMonitor::default()),
-            plugins: Mutex::new(plugins),
             sample_interval_ms,
             network_enabled,
             watcher: Mutex::new(None),
@@ -3147,10 +3139,14 @@ pub fn watch_path(app: &AppHandle, state: &Arc<AppState>, path: &Path) -> bool {
 - [ ] **Step 3: 写 `src-tauri/src/system/mod.rs`**
 
 ```rust
-//! 原生集成：菜单栏、托盘、快捷键、自启、激活策略与后台任务。
+//! 原生集成：菜单栏、托盘、快捷键、自启、激活策略、单实例与后台任务。
 
-pub mod tasks;
-```
+pub mod activation;
+pub mod autolaunch;
+pub mod menu;
+pub mod shortcut;
+pub mod single_instance;
+pub mod tasks;```
 
 > `activation.rs` / `autolaunch.rs` / `menu.rs` / `shortcut.rs` / `tray.rs` 在 Task 11–14 创建。本步骤**先只写** `pub mod tasks;`，其余在对应任务补齐（否则编译不过）。
 
@@ -3396,6 +3392,8 @@ pub fn kill_process(pid: i32) -> Result<bool, String> {
 
 ```rust
 pub mod processes;
+pub mod settings;
+pub mod system;
 
 /// 汇总所有 command。
 pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
@@ -3403,9 +3401,32 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         processes::list_processes,
         processes::refresh_processes,
         processes::kill_process,
+        files::list_dir,
+        files::create_folder,
+        files::create_file,
+        files::rename_path,
+        files::delete_to_trash,
+        files::reveal_in_finder,
+        files::parent_dir,
+        files::copy_text,
+        files::home_dir,
+        files::watch_dir,
+        clipboard::clipboard_current,
+        clipboard::clipboard_history,
+        clipboard::remove_history_item,
+        clipboard::clear_history,
+        monitor::system_snapshot,
+        settings::get_settings,
+        settings::update_settings,
+        settings::get_strings,
+        system::hide_main_window,
+        system::show_main_window,
+        system::set_menu_bar_mode,
+        system::set_shortcut_enabled,
+        system::set_auto_launch,
+        system::popup_context_menu,
     ]
-}
-```
+}```
 
 `src-tauri/src/lib.rs` 的 Builder 追加 `.invoke_handler(commands::handler())`。
 
@@ -3742,6 +3763,8 @@ use crate::state::AppState;
 #[tauri::command]
 pub fn system_snapshot(state: State<'_, Arc<AppState>>) -> SystemInfoDto {
     let monitor = state.monitor.lock().expect("监控锁中毒");
+    // 进程总数直接读进程缓存的长度 —— 不额外采集，也不多付一次 IPC 负载。
+    let process_count = state.processes.lock().expect("进程锁中毒").processes.len();
     SystemInfoDto {
         cpu_usage: monitor.system_info.cpu_usage,
         memory_usage: monitor.system_info.memory_usage,
@@ -3750,61 +3773,16 @@ pub fn system_snapshot(state: State<'_, Arc<AppState>>) -> SystemInfoDto {
         network_download: monitor.system_info.network_download,
         cpu_history: monitor.cpu_history.clone(),
         memory_history: monitor.memory_history.clone(),
+        process_count,
     }
-}
-```
+}```
 
 - [ ] **Step 3: 写 `src-tauri/src/commands/plugins.rs`**
 
-```rust
-//! 插件命令。
 
-use std::sync::Arc;
+> **本块已随 Task 30 移除**：`src-tauri/src/commands/plugins.rs` 整个文件已删除（插件子系统下线），
+> `list_plugins` / `reload_plugins` / `plugins_dir` 三个 command 一并注销。
 
-use tauri::State;
-
-use crate::commands::dto::PluginRow;
-use crate::core::plugin::PluginManager;
-use crate::state::AppState;
-
-/// 把插件清单映射成 DTO 行，并补上插件根目录。
-fn to_rows(plugins: &PluginManager) -> Vec<PluginRow> {
-    let dir = plugins.plugins_dir().to_string_lossy().to_string();
-    plugins
-        .loaded_plugins
-        .iter()
-        .map(|manifest| {
-            let mut row = PluginRow::from(manifest);
-            row.dir = dir.clone();
-            row
-        })
-        .collect()
-}
-
-/// 列出已加载的插件。
-#[tauri::command]
-pub fn list_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
-    let plugins = state.plugins.lock().expect("插件锁中毒");
-    to_rows(&plugins)
-}
-
-/// 重新扫描插件目录。
-#[tauri::command]
-pub fn reload_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
-    let mut plugins = state.plugins.lock().expect("插件锁中毒");
-    plugins.load_plugins();
-    to_rows(&plugins)
-}
-
-/// 插件目录路径。
-#[tauri::command]
-pub fn plugins_dir() -> String {
-    PluginManager::default()
-        .plugins_dir()
-        .to_string_lossy()
-        .to_string()
-}
-```
 
 > `PluginManager::default()` 不读盘，仅用于取目录常量，安全。
 
@@ -3817,11 +3795,7 @@ pub fn plugins_dir() -> String {
         clipboard::clipboard_history,
         clipboard::remove_history_item,
         clipboard::clear_history,
-        monitor::system_snapshot,
-        plugins::list_plugins,
-        plugins::reload_plugins,
-        plugins::plugins_dir,
-```
+        monitor::system_snapshot,```
 
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
@@ -3977,18 +3951,10 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
             )?,
             &MenuItem::with_id(
                 app,
-                "nav:plugins",
-                i18n.t("nav.plugins"),
-                true,
-                Some("CmdOrCtrl+5"),
-            )?,
-            &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(
-                app,
                 "nav:settings",
                 i18n.t("nav.settings"),
                 true,
-                None::<&str>,
+                Some("CmdOrCtrl+5"),
             )?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, Some(&i18n.t("view.fullscreen")))?,
@@ -4192,6 +4158,38 @@ pub mod menu;
             // 菜单文案跟着设置里的语言走。
             let locale = state.settings.lock().expect("设置锁中毒").locale;
             crate::system::menu::build(&handle, locale)?;
+            crate::system::tray::build(&handle, locale)?;
+
+            // 监听「唤起请求」：别的实例发现自己不是首个实例时会往这个目录里
+            // 丢一个请求文件，首个实例收到就把主窗口叫出来。
+            crate::system::single_instance::spawn_activation_watcher(handle.clone());
+
+            // 全局快捷键 ⌘L：**默认开启**（core/settings.rs 的默认值是 true），
+            // 设置项可热更新。注册失败必须留下痕迹，否则「显示已开启但毫无反应」
+            // 会变成无法排查的静默失效。
+            {
+                let shortcut_enabled = state
+                    .settings
+                    .lock()
+                    .expect("设置锁中毒")
+                    .global_shortcut_enabled;
+                if shortcut_enabled && let Err(err) = crate::system::shortcut::register(&handle) {
+                    eprintln!("[shortcut] 注册 ⌘L 失败: {err}");
+                }
+            }
+
+            // Dock / 菜单栏模式必须在启动时按已保存的设置复现一次。
+            // 只在 `update_settings` / `set_menu_bar_mode` 里应用是不够的：
+            // 那两条路径只覆盖「本次运行中切换」的情况，用户开启菜单栏模式后
+            // 重启应用会重新变回常规 Dock 模式，设置形同虚设。
+            // 这里的顺序与 `commands::system::set_menu_bar_mode` 保持一致。
+            {
+                let show_menu_bar = state.settings.lock().expect("设置锁中毒").show_menu_bar;
+                if show_menu_bar {
+                    crate::system::activation::set_accessory_mode(true, &handle);
+                    let _ = app.get_webview_window("main").map(|w| w.hide());
+                }
+            }
 
             crate::system::tasks::spawn_process_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_clipboard_loop(handle.clone(), state.clone());
@@ -4204,11 +4202,7 @@ pub mod menu;
             crate::system::tasks::spawn_watcher(handle.clone(), state);
 
             Ok(())
-        })
-        .on_menu_event(|app, event| {
-            crate::system::menu::on_menu_event(app, event.id().as_ref());
-        })
-```
+        })```
 
 - [ ] **Step 4: 编译并人工验收**
 
@@ -5446,18 +5440,6 @@ export interface SystemInfoDto {
   processCount: number;
 }
 
-export interface PluginRow {
-  id: string;
-  name: string;
-  version: string;
-  author: string | null;
-  description: string | null;
-  minimumAppVersion: string | null;
-  permissions: string[];
-  main: string | null;
-  dir: string;
-}
-
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type Accent = 'signal' | 'haze' | 'moss' | 'amber';
 export type Locale = 'zh-Hans' | 'en';
@@ -5481,7 +5463,7 @@ export interface Notice {
   message: string;
 }
 
-export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor' | 'plugins' | 'settings';```
+export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor' | 'settings';```
 
 - [ ] **Step 2: 写 `frontend/src/lib/bridge.ts`**
 
@@ -5495,7 +5477,6 @@ import { open } from '@tauri-apps/plugin-dialog';
 import type {
   FileRow,
   HistoryRow,
-  PluginRow,
   ProcessRow,
   Settings,
   SettingsPatch,
@@ -5539,10 +5520,6 @@ export const api = {
 
   systemSnapshot: () => invoke<SystemInfoDto>('system_snapshot'),
 
-  listPlugins: () => invoke<PluginRow[]>('list_plugins'),
-  reloadPlugins: () => invoke<PluginRow[]>('reload_plugins'),
-  pluginsDir: () => invoke<string>('plugins_dir'),
-
   getSettings: () => invoke<Settings>('get_settings'),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>('update_settings', { patch }),
   getStrings: (locale: string) => invoke<Record<string, string>>('get_strings', { locale }),
@@ -5565,8 +5542,7 @@ export const api = {
 /** 订阅一个后端事件，返回取消订阅函数。 */
 export function onEvent<T>(name: string, handler: (payload: T) => void): Promise<UnlistenFn> {
   return listen<T>(name, (event) => handler(event.payload));
-}
-```
+}```
 
 - [ ] **Step 3: 写 `frontend/src/lib/store.ts`**
 
@@ -6733,13 +6709,12 @@ export interface TabDef {
   group: 'tools' | 'system';
 }
 
-/** 六个标签页的定义，顺序即标签条顺序。 */
+/** 五个标签页的定义，顺序即标签条顺序。 */
 export const TABS: TabDef[] = [
   { id: 'processes', labelKey: 'nav.process', group: 'tools' },
   { id: 'files', labelKey: 'nav.file', group: 'tools' },
   { id: 'clipboard', labelKey: 'nav.clipboard', group: 'tools' },
   { id: 'monitor', labelKey: 'nav.monitor', group: 'tools' },
-  { id: 'plugins', labelKey: 'nav.plugins', group: 'system' },
   { id: 'settings', labelKey: 'nav.settings', group: 'system' },
 ];
 
@@ -6943,7 +6918,6 @@ import { Toolbar } from './Toolbar';
 import { Clipboard } from '../pages/Clipboard';
 import { Files } from '../pages/Files';
 import { Monitor } from '../pages/Monitor';
-import { Plugins } from '../pages/Plugins';
 import { Processes } from '../pages/Processes';
 import { Settings } from '../pages/Settings';
 
@@ -6952,7 +6926,6 @@ const PAGES = {
   files: Files,
   clipboard: Clipboard,
   monitor: Monitor,
-  plugins: Plugins,
   settings: Settings,
 } as const;
 
@@ -7275,7 +7248,6 @@ vi.mock('../lib/bridge', () => ({
       'nav.file': '文件管理',
       'nav.clipboard': '剪贴板',
       'nav.monitor': '系统监控',
-      'nav.plugins': '插件',
       'nav.settings': '设置',
       'nav.section.tools': '工具',
       'nav.section.system': '系统',
@@ -7304,8 +7276,6 @@ vi.mock('../lib/bridge', () => ({
       cpuHistory: [],
       memoryHistory: [],
     }),
-    listPlugins: vi.fn().mockResolvedValue([]),
-    pluginsDir: vi.fn().mockResolvedValue('/tmp/plugins'),
   },
   onEvent: vi.fn().mockResolvedValue(() => {}),
 }));
@@ -7319,7 +7289,6 @@ vi.mock('../lib/store', async () => {
       'nav.file': '文件管理',
       'nav.clipboard': '剪贴板',
       'nav.monitor': '系统监控',
-      'nav.plugins': '插件',
       'nav.settings': '设置',
       'nav.section.tools': '工具',
       'nav.section.system': '系统',
@@ -7352,13 +7321,13 @@ describe('AppShell', () => {
     vi.clearAllMocks();
   });
 
-  it('渲染品牌与六个标签页', async () => {
+  it('渲染品牌与五个标签页', async () => {
     render(<AppShell />);
     expect(await screen.findByText('KI6')).toBeInTheDocument();
 
-    // 六个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
+    // 五个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
     const tabs = screen.getByRole('tablist');
-    for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控', '插件', '设置']) {
+    for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控', '设置']) {
       expect(await within(tabs).findByRole('tab', { name: label })).toBeInTheDocument();
     }
   });
@@ -8992,198 +8961,23 @@ AI-Tool: TophantAI"
 
 - [ ] **Step 1: 写 `frontend/src/pages/Plugins.tsx`**
 
-```tsx
-import { useCallback, useEffect, useState } from 'react';
 
-import { Card, Kicker } from '../components';
-import { api } from '../lib/bridge';
-import { useI18n } from '../lib/i18n';
-import { pushToast } from '../lib/store';
-import type { PluginRow } from '../lib/types';
+> **本块已随 Task 30 移除**：`frontend/src/pages/Plugins.tsx` 已删除，插件页不再存在。
 
-export function Plugins() {
-  const { t } = useI18n();
-  const [plugins, setPlugins] = useState<PluginRow[]>([]);
-  const [dir, setDir] = useState('');
-
-  useEffect(() => {
-    void api.listPlugins().then(setPlugins);
-    void api.pluginsDir().then(setDir);
-  }, []);
-
-  const reload = useCallback(async () => {
-    const list = await api.reloadPlugins();
-    setPlugins(list);
-    pushToast('info', t('plugin.manifest'));
-  }, [t]);
-
-  return (
-    <div className="page">
-      <div className="page__head">
-        <Kicker index="05">{t('nav.plugins')}</Kicker>
-        <div className="page__tools">
-          <button type="button" className="native-button" onClick={() => void reload()}>
-            {t('process.refresh')}
-          </button>
-        </div>
-      </div>
-
-      <Card title={t('settings.plugin.dir')} className="page__card">
-        <div className="plugin-dir">{dir || '—'}</div>
-
-        {plugins.length === 0 ? (
-          <div className="empty-state">{t('settings.plugin.empty')}</div>
-        ) : (
-          plugins.map((plugin) => (
-            <div key={plugin.id} className="plugin-item">
-              <div className="plugin-item__name">
-                <span className="file-name__glyph" aria-hidden="true">
-                  ◆
-                </span>
-                {plugin.name}
-              </div>
-              <dl className="plugin-item__meta">
-                <dt>{t('plugin.version')}</dt>
-                <dd>{plugin.version}</dd>
-                <dt>{t('plugin.author')}</dt>
-                <dd>{plugin.author ?? '—'}</dd>
-                <dt>{t('plugin.permissions')}</dt>
-                <dd>{plugin.permissions.length > 0 ? plugin.permissions.join('、') : '—'}</dd>
-                <dt>{t('plugin.minVersion')}</dt>
-                <dd>{plugin.minimumAppVersion ?? '—'}</dd>
-              </dl>
-            </div>
-          ))
-        )}
-      </Card>
-    </div>
-  );
-}
-```
 
 - [ ] **Step 2: 补样式**
 
-```css
-.plugin-dir {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-muted);
-  padding-bottom: 8px;
-}
 
-.plugin-item {
-  border-top: 1px solid var(--border);
-  padding: 10px 0;
-}
+> **本块已随 Task 30 移除**：`base.css` 里的 `.plugin-dir` / `.plugin-item*` 样式已删除。
 
-.plugin-item__name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  margin-bottom: 6px;
-}
-
-.plugin-item__meta {
-  display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 2px 12px;
-  margin: 0;
-  font-size: 11px;
-}
-
-.plugin-item__meta dt {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.plugin-item__meta dd {
-  margin: 0;
-  font-family: var(--font-mono);
-}
-```
 
 - [ ] **Step 3: 写测试并提交**
 
 `frontend/src/pages/Plugins.test.tsx`：
 
-```tsx
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../lib/bridge', () => ({
-  EVENT: {},
-  api: {
-    listPlugins: vi.fn().mockResolvedValue([
-      {
-        id: 'demo',
-        name: '示例插件',
-        version: '1.0.0',
-        author: 'Igigi',
-        description: null,
-        minimumAppVersion: null,
-        permissions: ['fs'],
-        main: null,
-        dir: '/tmp/plugins',
-      },
-    ]),
-    reloadPlugins: vi.fn().mockResolvedValue([]),
-    pluginsDir: vi.fn().mockResolvedValue('/tmp/plugins'),
-  },
-  onEvent: vi.fn().mockResolvedValue(() => {}),
-}));
+> **本块已随 Task 30 移除**：`frontend/src/pages/Plugins.test.tsx` 已删除。
 
-vi.mock('../lib/store', async () => {
-  const actual = await vi.importActual<typeof import('../lib/store')>('../lib/store');
-  const state = {
-    settings: null,
-    strings: {
-      'nav.plugins': '插件',
-      'settings.plugin.dir': '插件目录',
-      'settings.plugin.empty': '尚未安装插件',
-      'plugin.manifest': '清单信息',
-      'plugin.version': '版本',
-      'plugin.author': '作者',
-      'plugin.permissions': '权限',
-      'plugin.minVersion': '最低应用版本',
-      'process.refresh': '刷新',
-    },
-    activeTab: 'plugins',
-    toast: null,
-    locale: 'zh-Hans',
-  };
-  return {
-    ...actual,
-    useAppState: () => state,
-    useAppStore: () => [state, () => {}],
-  };
-});
-
-import { Plugins } from './Plugins';
-
-describe('Plugins', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('展示插件目录与清单信息', async () => {
-    render(<Plugins />);
-    expect(await screen.findByText('/tmp/plugins')).toBeInTheDocument();
-    expect(await screen.findByText('示例插件')).toBeInTheDocument();
-    expect(await screen.findByText('1.0.0')).toBeInTheDocument();
-  });
-
-  it('没有插件时展示空态', async () => {
-    const { api } = await import('../lib/bridge');
-    vi.mocked(api.listPlugins).mockResolvedValueOnce([]);
-    render(<Plugins />);
-    expect(await screen.findByText('尚未安装插件')).toBeInTheDocument();
-  });
-});
-```
 
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
@@ -9243,7 +9037,7 @@ export function Settings() {
   if (!settings) {
     return (
       <div className="page">
-        <Kicker index="06">{t('settings.title')}</Kicker>
+        <Kicker index="05">{t('settings.title')}</Kicker>
         <div className="empty-state">{t('common.loading')}</div>
       </div>
     );
@@ -9252,7 +9046,7 @@ export function Settings() {
   return (
     <div className="page">
       <div className="page__head">
-        <Kicker index="06">{t('settings.title')}</Kicker>
+        <Kicker index="05">{t('settings.title')}</Kicker>
       </div>
 
       <div className="settings-grid">
@@ -9372,7 +9166,7 @@ export function Settings() {
         </Card>
 
         <Card title={t('settings.about')}>
-          <dl className="plugin-item__meta">
+          <dl className="about-meta">
             <dt>{t('settings.version')}</dt>
             <dd>1.2.0</dd>
             <dt>{t('settings.bundleId')}</dt>
@@ -9384,8 +9178,7 @@ export function Settings() {
       </div>
     </div>
   );
-}
-```
+}```
 
 - [ ] **Step 2: 补样式**
 
@@ -10761,6 +10554,96 @@ FNV-1a 标准向量、身份键稳定性、锁路径与唤起目录同键、**�
 
 ---
 
+### Task 30: 去掉插件功能 —— 插件子系统整体下线
+
+**动机**
+
+用户要求去掉插件功能。插件子系统在本次重写里只落地了一个「插件页」：
+扫描 `~/Library/Application Support/chuaker7/Plugins` 目录、解析每个插件的
+`manifest.json`、在界面上列出来。它从来**没有真正加载过插件代码** ——
+没有执行插件入口、没有注册插件命令、没有隔离机制，实质上只是个目录浏览器。
+
+留着它有两个代价：一是用户看到的是一个「能装插件但装不了」的半成品入口；
+二是它把 `PluginManifest` / `PluginManager` / `PluginRow` / 三个 command
+一路牵进 DTO 契约、状态、菜单、前端类型与桥接层，每一处都要跟着改。
+
+**决定：整体删除，而不是隐藏入口。**
+
+**删除清单**
+
+| 层 | 文件 | 说明 |
+| --- | --- | --- |
+| Rust | `src-tauri/src/core/plugin.rs` | `PluginManager` + `PluginManifest`（整文件删除） |
+| Rust | `src-tauri/src/commands/plugins.rs` | `list_plugins` / `reload_plugins` / `plugins_dir`（整文件删除） |
+| Rust | `src-tauri/src/commands/dto.rs` | 删除 `PluginRow` DTO 与 `From<&PluginManifest>` 转换 |
+| Rust | `src-tauri/src/state.rs` | `AppState` 去掉 `plugins` 字段与启动时的 `load_plugins()` |
+| Rust | `src-tauri/src/commands/mod.rs` | 注销 `plugins` 模块与三个 command |
+| Rust | `src-tauri/src/core/mod.rs` / `core/settings.rs` | 去掉 `pub mod plugin;` 与 `plugins_dir()` |
+| 前端 | `frontend/src/pages/Plugins.tsx` + `.test.tsx` | 插件页与其测试（整文件删除） |
+| 前端 | `frontend/src/app/navigation.ts` | 标签条从 6 项减到 5 项 |
+| 前端 | `frontend/src/lib/types.ts` | 删除 `PluginRow`；`TabId` 去掉 `'plugins'` |
+| 前端 | `frontend/src/lib/bridge.ts` | 删除三个插件 API 包装 |
+| 前端 | `frontend/src/app/AppShell.tsx` | `PAGES` 去掉插件页 |
+| 前端 | `frontend/src/styles/base.css` | 删除 `.plugin-dir` / `.plugin-item*` 样式 |
+| 文案 | `locales/{zh-Hans,en}.lproj/Localizable.strings` | 删除 9 个 key（唯一 key 175 → **166**） |
+| 文档 | `docs/PLUGIN_ARCHITECTURE.md` | 插件架构文档（整文件删除） |
+| 截图 | `docs/screenshots/tauri-plugins.png` | 插件页截图（整文件删除） |
+
+**连带改动（不是删插件本身，但必须跟着改）**
+
+1. **菜单栏**：删掉「视图 → 插件」，**⌘5 空出来给「设置」** —— 原来设置项没有快捷键，
+   插件占着 ⌘5。README 里「⌘1–⌘5 切换页面」的说法因此继续成立。
+2. **页码编号**：设置页的 `Kicker index` 从 `06` 改成 `05`（插件页原本占 05）。
+3. **CSS 类名**：设置页「关于」卡片复用了 `.plugin-item__meta` 这个插件样式类，
+   删插件样式会连带打崩它 —— 改名为通用类 `.about-meta`。
+4. **截图重出**：标签条从 6 项变 5 项，五张截图的顶部标签条全部过时，
+   全部用真实数据 + mock IPC + Chrome headless 重新生成。
+
+**菜单栏「视图」菜单的最终形态**：
+
+```rust
+            &MenuItem::with_id(
+                app,
+                "nav:processes",
+                i18n.t("nav.process"),
+                true,
+                Some("CmdOrCtrl+1"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:files",
+                i18n.t("nav.file"),
+                true,
+                Some("CmdOrCtrl+2"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:clipboard",
+                i18n.t("nav.clipboard"),
+                true,
+                Some("CmdOrCtrl+3"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:monitor",
+                i18n.t("nav.monitor"),
+                true,
+                Some("CmdOrCtrl+4"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:settings",
+                i18n.t("nav.settings"),
+                true,
+                Some("CmdOrCtrl+5"),
+            )?,
+```
+
+**闸门**：cargo fmt --check 干净；clippy 0 诊断；cargo test **34 passed**；
+tsc 通过；vitest **36 passed**（原 38，减去插件页的 2 个用例）；npm run build 成功。
+
+---
+
 ## 计划自检记录
 
 ### 1. 设计文档覆盖对照
@@ -10837,7 +10720,7 @@ Task 4–15 可与 Task 16–24 并行（Rust 侧与前端侧文件不重叠）�
 | --- | --- | --- | --- | --- |
 | Task 1 | #3 | 18 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
 | Task 1 | #5 | 7 | `src-tauri/src/lib.rs` | `pub fn run() {` |
-| Task 4 | #7 | 13 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
+| Task 4 | #6 | 13 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
 | Task 11 | #2 | 17 | `（片段，无单一对应文件）` | `> "menubar.edit"      = "编辑"        / "Edit"` |
 
 ### 本轮同步记录（Task 27 执行期间）
@@ -10941,3 +10824,53 @@ Task 29 自己也动了 4 个文件，产生的漂移**同样已回写为实际�
 >
 > **MSRV 变更**：`File::try_lock` 需要 Rust 1.89（`src-tauri/Cargo.toml` 的
 > `rust-version` 1.88 → 1.89）。工具链仍是 1.90，**不需要升级 rustc**。
+
+### 本轮同步记录（Task 30 执行期间）
+
+Task 30 下线插件子系统，删除 6 个文件、改动 12 个文件。
+
+**★ 校验口径修正（重要）**
+
+此前「全量扫描后只剩 3 个未命中块」的结论**是错的**：扫描脚本把
+`.superpowers/sdd/**/task-*-brief.md` 也算进了语料 —— 那些简报是从计划里生成的，
+内容与计划块**逐字相同**，于是任何历史块都能在简报里「命中」，把真实的漂移全遮住了。
+
+修正后（语料排除 `.superpowers/` 与 `.worktrees/`），真实未命中块是 **33 个**，
+其中 **26 个已按实际文件回写**、**5 个因文件被删除而改成说明文字**、
+**3 个是已登记的历史例外**（Task 1 #3 / #5、Task 4 #6 —— 原 #7，删块后位移）。
+
+**已回写为实际文件的块（26 个）**
+
+| 任务 | 块序号 | 回写来源 |
+| --- | --- | --- |
+| Task 2 | #1 / #5 / #6 | `vite.config.ts` / `frontend/src/main.tsx` / `frontend/src/App.tsx` |
+| Task 3 | #0 | `frontend/src/styles/tokens.css` |
+| Task 4 | #0 / #4 / #5 | `core/mod.rs` / `core/theme.rs` / `core/settings.rs` |
+| Task 5 | #17 / #19 / #20 | `core/clipboard.rs`（tests 段）/ `core/monitor.rs`（`SystemInfo` 段）/ `core/mod.rs`（模块声明段） |
+| Task 6 | #0 / #1 | `commands/dto.rs` / `commands/mod.rs`（文件头） |
+| Task 7 | #0 / #2 | `state.rs` / `system/mod.rs`（文件头） |
+| Task 8 | #1 | `commands/mod.rs`（`handler()` 段） |
+| Task 10 | #1 / #3 | `commands/monitor.rs` / `commands/mod.rs`（handler 内命令清单段） |
+| Task 11 | #1 / #3 | `system/menu.rs` / `lib.rs`（`setup()` 段） |
+| Task 16 | #0 / #1 | `frontend/src/lib/types.ts` / `frontend/src/lib/bridge.ts` |
+| Task 18 | #0 / #4 / #8 | `frontend/src/app/navigation.ts` / `AppShell.tsx` / `AppShell.test.tsx` |
+| Task 24 | #0 | `frontend/src/pages/Settings.tsx` |
+
+**因文件被删除而改成说明文字的块（5 个）**
+
+| 任务 | 块序号 | 原内容 | 处理 |
+| --- | --- | --- | --- |
+| Task 4 | #6 | `core/plugin.rs` 的 `plugins_dir()` 片段 | 改为「已随 Task 30 移除」 |
+| Task 10 | #2 | `commands/plugins.rs` 全文 | 改为「已随 Task 30 移除」 |
+| Task 23 | #0 / #1 / #2 | `Plugins.tsx` / `.plugin-*` 样式 / `Plugins.test.tsx` | 改为「已随 Task 30 移除」 |
+
+> **Task 23（插件页）整段已成为历史**：它描述的实现已被 Task 30 整体下线，
+> 计划里保留的说明文字记录了「曾经有过、后来被移除」这条事实。
+
+**保留为历史例外的块（3 个）**
+
+| 任务 | 块序号 | 对应文件（实际） | 说明 |
+| --- | --- | --- | --- |
+| Task 1 | #3 | `src-tauri/src/lib.rs` | 任务当时的文件头，后续被多次扩展 |
+| Task 1 | #5 | `src-tauri/src/lib.rs` | 任务当时的 `run()` 片段 |
+| Task 4 | #6 | `src-tauri/src/lib.rs` | 同上（原 #7，Task 10 删块后序号位移） |

@@ -40,18 +40,6 @@ export interface SystemInfoDto {
   processCount: number;
 }
 
-export interface PluginRow {
-  id: string;
-  name: string;
-  version: string;
-  author: string | null;
-  description: string | null;
-  minimumAppVersion: string | null;
-  permissions: string[];
-  main: string | null;
-  dir: string;
-}
-
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type Accent = 'signal' | 'haze' | 'moss' | 'amber';
 export type Locale = 'zh-Hans' | 'en';
@@ -75,4 +63,4 @@ export interface Notice {
   message: string;
 }
 
-export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor' | 'plugins' | 'settings';
+export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor' | 'settings';

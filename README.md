@@ -2,7 +2,7 @@
 
 > 鸬鹚工具箱 —— macOS 系统工具箱 · **Tauri v2 + React + TypeScript 重写版**
 >
-> 进程管理 · 文件管理 · 剪贴板管理 · 系统监控 · 原生菜单栏 · 托盘 · 全局快捷键 · 插件架构
+> 进程管理 · 文件管理 · 剪贴板管理 · 系统监控 · 原生菜单栏 · 托盘 · 全局快捷键
 
 Ki6 是 [LuciBox](https://github.com/hagenmagpie/LuciBox)（SwiftUI + AppKit）的 **Rust +
 Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保持一致，界面语言换成更克制的
@@ -35,9 +35,9 @@ Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保�
 | --- | --- | --- |
 | ![进程管理](docs/screenshots/tauri-processes.png) | ![文件管理](docs/screenshots/tauri-files.png) | ![剪贴板](docs/screenshots/tauri-clipboard.png) |
 
-| 系统监控 | 插件 | 设置 |
-| --- | --- | --- |
-| ![系统监控](docs/screenshots/tauri-monitor.png) | ![插件](docs/screenshots/tauri-plugins.png) | ![设置](docs/screenshots/tauri-settings.png) |
+| 系统监控 | 设置 |
+| --- | --- |
+| ![系统监控](docs/screenshots/tauri-monitor.png) | ![设置](docs/screenshots/tauri-settings.png) |
 
 > 截图取自真实运行数据（真实进程、真实目录、真实剪贴板内容）。
 > 截图在 Chromium headless 里渲染 —— CSS、字体、布局与 WKWebView 同源，
@@ -49,7 +49,7 @@ Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保�
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ ●●●   KI6        进程 文件 剪贴板 监控 │ 插件 设置    [⌕ 搜索] │ ← 工具栏
+│ ●●●   KI6        进程 文件 剪贴板 监控 │ 设置    [⌕ 搜索] │ ← 工具栏
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │                        当前页内容                              │
@@ -97,7 +97,6 @@ Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保�
 | **单实例** | 开机自启与手动打开撞车时只保留一个进程，第二次启动会把已有实例的窗口唤出来 |
 | **主题** | 跟随系统 / 浅色 / 深色，四种强调色，实时切换 |
 | **国际化** | 简体中文 / English，原生菜单栏与界面文案全部跟随应用语言 |
-| **插件** | 扫描插件目录、解析 `manifest.json`、注册标签页与命令 |
 
 ---
 
@@ -168,13 +167,13 @@ Ki6/
 │   └── index.html
 ├── src-tauri/
 │   ├── src/
-│   │   ├── lib.rs             # Tauri Builder、插件、命令注册
+│   │   ├── lib.rs             # Tauri Builder、Tauri 插件注册、命令注册
 │   │   ├── main.rs            # 二进制入口
 │   │   ├── state.rs           # AppState（唯一权威状态源）
 │   │   ├── events.rs          # 前后端事件常量
 │   │   ├── core/              # 纯业务逻辑（不依赖 tauri crate）
 │   │   │   ├── process.rs  files.rs  clipboard.rs  monitor.rs
-│   │   │   ├── plugin.rs   settings.rs  i18n.rs  theme.rs
+│   │   │   ├── settings.rs  i18n.rs  theme.rs
 │   │   │   └── platform.rs  icon.rs
 │   │   ├── commands/          # Tauri command 门面 + DTO
 │   │   └── system/            # 原生集成
@@ -216,7 +215,6 @@ Ki6/
 | `MenuBarManager.swift` | `src-tauri/src/system/menu.rs` + `src-tauri/src/system/tray.rs` |
 | `GlobalShortcutManager.swift` | `src-tauri/src/system/shortcut.rs` |
 | `AutoLaunchManager.swift` | `src-tauri/src/system/autolaunch.rs` |
-| `PluginSystem.swift` | `src-tauri/src/core/plugin.rs` |
 | `Info.plist` / `@AppStorage` | `src-tauri/src/core/settings.rs`（`settings.json`） |
 | `Localizable.strings` | `locales/*/Localizable.strings`（原样复用） |
 

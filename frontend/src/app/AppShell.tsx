@@ -10,7 +10,6 @@ import { Toolbar } from './Toolbar';
 import { Clipboard } from '../pages/Clipboard';
 import { Files } from '../pages/Files';
 import { Monitor } from '../pages/Monitor';
-import { Plugins } from '../pages/Plugins';
 import { Processes } from '../pages/Processes';
 import { Settings } from '../pages/Settings';
 
@@ -19,7 +18,6 @@ const PAGES = {
   files: Files,
   clipboard: Clipboard,
   monitor: Monitor,
-  plugins: Plugins,
   settings: Settings,
 } as const;
 
