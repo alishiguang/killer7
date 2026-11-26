@@ -15,12 +15,15 @@ Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保�
 
 ## 下载
 
-仓库内已附带构建好的产物（Apple Silicon）：
+最新版本 **[Ki6 1.2.0](https://github.com/chuaker7/Ki6/releases/tag/v1.2.0)**（Apple Silicon）：
 
 | 文件 | 说明 |
 | --- | --- |
-| [`release/Ki6_1.2.0_aarch64.dmg`](release/Ki6_1.2.0_aarch64.dmg) | 磁盘映像，双击后拖进「应用程序」 |
-| [`release/Ki6.zip`](release/Ki6.zip) | `Ki6.app` 的压缩包，解压即用 |
+| [`Ki6_1.2.0_aarch64.dmg`](release/Ki6_1.2.0_aarch64.dmg) | 磁盘映像，双击后拖进「应用程序」 |
+| [`Ki6.zip`](release/Ki6.zip) | `Ki6.app` 的压缩包，解压即用 |
+
+两个文件同时挂在 [Releases 页面](https://github.com/chuaker7/Ki6/releases/tag/v1.2.0) 上作为附件，
+仓库里的 `release/` 目录也各存了一份。
 
 首次运行是未签名的（ad-hoc 签名），Gatekeeper 会拦截 —— 在「系统设置 → 隐私与安全性」
 里点「仍要打开」，或右键点「打开」。
