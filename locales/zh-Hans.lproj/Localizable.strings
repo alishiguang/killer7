@@ -130,13 +130,10 @@
 "app.tagline" = "MACOS 系统工具箱";
 "app.subtitle" = "Ki6 · Rust 重写版";
 
-"nav.section.tools" = "工具";
-"nav.section.system" = "系统";
 "nav.process" = "进程管理";
 "nav.file" = "文件管理";
 "nav.clipboard" = "剪贴板";
 "nav.monitor" = "系统监控";
-"nav.settings" = "设置";
 
 "common.search" = "搜索";
 "common.all" = "全部";

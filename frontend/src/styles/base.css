@@ -288,6 +288,12 @@ figure {
   flex: 0 0 220px;
 }
 
+/* 工具栏右上角的设置按钮：角落里的一个齿轮，不占主导航的位置 */
+.toolbar__settings {
+  flex: 0 0 auto;
+  margin-left: 10px;
+}
+
 /* 标签条：工具组与系统组之间有一道细分隔 */
 .tabstrip {
   display: flex;
@@ -428,6 +434,13 @@ figure {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+/* 页头左侧的「返回 + 标题」组合 */
+.page__head-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .page__tools {

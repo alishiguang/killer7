@@ -29,9 +29,7 @@ vi.mock('../lib/bridge', () => ({
       'nav.file': '文件管理',
       'nav.clipboard': '剪贴板',
       'nav.monitor': '系统监控',
-      'nav.settings': '设置',
-      'nav.section.tools': '工具',
-      'nav.section.system': '系统',
+      'settings.title': '设置',
       'app.brand': 'KI6',
       'app.tagline': 'MACOS 系统工具箱',
     }),
@@ -70,9 +68,7 @@ vi.mock('../lib/store', async () => {
       'nav.file': '文件管理',
       'nav.clipboard': '剪贴板',
       'nav.monitor': '系统监控',
-      'nav.settings': '设置',
-      'nav.section.tools': '工具',
-      'nav.section.system': '系统',
+      'settings.title': '设置',
       'app.brand': 'KI6',
       'app.tagline': 'MACOS 系统工具箱',
       'common.search': '搜索',
@@ -84,6 +80,7 @@ vi.mock('../lib/store', async () => {
       'bottom.network': '网络',
     },
     activeTab: 'processes',
+    settingsOpen: false,
     toast: null,
     locale: 'zh-Hans',
     search: '',
@@ -102,20 +99,25 @@ describe('AppShell', () => {
     vi.clearAllMocks();
   });
 
-  it('渲染品牌与五个标签页', async () => {
+  it('渲染品牌与四个标签页', async () => {
     render(<AppShell />);
     expect(await screen.findByText('KI6')).toBeInTheDocument();
 
-    // 五个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
+    // 四个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
+    // 设置不占标签位，它由工具栏角落的齿轮按钮进入。
     const tabs = screen.getByRole('tablist');
-    for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控', '设置']) {
+    for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控']) {
       expect(await within(tabs).findByRole('tab', { name: label })).toBeInTheDocument();
     }
+    expect(within(tabs).queryByRole('tab', { name: '设置' })).not.toBeInTheDocument();
   });
 
-  it('工具栏上有搜索框，底部有汇总栏', async () => {
+  it('工具栏上有搜索框、设置按钮，底部有汇总栏', async () => {
     render(<AppShell />);
     expect(await screen.findByPlaceholderText('搜索')).toBeInTheDocument();
+
+    // 设置入口是工具栏角落里的一个齿轮图标按钮。
+    expect(await screen.findByRole('button', { name: '设置' })).toBeInTheDocument();
 
     // 底部汇总栏的三栏：CPU / 内存 / 磁盘 + CPU 负载 + 进程数 + 网络。
     expect(await screen.findByText('CPU 负载')).toBeInTheDocument();

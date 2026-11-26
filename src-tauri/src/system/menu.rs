@@ -42,7 +42,7 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
             &MenuItem::with_id(
                 app,
                 "app:settings",
-                i18n.t("nav.settings"),
+                i18n.t("settings.title"),
                 true,
                 Some("CmdOrCtrl+,"),
             )?,
@@ -70,8 +70,9 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
         ],
     )?;
 
-    // 「设置」的 Cmd+, 加速键只留给应用菜单里的那一项；视图菜单里再挂一次
-    // 会让同一个快捷键指向两个菜单项，macOS 只能二选一。
+    // 「设置」不再是视图菜单里的一项（前端把它挪到了工具栏角落的齿轮按钮），
+    // 只由应用菜单的「设置…」触发，Cmd+, 加速键也只挂在那里 —— 同一个快捷键
+    // 指向两个菜单项时 macOS 只能二选一。
     let view_menu = Submenu::with_items(
         app,
         i18n.t("menubar.view"),
@@ -104,13 +105,6 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
                 i18n.t("nav.monitor"),
                 true,
                 Some("CmdOrCtrl+4"),
-            )?,
-            &MenuItem::with_id(
-                app,
-                "nav:settings",
-                i18n.t("nav.settings"),
-                true,
-                Some("CmdOrCtrl+5"),
             )?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, Some(&i18n.t("view.fullscreen")))?,

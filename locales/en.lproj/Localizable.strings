@@ -130,13 +130,10 @@
 "app.tagline" = "MACOS SYSTEM TOOLBOX";
 "app.subtitle" = "Ki6 · Rust rewrite";
 
-"nav.section.tools" = "Tools";
-"nav.section.system" = "System";
 "nav.process" = "Processes";
 "nav.file" = "Files";
 "nav.clipboard" = "Clipboard";
 "nav.monitor" = "Monitor";
-"nav.settings" = "Settings";
 
 "common.search" = "Search";
 "common.all" = "All";

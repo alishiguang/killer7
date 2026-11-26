@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
  * 图标集：24×24 线性图标，统一 `currentColor` + 1.5 描边。
  *
  * **不引第三方图标库** —— 依赖白名单里只有 react / react-dom / @tauri-apps/api /
- * @tauri-apps/plugin-dialog，为了 11 个图标加一个库不划算；手写 SVG 还能精确控制
+ * @tauri-apps/plugin-dialog，为了 13 个图标加一个库不划算；手写 SVG 还能精确控制
  * 描边粗细与圆角，保持和 ink/paper 视觉语言一致。
  */
 export type IconName =
@@ -14,6 +14,8 @@ export type IconName =
   | 'folder-plus'
   | 'file-plus'
   | 'arrow-up'
+  | 'arrow-left'
+  | 'gear'
   | 'pencil'
   | 'trash'
   | 'copy'
@@ -57,6 +59,28 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <line x1="12" y1="20" x2="12" y2="5" />
       <polyline points="5 12 12 5 19 12" />
+    </>
+  ),
+  // 向左箭头：从设置页返回上一个页面
+  'arrow-left': (
+    <>
+      <line x1="19" y1="12" x2="5" y2="12" />
+      <polyline points="12 19 5 12 12 5" />
+    </>
+  ),
+  // 齿轮：打开设置
+  gear: (
+    <>
+      <circle cx="12" cy="12" r="7" />
+      <circle cx="12" cy="12" r="2.6" />
+      <line x1="12" y1="2.5" x2="12" y2="5" />
+      <line x1="12" y1="19" x2="12" y2="21.5" />
+      <line x1="2.5" y1="12" x2="5" y2="12" />
+      <line x1="19" y1="12" x2="21.5" y2="12" />
+      <line x1="5.3" y1="5.3" x2="7.1" y2="7.1" />
+      <line x1="16.9" y1="16.9" x2="18.7" y2="18.7" />
+      <line x1="18.7" y1="5.3" x2="16.9" y2="7.1" />
+      <line x1="7.1" y1="16.9" x2="5.3" y2="18.7" />
     </>
   ),
   // 铅笔：重命名

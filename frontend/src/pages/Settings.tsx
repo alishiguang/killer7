@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 
-import { Card, Checkbox, Kicker, Segmented } from '../components';
+import { Card, Checkbox, Icon, Kicker, Segmented } from '../components';
 import { api } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
 import { applyTheme } from '../lib/theme';
@@ -27,7 +27,7 @@ export function Settings() {
   if (!settings) {
     return (
       <div className="page">
-        <Kicker index="05">{t('settings.title')}</Kicker>
+        <Kicker>{t('settings.title')}</Kicker>
         <div className="empty-state">{t('common.loading')}</div>
       </div>
     );
@@ -36,7 +36,18 @@ export function Settings() {
   return (
     <div className="page">
       <div className="page__head">
-        <Kicker index="05">{t('settings.title')}</Kicker>
+        <div className="page__head-lead">
+          <button
+            type="button"
+            className="native-button native-button--icon"
+            title={t('common.back')}
+            aria-label={t('common.back')}
+            onClick={() => setState({ settingsOpen: false })}
+          >
+            <Icon name="arrow-left" />
+          </button>
+          <Kicker>{t('settings.title')}</Kicker>
+        </div>
       </div>
 
       <div className="settings-grid">

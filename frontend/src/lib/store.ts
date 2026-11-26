@@ -11,6 +11,8 @@ export interface AppState {
   strings: Record<string, string>;
   /** 当前标签页。 */
   activeTab: TabId;
+  /** 设置面板是否展开。设置不再是一个标签页，而是工具栏角落齿轮按钮打开的覆盖视图。 */
+  settingsOpen: boolean;
   /** 顶部提示。 */
   toast: (Notice & { id: number }) | null;
   /** 界面语言。 */
@@ -23,6 +25,7 @@ const initialState: AppState = {
   settings: null,
   strings: {},
   activeTab: 'processes',
+  settingsOpen: false,
   toast: null,
   locale: 'zh-Hans',
   search: '',

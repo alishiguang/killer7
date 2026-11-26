@@ -64,8 +64,10 @@ vi.mock('../lib/store', async () => {
       'settings.version': '版本',
       'settings.bundleId': 'Bundle ID',
       'settings.copyright': '版权',
+      'common.back': '返回',
     },
-    activeTab: 'settings',
+    activeTab: 'processes',
+    settingsOpen: true,
     toast: null,
     locale: 'zh-Hans',
   };
@@ -101,5 +103,10 @@ describe('Settings', () => {
   it('渲染关于信息中的 bundle id', async () => {
     render(<Settings />);
     expect(await screen.findByText('com.igigi.chuaker7')).toBeInTheDocument();
+  });
+
+  it('页头带一个返回按钮', async () => {
+    render(<Settings />);
+    expect(await screen.findByRole('button', { name: '返回' })).toBeInTheDocument();
   });
 });

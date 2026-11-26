@@ -63,4 +63,4 @@ export interface Notice {
   message: string;
 }
 
-export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor' | 'settings';
+export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor';
