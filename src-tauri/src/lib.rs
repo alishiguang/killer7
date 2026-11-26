@@ -16,6 +16,23 @@ use state::AppState;
 
 /// Tauri Builder 装配入口。
 pub fn run() {
+    // 单实例仲裁必须发生在**任何窗口 / 托盘 / 后台线程起来之前**。
+    //
+    // 开机自启走 LaunchAgent，launchd 直接拉起包内二进制，不经过 LaunchServices；
+    // 之后用户从 Finder 再打开同一个 app 就会多出一个进程 —— 两个托盘图标、
+    // 两套菜单栏、两份后台采样线程，还可能并发写同一个 settings.json。
+    //
+    // 判定靠文件锁（进程退出即释放，不留死锁文件），唤起已有实例靠请求文件。
+    match crate::system::single_instance::acquire() {
+        crate::system::single_instance::Arbitration::Primary => {}
+        crate::system::single_instance::Arbitration::Secondary => {
+            // 把「用户又点了一次图标」的意图转给已在跑的那个实例。
+            crate::system::single_instance::request_activation();
+            eprintln!("[single-instance] 已有实例在运行，本次启动已退出");
+            std::process::exit(0);
+        }
+    }
+
     let settings = crate::core::settings::Settings::load();
     let app_state = AppState::new(settings);
 
@@ -32,6 +49,10 @@ pub fn run() {
             let locale = state.settings.lock().expect("设置锁中毒").locale;
             crate::system::menu::build(&handle, locale)?;
             crate::system::tray::build(&handle, locale)?;
+
+            // 监听「唤起请求」：别的实例发现自己不是首个实例时会往这个目录里
+            // 丢一个请求文件，首个实例收到就把主窗口叫出来。
+            crate::system::single_instance::spawn_activation_watcher(handle.clone());
 
             // 全局快捷键 ⌘L：**默认开启**（core/settings.rs 的默认值是 true），
             // 设置项可热更新。注册失败必须留下痕迹，否则「显示已开启但毫无反应」

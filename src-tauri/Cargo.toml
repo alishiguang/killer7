@@ -2,7 +2,7 @@
 name = "chuaker7"
 version = "1.2.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"  # File::try_lock（单实例保护）自 1.89 稳定
 description = "Ki6 — macOS 系统工具箱（Tauri v2 + React 重写版）"
 authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
 license = "MIT"
