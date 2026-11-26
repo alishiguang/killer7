@@ -272,7 +272,7 @@ opt-level = 1
 name = "chuaker7"
 version = "1.2.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"  # File::try_lock（单实例保护）自 1.89 稳定
 description = "Ki6 — macOS 系统工具箱（Tauri v2 + React 重写版）"
 authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
 license = "MIT"
@@ -307,8 +307,7 @@ objc2-app-kit = "0.3"
 
 [features]
 default = ["custom-protocol"]
-custom-protocol = ["tauri/custom-protocol"]
-```
+custom-protocol = ["tauri/custom-protocol"]```
 
 - [ ] **Step 4: 创建 `src-tauri/build.rs` 与 `src-tauri/src/{main.rs,lib.rs}`**
 
@@ -319,7 +318,7 @@ custom-protocol = ["tauri/custom-protocol"]
 name = "chuaker7"
 version = "1.2.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"  # File::try_lock（单实例保护）自 1.89 稳定
 description = "Ki6 — macOS 系统工具箱（Tauri v2 + React 重写版）"
 authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
 license = "MIT"
@@ -3195,6 +3194,23 @@ use state::AppState;
 
 /// Tauri Builder 装配入口。
 pub fn run() {
+    // 单实例仲裁必须发生在**任何窗口 / 托盘 / 后台线程起来之前**。
+    //
+    // 开机自启走 LaunchAgent，launchd 直接拉起包内二进制，不经过 LaunchServices；
+    // 之后用户从 Finder 再打开同一个 app 就会多出一个进程 —— 两个托盘图标、
+    // 两套菜单栏、两份后台采样线程，还可能并发写同一个 settings.json。
+    //
+    // 判定靠文件锁（进程退出即释放，不留死锁文件），唤起已有实例靠请求文件。
+    match crate::system::single_instance::acquire() {
+        crate::system::single_instance::Arbitration::Primary => {}
+        crate::system::single_instance::Arbitration::Secondary => {
+            // 把「用户又点了一次图标」的意图转给已在跑的那个实例。
+            crate::system::single_instance::request_activation();
+            eprintln!("[single-instance] 已有实例在运行，本次启动已退出");
+            std::process::exit(0);
+        }
+    }
+
     let settings = crate::core::settings::Settings::load();
     let app_state = AppState::new(settings);
 
@@ -3211,6 +3227,10 @@ pub fn run() {
             let locale = state.settings.lock().expect("设置锁中毒").locale;
             crate::system::menu::build(&handle, locale)?;
             crate::system::tray::build(&handle, locale)?;
+
+            // 监听「唤起请求」：别的实例发现自己不是首个实例时会往这个目录里
+            // 丢一个请求文件，首个实例收到就把主窗口叫出来。
+            crate::system::single_instance::spawn_activation_watcher(handle.clone());
 
             // 全局快捷键 ⌘L：**默认开启**（core/settings.rs 的默认值是 true），
             // 设置项可热更新。注册失败必须留下痕迹，否则「显示已开启但毫无反应」
@@ -3264,8 +3284,7 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Ki6");
-}
-```
+}```
 
 > **实际落地**：后续任务给 lib.rs 追加了 system / commands / setup 装配。
 > 上文是当前文件的**完整内容**。
@@ -4720,9 +4739,9 @@ pub mod activation;
 pub mod autolaunch;
 pub mod menu;
 pub mod shortcut;
+pub mod single_instance;
 pub mod tasks;
-pub mod tray;
-```
+pub mod tray;```
 
 > `rustfmt` 的 `reorder_modules` 默认开启，`mod` 声明会按字母序重排 ——
 > 补完这两行后整个文件的**全文**就是上面这几行，不要按追加顺序写。
@@ -4950,15 +4969,15 @@ pub mod autolaunch;
 > `autolaunch`，此时 `system/mod.rs` 全文应为：
 
 ```rust
-//! 原生集成：菜单栏、托盘、快捷键、自启、激活策略与后台任务。
+//! 原生集成：菜单栏、托盘、快捷键、自启、激活策略、单实例与后台任务。
 
 pub mod activation;
 pub mod autolaunch;
 pub mod menu;
 pub mod shortcut;
+pub mod single_instance;
 pub mod tasks;
-pub mod tray;
-```
+pub mod tray;```
 
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
@@ -10588,6 +10607,160 @@ export function BottomBar() {
 
 ---
 
+### Task 29: 单实例保护 —— 补上开机自启与手动打开的撞车缺口
+
+**背景**
+
+T28 交付后复查剩余缺口时，发现一个真实的双实例风险：
+
+开机自启走 LaunchAgent，plist 的 `ProgramArguments` 直接指向 `.app` 包内的二进制，
+由 launchd 在登录时拉起 —— **这条路径不经过 LaunchServices**，所以 LaunchServices 并不知道
+这个进程的存在。之后用户从 Finder 双击同一个 `Ki6.app`，系统会**再起一个进程**：
+两个托盘图标、两套菜单栏项、两份后台采样线程，还可能并发写同一个 `settings.json`
+（后者是真正会损坏数据的那种）。
+
+**做法：文件锁仲裁 + 文件唤起请求**
+
+| 层 | 机制 | 为什么这么选 |
+| --- | --- | --- |
+| 仲裁 | `File::try_lock` 锁住数据目录里的锁文件 | 进程退出/崩溃时操作系统自动释放锁，不会留下要人工清理的死锁文件 |
+| 唤起 | 后启动的实例往唤起目录丢请求文件，首个实例用 `notify` 盯着 | 「仅菜单栏模式」下主窗口本来就是隐藏的，只有先启动的实例自己知道怎么把它叫出来 |
+
+身份键用**可执行文件的规范化路径**（打包态 `/Applications/Ki6.app/Contents/MacOS/chuaker7`，
+开发态 `target/release/chuaker7`），两者天然分开 —— 开发时跑二进制不会把正在运行的正式版顶掉，
+也不必读 `Info.plist` 拿 bundle id（`NSBundle` 会把 `objc2-foundation` 拖成直接依赖，不在白名单里）。
+
+> **依赖白名单说明**：`tauri-plugin-single-instance` **不在**本项目白名单里，所以这里用
+> 白名单已有的 `objc2` / `objc2-app-kit` 与标准库自己实现。
+>
+> **MSRV**：`File::try_lock` 自 Rust **1.89** 稳定，`src-tauri/Cargo.toml` 的
+> `rust-version` 由 1.88 提到 1.89 —— 仍然**低于**工具链 1.90，不需要升级 rustc。
+
+**仲裁入口**（`system/single_instance.rs`）：
+
+```rust
+/// 尝试抢占单实例所有权。
+///
+/// 返回 `Secondary` 表示**已经有实例在跑**，调用方应当立刻退出。
+/// 拿不到锁文件、或加锁本身出错时一律放行（`Primary`）——
+/// 单实例是锦上添花的保护，不该因为文件系统出怪问题就让用户打不开应用。
+pub fn acquire() -> Arbitration {
+    let path = lock_path();
+    if let Some(parent) = path.parent()
+        && let Err(err) = std::fs::create_dir_all(parent)
+    {
+        eprintln!("[single-instance] 创建数据目录失败，放行启动: {err}");
+        return Arbitration::Primary;
+    }
+
+    let file = match OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+    {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!("[single-instance] 打开锁文件失败，放行启动: {err}");
+            return Arbitration::Primary;
+        }
+    };
+
+    match file.try_lock() {
+        Ok(()) => {
+            *HELD_LOCK.lock().unwrap_or_else(|err| err.into_inner()) = Some(file);
+            Arbitration::Primary
+        }
+        Err(TryLockError::WouldBlock) => {
+            // 锁被别的进程占着 —— 那就是已经有一个实例在跑了。
+            // 这里必须让 `file` 析构（fd 关闭），否则本进程也会持有一份锁。
+            Arbitration::Secondary
+        }
+        Err(TryLockError::Error(err)) => {
+            eprintln!("[single-instance] 加锁失败，放行启动: {err}");
+            Arbitration::Primary
+        }
+    }
+}
+```
+
+**唤起请求监听**（同一文件）：
+
+```rust
+/// 启动唤起请求监听（只由首个实例执行）。
+///
+/// 收到请求后清空目录并把主窗口显示出来 —— 与点击托盘图标的效果一致。
+pub fn spawn_activation_watcher<R: Runtime>(app: AppHandle<R>) {
+    let dir = activation_dir();
+    if let Err(err) = std::fs::create_dir_all(&dir) {
+        eprintln!("[single-instance] 创建唤起目录失败: {err}");
+        return;
+    }
+
+    std::thread::spawn(move || {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
+            let _ = tx.send(result);
+        });
+        let Ok(mut watcher) = watcher else {
+            eprintln!("[single-instance] 无法创建唤起监听器");
+            return;
+        };
+        if let Err(err) = watcher.watch(&dir, RecursiveMode::NonRecursive) {
+            eprintln!("[single-instance] 监听 {} 失败: {err}", dir.display());
+            return;
+        }
+
+        while let Ok(result) = rx.recv() {
+            let Ok(event) = result else { continue };
+            if !matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_)) {
+                continue;
+            }
+            // 先清目录再唤起：请求是一次性的，残留文件会让下一次启动白唤起一次。
+            clear_requests(&dir);
+            crate::system::tray::show_main_window(&app);
+        }
+    });
+}
+```
+
+**接入点**（`lib.rs` 的 `run()`）—— 必须发生在**任何窗口 / 托盘 / 后台线程起来之前**：
+
+```rust
+    // 单实例仲裁必须发生在**任何窗口 / 托盘 / 后台线程起来之前**。
+    //
+    // 开机自启走 LaunchAgent，launchd 直接拉起包内二进制，不经过 LaunchServices；
+    // 之后用户从 Finder 再打开同一个 app 就会多出一个进程 —— 两个托盘图标、
+    // 两套菜单栏、两份后台采样线程，还可能并发写同一个 settings.json。
+    //
+    // 判定靠文件锁（进程退出即释放，不留死锁文件），唤起已有实例靠请求文件。
+    match crate::system::single_instance::acquire() {
+        crate::system::single_instance::Arbitration::Primary => {}
+        crate::system::single_instance::Arbitration::Secondary => {
+            // 把「用户又点了一次图标」的意图转给已在跑的那个实例。
+            crate::system::single_instance::request_activation();
+            eprintln!("[single-instance] 已有实例在运行，本次启动已退出");
+            std::process::exit(0);
+        }
+    }
+```
+
+**实测（macOS，真跑）**
+
+| 场景 | 结果 |
+| --- | --- |
+| 第一个实例启动 | 正常起来，拿到锁 |
+| 第二个实例启动 | **立即退出**（退出码 0），日志打印「已有实例在运行，本次启动已退出」；进程数仍为 1 |
+| 菜单栏模式下（主窗口隐藏）再启动一个 | 第二个退出后，**第一个实例的窗口被唤出**（CGWindowList 实测 `owner=chuaker7 name=Ki6 bounds=1080×720`） |
+| 唤起请求目录 | 请求被消费后清空，不留残file |
+
+**闸门**：cargo fmt --check 干净；clippy 0 诊断；cargo test **34 passed**（新增 4 个单测：
+FNV-1a 标准向量、身份键稳定性、锁路径与唤起目录同键、**同一把锁第二次加锁必须失败**、
+唤起请求落盘与清空）；tsc 通过；vitest 38/38 绿。
+
+---
+
 ## 计划自检记录
 
 ### 1. 设计文档覆盖对照
@@ -10740,3 +10913,31 @@ Task 28 把外壳改成活动监视器式三段布局，顺带改了 8 个前端
 
 > **Task 28 自身新增两块**：`BottomBar.tsx` 全文与 `dto.rs` 的 `process_count`
 > 字段片段，均与仓库实际文件逐字节一致。
+
+### 本轮同步记录（Task 29 执行期间）
+
+Task 29 补单实例保护，新增 `src-tauri/src/system/single_instance.rs`，并改动
+`system/mod.rs`、`lib.rs`、`src-tauri/Cargo.toml`（MSRV 1.88 → 1.89）、README。
+
+计划里新增 **Task 29** 段落，三块代码均为实际文件的逐字节摘录：
+
+| 计划块 | 来源 |
+| --- | --- |
+| 仲裁入口 | `src-tauri/src/system/single_instance.rs` 的 `acquire()` |
+| 唤起监听 | `src-tauri/src/system/single_instance.rs` 的 `spawn_activation_watcher()` |
+| 接入点 | `src-tauri/src/lib.rs` 的 `run()` 开头 |
+
+Task 29 自己也动了 4 个文件，产生的漂移**同样已回写为实际文件**：
+
+| 任务 | 块序号 | 回写来源 | 变更原因 |
+| --- | --- | --- | --- |
+| Task 1 | #1 / #2 | `src-tauri/Cargo.toml` | MSRV 1.88 → 1.89（`File::try_lock`） |
+| Task 7 | #4 | `src-tauri/src/lib.rs` | `run()` 开头接入单实例仲裁 |
+| Task 13 | #2 | `src-tauri/src/system/mod.rs` | 新增 `single_instance` 模块声明 |
+| Task 14 | #2 | `src-tauri/src/system/mod.rs` | 同上（模块文档注释同步） |
+
+> **依赖白名单未变**：没有引入 `tauri-plugin-single-instance`，只用白名单里已有的
+> `objc2` / `objc2-app-kit` / `notify` 与标准库。
+>
+> **MSRV 变更**：`File::try_lock` 需要 Rust 1.89（`src-tauri/Cargo.toml` 的
+> `rust-version` 1.88 → 1.89）。工具链仍是 1.90，**不需要升级 rustc**。
