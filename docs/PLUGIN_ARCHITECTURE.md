@@ -1,10 +1,10 @@
-# killer7 插件系统架构设计
+# chuaker7 插件系统架构设计
 
 本文档移植自 Swift 版 `PluginSystem.swift` 顶部的架构说明，并根据 Rust 实现做了对应调整。
 
 ## 概述
 
-killer7 的插件系统允许第三方开发者扩展应用功能，同时保持核心代码的稳定性和安全性。
+chuaker7 的插件系统允许第三方开发者扩展应用功能，同时保持核心代码的稳定性和安全性。
 
 ## 架构设计
 
@@ -91,7 +91,7 @@ pub struct PluginCommand {
 ### 3. 插件生命周期
 
 1. **发现 (Discovery)**
-   - 扫描 `~/Library/Application Support/killer7/Plugins` 目录
+   - 扫描 `~/Library/Application Support/chuaker7/Plugins` 目录
    - 读取插件清单 (`manifest.json`)
    - 验证插件签名
 
@@ -120,7 +120,7 @@ pub struct PluginCommand {
 ### 5. 目录结构
 
 ```
-killer7/
+chuaker7/
 └── Plugins/                    # 插件目录
     ├── manifest.json           # 插件清单
     └── MyPlugin/
@@ -137,7 +137,7 @@ killer7/
   "name": "My Plugin",
   "version": "1.0.0",
   "author": "Example Author",
-  "description": "A sample plugin for killer7",
+  "description": "A sample plugin for chuaker7",
   "minimum_app_version": "1.1.0",
   "permissions": ["file_access", "network"],
   "main": "libmyplugin.dylib"

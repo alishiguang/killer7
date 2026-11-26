@@ -1,4 +1,4 @@
-# killer7 架构改版设计：Tauri v2 + React + TypeScript
+# Ki6 架构改版设计：Tauri v2 + React + TypeScript
 
 - 日期：2026-11-24
 - 状态：已批准
@@ -55,7 +55,7 @@ egui 版功能对等移植完成，但实际使用感受不佳，用户明确指
 ## 4. 目录结构
 
 ```
-killer7/
+Ki6/
 ├── src-tauri/                 # Rust 侧（Tauri v2 应用）
 │   ├── Cargo.toml
 │   ├── tauri.conf.json        # 窗口、托盘、权限、bundle 配置
@@ -169,33 +169,38 @@ process 定时刷新 ─┘
 
 ### 6.1 Commands
 
-| 分组 | 命令 | 签名 |
-| --- | --- | --- |
-| 进程 | `list_processes` | `() -> Vec<ProcessRow>` |
-| | `refresh_processes` | `() -> ()` |
-| | `kill_process` | `(pid: i32) -> ()` |
-| 文件 | `list_dir` | `(path: String) -> Vec<FileRow>` |
-| | `create_folder` | `(dir: String, name: String) -> Result<(), String>` |
-| | `create_file` | `(dir: String, name: String) -> Result<(), String>` |
-| | `rename_path` | `(path: String, new_name: String) -> Result<(), String>` |
-| | `delete_to_trash` | `(path: String) -> Result<(), String>` |
-| | `reveal_in_finder` | `(path: String) -> ()` |
-| | `parent_dir` | `(path: String) -> Option<String>` |
-| | `copy_text` | `(text: String) -> ()` |
-| 剪贴板 | `clipboard_current` | `() -> String` |
-| | `clipboard_history` | `() -> Vec<HistoryRow>` |
-| | `remove_history_item` | `(id: u64) -> ()` |
-| | `clear_history` | `() -> ()` |
-| 监控 | `system_snapshot` | `() -> SystemInfo` |
-| 插件 | `list_plugins` | `() -> Vec<PluginRow>` |
-| | `reload_plugins` | `() -> Vec<PluginRow>` |
-| 设置 | `get_settings` | `() -> Settings` |
-| | `update_settings` | `(patch: SettingsPatch) -> Settings` |
-| | `get_strings` | `(locale: String) -> HashMap<String, String>` |
-| 系统 | `set_menu_bar_mode` | `(enabled: bool) -> ()` |
-| | `set_shortcut_enabled` | `(enabled: bool) -> ()` |
-| | `set_auto_launch` | `(enabled: bool) -> Result<(), String>` |
-| | `hide_main_window` / `show_main_window` | `() -> ()` |
+| 分组 | 命令 | 参数 | 返回 |
+| --- | --- | --- | --- |
+| 进程 | `list_processes` | — | `Vec<ProcessRow>` |
+| | `refresh_processes` | — | `Vec<ProcessRow>` |
+| | `kill_process` | `pid: i32` | `Result<bool, String>` |
+| 文件 | `list_dir` | `path: String` | `Vec<FileRow>` |
+| | `create_folder` | `dir: String, name: String` | `Result<(), String>` |
+| | `create_file` | `dir: String, name: String` | `Result<(), String>` |
+| | `rename_path` | `path: String, new_name: String` | `Result<(), String>` |
+| | `delete_to_trash` | `path: String` | `Result<(), String>` |
+| | `reveal_in_finder` | `path: String` | `()` |
+| | `parent_dir` | `path: String` | `Option<String>` |
+| | `copy_text` | `text: String` | `()` |
+| | `home_dir` | — | `String` |
+| | `watch_dir` | `path: String` | `()` |
+| 剪贴板 | `clipboard_current` | — | `String` |
+| | `clipboard_history` | — | `Vec<HistoryRow>` |
+| | `remove_history_item` | `id: u64` | `Result<(), String>` |
+| | `clear_history` | — | `Result<(), String>` |
+| 监控 | `system_snapshot` | — | `SystemInfoDto` |
+| 插件 | `list_plugins` | — | `Vec<PluginRow>` |
+| | `reload_plugins` | — | `Vec<PluginRow>` |
+| | `plugins_dir` | — | `String` |
+| 设置 | `get_settings` | — | `Settings` |
+| | `update_settings` | `patch: SettingsPatch` | `Settings` |
+| | `get_strings` | `locale: String` | `HashMap<String, String>` |
+| 系统 | `set_menu_bar_mode` | `enabled: bool` | `()` |
+| | `set_shortcut_enabled` | `enabled: bool` | `()` |
+| | `set_auto_launch` | `enabled: bool` | `Result<(), String>` |
+| | `hide_main_window` | — | `()` |
+| | `show_main_window` | — | `()` |
+| | `popup_context_menu` | `kind: String, payload: serde_json::Value` | `()` |
 
 ### 6.2 Events
 
@@ -220,7 +225,7 @@ Rust 侧类型用 `serde::Serialize` 直接导出给前端（`camelCase`），�
 
 | 元素 | 实现 | 对应痛点 |
 | --- | --- | --- |
-| 应用菜单栏 | Tauri `setAsAppMenu()`：关于 killer7 / 设置… / 隐藏 / 退出，含 ⌘, ⌘L, ⌘W 加速器 | 缺少原生交互 |
+| 应用菜单栏 | Tauri `setAsAppMenu()`：关于 Ki6 / 设置… / 隐藏 / 退出，含 ⌘, ⌘L, ⌘W 加速器 | 缺少原生交互 |
 | 右键菜单 | `Menu.popup()`：进程行、文件行、剪贴板条目各自一套原生菜单 | 缺少原生交互 |
 | 托盘菜单 | `TrayIconBuilder` + 原生菜单，实时显示 CPU / 内存 / 磁盘 | 缺少原生交互 |
 | 文件对话框 | Tauri dialog 插件 | 缺少原生交互 |
@@ -283,7 +288,7 @@ Rust 侧类型用 `serde::Serialize` 直接导出给前端（`camelCase`），�
 
 ## 11. 仓库策略
 
-- 同一个 `alishiguang/killer7` 仓库继续演进，主分支 `main`。
+- 同一个 `chuaker7/Ki6` 仓库继续演进，主分支 `main`。（**展示名统一为 `Ki6`**：窗口标题、菜单栏、托盘、关于框、品牌字、`productName`、README 与 GitHub 描述；**标识符统一为 `chuaker7`**：crate / lib / npm 包名 / bundle id / LaunchAgent 标签 / 数据目录 / 类型名 —— 标识符不随展示名改动，改了会丢用户已有设置。）
 - 当前 egui 版保留在 `legacy-egui` 分支（指向 `b36b8dc`），随时可对照或回退。
 - 提交信息中文，结尾附 `AI-Coding: true` / `AI-Tool: TophantAI`。
 

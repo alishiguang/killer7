@@ -6,7 +6,7 @@
 */
 
 // MARK: - App Info
-"app.name" = "LuciBox";
+"app.name" = "Ki6";
 "app.description" = "A powerful macOS system toolkit";
 
 // MARK: - Tab Titles
@@ -52,6 +52,8 @@
 "clipboard.title" = "Clipboard";
 "clipboard.current" = "Current Clipboard";
 "clipboard.history" = "History";
+"clipboard.column.type" = "Type";
+"clipboard.column.time" = "Time";
 "clipboard.search.placeholder" = "Search history";
 "clipboard.clear" = "Clear";
 "clipboard.clearHistory" = "Clear History";
@@ -73,8 +75,8 @@
 "monitor.download" = "Download";
 
 // MARK: - Menu Bar
-"menubar.title" = "LuciBox";
-"menubar.open" = "Open LuciBox";
+"menubar.title" = "Ki6";
+"menubar.open" = "Open Ki6";
 "menubar.quit" = "Quit";
 
 // MARK: - Settings
@@ -123,10 +125,10 @@
 "view.menu" = "View";
 "view.menuBar.mode" = "Menu Bar Mode";
 
-// MARK: - killer7 branding
-"app.brand" = "KILLER7";
+// MARK: - Ki6 branding
+"app.brand" = "KI6";
 "app.tagline" = "MACOS SYSTEM TOOLBOX";
-"app.subtitle" = "LuciBox · Rust rewrite";
+"app.subtitle" = "Ki6 · Rust rewrite";
 
 "nav.section.tools" = "Tools";
 "nav.section.system" = "System";
@@ -149,6 +151,13 @@
 "common.back" = "Back";
 "common.done" = "Done";
 
+"bottom.cpu" = "CPU";
+"bottom.memory" = "Memory";
+"bottom.disk" = "Disk";
+"bottom.cpuLoad" = "CPU Load";
+"bottom.processes" = "Processes";
+"bottom.network" = "Network";
+
 "process.empty" = "No matching processes";
 "process.count" = "%@ processes";
 "process.kill.done" = "Terminated %@";
@@ -165,6 +174,7 @@
 "file.failed" = "Operation failed";
 
 "clipboard.copied" = "Copied to clipboard";
+"clipboard.deleted" = "Deleted";
 "clipboard.history.count" = "%@ items";
 "clipboard.type.text" = "Text";
 
@@ -193,6 +203,28 @@
 "plugin.permissions" = "Permissions";
 "plugin.minVersion" = "Minimum App Version";
 
-"menubar.open" = "Open killer7";
+"menubar.open" = "Open Ki6";
 "menubar.quit" = "Quit";
-"menubar.title" = "killer7";
+"menubar.title" = "Ki6";
+
+// MARK: - Native Menu Bar (macOS predefined items)
+// These keys let every native menu-bar entry follow the app language. muda 0.20
+// hard-codes the title via initWithTitle: and never follows the system language,
+// so we have to supply the copy ourselves. The three app-name-bearing entries
+// (About / Hide / Quit) are assembled as "<verb> Ki6" on the Rust side.
+"menubar.edit" = "Edit";
+"menubar.view" = "View";
+"menubar.window" = "Window";
+"menubar.hide" = "Hide";
+"menubar.hideOthers" = "Hide Others";
+"menubar.showAll" = "Show All";
+"menubar.quitApp" = "Quit";
+"edit.undo" = "Undo";
+"edit.redo" = "Redo";
+"edit.cut" = "Cut";
+"edit.copy" = "Copy";
+"edit.paste" = "Paste";
+"edit.selectAll" = "Select All";
+"window.minimize" = "Minimize";
+"window.close" = "Close Window";
+"view.fullscreen" = "Toggle Full Screen";

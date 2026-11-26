@@ -1,8 +1,8 @@
-# killer7 Tauri v2 + React 重写实施计划
+# Ki6 Tauri v2 + React 重写实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 killer7 从 egui 立即模式重写为 Tauri v2 + React 19 + TypeScript 前端架构，保留 cindy.cn 的 ink/paper 视觉语言与全部业务功能，同时用 macOS 原生能力（应用菜单栏、原生右键菜单、托盘菜单、原生对话框）替换自绘交互层，消除首帧空白与滚动掉帧。
+**Goal:** 把 Ki6 从 egui 立即模式重写为 Tauri v2 + React 19 + TypeScript 前端架构，保留 cindy.cn 的 ink/paper 视觉语言与全部业务功能，同时用 macOS 原生能力（应用菜单栏、原生右键菜单、托盘菜单、原生对话框）替换自绘交互层，消除首帧空白与滚动掉帧。
 
 **Architecture:** Rust 侧保留全部业务逻辑（`core/`），作为唯一权威状态源；前端只持有渲染快照，搜索与排序在本地完成。Rust 通过 Tauri `invoke`（命令）与 `emit`（事件）与前端通信；原生能力一律走 Tauri 官方 API，仅「切换 NSApp 激活策略」一处使用 `objc2-app-kit` 直调 AppKit。egui 层（`app.rs`/`ui_kit.rs`/`theme.rs` 的 egui 部分/`fonts.rs`/`views/*`）整体废弃。
 
@@ -31,7 +31,18 @@
 - **删除文件**：一律使用 `"/Users/lishiguang/.minimax/bin/mavis-trash" -- "<path>"`，**不得**使用 `rm`（会被权限网关拦截）。
 - **不泄露凭证**：推送 GitHub 用 `GIT_ASKPASS` 注入临时脚本，推送完立即用 `mavis-trash` 删除脚本；任何提交、日志、计划文件中不得出现 PAT 明文。
 - **性能红线**：进程列表 500 行时 DOM 节点数不超过 60（虚拟列表，固定行高 26px，overscan 8）；滚动不得掉帧；首帧不得出现空白（WebView 直接渲染 HTML，不存在 egui 的整帧丢弃）。
+- **构建前置条件（重要）**：`src-tauri/Cargo.toml` 的 `default = ["custom-protocol"]` 让 `tauri::generate_context!` 在编译期**无条件**校验 `frontendDist`（即 `frontend/dist`）目录存在，而该目录由前端构建产出且被 `.gitignore` 的 `dist/` 规则忽略。因此：
+  - **干净检出后直接 `cargo build` / `cargo test` 必然失败**（报 `The frontendDist configuration is set to "../frontend/dist" but this path doesn't exist`），这是 Tauri v2 项目的固有形态，**不是缺陷**。
+  - 所有 Rust 命令（`cargo build` / `cargo test` / `cargo clippy`）必须在**已跑过 `npm run build`** 的工作树里执行。
+  - **任何 release 构建（`tauri build`）之前，必须确认 `frontend/dist/index.html` 是真实前端产物，而不是占位文件**——否则空白首页会被内嵌进二进制，直接违反「首帧不得出现空白」的性能红线。
+  - 占位文件（若需要临时创建以让 Rust 侧先跑起来）必须位于被 gitignore 的路径下，不得提交。
 - **分支策略**：`main` 继续演进；egui 版永久存档在 `legacy-egui` 分支（指向 `b36b8dc`），**不得删除或改写该分支**。
+- **命名约定（重要）**：GitHub **仓库名是 `chuaker7/Ki6`**（远端 `https://github.com/chuaker7/Ki6.git`）。
+  - **展示名（用户看得见的一切）统一为 `Ki6`**：窗口标题、菜单栏、托盘、关于框、页面品牌字、`productName`、本地化 key `app.name` / `app.brand` / `app.subtitle` / `menubar.title` / `menubar.open`、README 标题与项目介绍、GitHub 仓库描述。
+  - **标识符（技术标识）统一为 `chuaker7`**：crate 名、lib 名、npm 包名、bundle identifier（`com.igigi.chuaker7`）、LaunchAgent 标签（`com.igigi.chuaker7`）、数据目录（`~/Library/Application Support/chuaker7`）、类型名。**标识符不随展示名改动** —— 改了会丢用户已有的设置与剪贴板历史。
+  - **唯一例外**：`core::settings` 里的一次性旧目录迁移必须硬编码旧名 `killer7`，那是给迁移用的历史路径，不得扩散到别处。
+- **进程缓存不变量（重要）**：`ProcessManager::processes` 字段是 `list_processes` 命令的**唯一**数据源，而 `collect()` **不写**这个字段（只有 `load_blocking()` 才写）。因此：① `AppState::new` 必须调一次 `load_blocking(limit)`；② 后台循环 `spawn_process_loop` 与命令 `refresh_processes` 采集完之后都必须**回写** `processes.processes`。漏掉任何一处，`list_processes` 就永远返回空列表，进程页（默认标签页）每次启动后要空好几秒。
+- **共享状态形状（重要）**：`AppState` 由 `Arc<AppState>` 直接托管（`manage(Arc::new(app_state))`），**不得**写成 `Arc<Mutex<AppState>>`——`std::sync::Mutex` 不参与字段访问的 autoderef，`state.sample_interval_ms` 这类写法会直接编译失败（E0609）；而且外套一层全局锁会把设置、剪贴板、插件等互不相关的子系统串行化：进程采集要跑 `ps`（几十毫秒），期间不该把别的命令一起卡住。`AppState` 的每个可变字段各自带 `Mutex`，已经足够。命令签名统一写 `state: State<'_, Arc<AppState>>`。
 
 ---
 
@@ -53,17 +64,23 @@
 | `PredefinedMenuItem` | 提供 `separator` / `copy` / `paste` / `select_all` / `minimize` / `fullscreen` / `hide` / `close_window` / `quit` / `about`，均签名 `(manager, Option<&str>) -> Result<Self>`。 |
 | 托盘构造器 | `TrayIconBuilder::new()` → `.menu(&menu)` / `.icon(Image)` / `.tooltip(s)` / `.menu_on_left_click(bool)` / `.icon_as_template(bool)` → `.build(manager) -> Result<TrayIcon>`。注意方法名是 `menu` 不是 `with_menu`，是 `icon` 不是 `with_icon`。 |
 | 托盘位图 | `tauri::image::Image::new_owned(rgba: Vec<u8>, width: u32, height: u32) -> Image<'static>`，可直接喂 `core::icon::bird_rgba(22)` 的输出。 |
+| **★ 托盘菜单事件也是全局监听** | Tauri 2.12.7 官方文档明写 `TrayIconBuilder::on_menu_event`「**not specific to this tray icon**… receives **each menu event of the application**」；实现层它 push 进 `manager.menu.global_event_listeners`，与 `Builder::on_menu_event` **是同一个 Vec**，分发时每个菜单事件遍历全部监听器。**限定范围只能靠按 id 的 `match` 门控**，绝不能把未知 id 转发给 `system::menu::on_menu_event`（会让应用菜单点击被处理两次）。 |
+| **`app.manage()` 重复调用是静默 no-op** | Tauri 2.12.7 `Manager::manage` 返回 `bool`；`StateManager::set` 在类型已存在时保留旧值并返回 false，**不 panic**。新增托盘必须用**新的托管类型**，否则新托盘的菜单项永远不会被刷新且无任何日志。 |
 | 激活策略 | `objc2-app-kit 0.3`：`NSApplication::sharedApplication(mtm: MainThreadMarker) -> Retained<NSApplication>`；`app.setActivationPolicy(policy) -> bool`；策略常量 `NSApplicationActivationPolicy::Regular`（0）/ `::Accessory`（1）。 |
 | Node 版本 | nvm 已装 v22.23.2 / v24.14.0 / v24.17.0；默认 v22.11.0 不满足 Vite 7。 |
 | 前端截图验收 | 本机 Google Chrome 可用：`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --screenshot=out.png --window-size=1080,720 http://localhost:1420` |
 | 已知踩坑（勿重试） | `@vitejs/plugin-react` 6.x 只支持 Vite 8 → 用 5.0.4 + Vite 7.1.5；TypeScript 7.0.2 是 Go 重写新 major → 用 5.9.3；crates.io API 不声明 MSRV，只能实测编译。 |
+| `Mutex` 与字段 autoderef | `std::sync::Mutex` **不参与字段访问的 autoderef**：`Arc<Mutex<T>>.f` / `Box<Mutex<T>>.f` / `Mutex<T>.f` 一律 E0609；`Arc<Arc<T>>.f` 与 `MutexGuard<T>.f` 正常。**方法调用**（`.lock()`）不受此限制。跨 `Mutex` 取字段只能通过 `MutexGuard`（先 `.lock()` 再取字段）。 |
+| `ps` / `lsof` 实耗 | `/bin/ps -eo pid=,comm=` 约 **30ms**；`/usr/sbin/lsof -nP -iTCP -sTCP:LISTEN` 约 **55ms**。启动时同步采一次进程列表（`load_blocking`）总代价约 90ms，可以接受。 |
+| `tauri::ipc::InvokeHandler` | 是**类型别名** `pub type InvokeHandler<R> = dyn Fn(Invoke<R>) -> bool + Send + Sync + 'static;`——缺泛型实参，且无尺寸**不能按值返回**（E0107 / E0277）。`Builder::invoke_handler` 只要 `F: Fn(Invoke<R>) -> bool + Send + Sync + 'static`，所以写 `impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static` 即可（已实测编译通过 + clippy 0 诊断）。`generate_handler![...]` 支持**多段模块路径**（`commands::processes::list_processes`），同样实测通过。 |
+| `notify` 事件枚举 | `notify 8.2` 的事件类型来自 `notify_types 2.2`：`notify::EventKind::{Create, Remove, Modify, Access, Any}`，`ModifyKind` 在 `notify::event::ModifyKind`。`_` 只能出现在**模式**位置，表达式里写 `EventKind::Remove(_)` 会报 E0001——判断事件要用 `matches!`。 |
 
 ---
 
 ## 目录结构总览
 
 ```
-killer7/
+Ki6/
 ├── Cargo.toml                      # workspace 根（members = ["src-tauri"]）
 ├── Cargo.lock
 ├── .cargo/config.toml              # 保留（tuna 稀疏索引），对子目录同样生效
@@ -78,7 +95,7 @@ killer7/
 │       ├── main.tsx
 │       ├── App.tsx
 │       ├── test/setup.ts
-│       ├── app/                    # Sidebar / TopBar / Toast / navigation
+│       ├── app/                    # Toolbar / BottomBar / Toast / navigation
 │       ├── components/             # VirtualList / DataTable / SearchField / ...
 │       ├── pages/                  # Processes / Files / Clipboard / Monitor / Plugins / Settings
 │       ├── lib/                    # bridge / store / types / format / i18n / native
@@ -120,7 +137,7 @@ killer7/
 | 分组 | 命令 | 参数 | 返回 |
 | --- | --- | --- | --- |
 | 进程 | `list_processes` | — | `Vec<ProcessRow>` |
-| | `refresh_processes` | — | `()` |
+| | `refresh_processes` | — | `Vec<ProcessRow>` |
 | | `kill_process` | `pid: i32` | `Result<bool, String>` |
 | 文件 | `list_dir` | `path: String` | `Vec<FileRow>` |
 | | `create_folder` | `dir: String, name: String` | `Result<(), String>` |
@@ -134,8 +151,8 @@ killer7/
 | | `watch_dir` | `path: String` | `()` |
 | 剪贴板 | `clipboard_current` | — | `String` |
 | | `clipboard_history` | — | `Vec<HistoryRow>` |
-| | `remove_history_item` | `id: u64` | `()` |
-| | `clear_history` | — | `()` |
+| | `remove_history_item` | `id: u64` | `Result<(), String>` |
+| | `clear_history` | — | `Result<(), String>` |
 | 监控 | `system_snapshot` | — | `SystemInfoDto` |
 | 插件 | `list_plugins` | — | `Vec<PluginRow>` |
 | | `reload_plugins` | — | `Vec<PluginRow>` |
@@ -150,7 +167,7 @@ killer7/
 | | `show_main_window` | — | `()` |
 | | `popup_context_menu` | `kind: String, payload: serde_json::Value` | `()` |
 
-> `popup_context_menu` 分两步落地：**P2 阶段**（Task 11）先注册一个空实现（`popup_context_menu` 直接返回，不弹菜单），保证 command 名与参数签名从一开始就固定下来，前端可以并行开发；**P3 收尾**（Task 25）再补上完整菜单逻辑。Task 25 的验收标准包含「右键能弹出原生菜单」，因此空实现不会被遗留到最终交付。
+> `popup_context_menu` 分两步落地：**P2 阶段**（Task 15）先注册一个空实现（`popup_context_menu` 直接返回，不弹菜单），保证 command 名与参数签名从一开始就固定下来，前端可以并行开发；**P3 收尾**（Task 25）再补上完整菜单逻辑。Task 25 的验收标准包含「右键能弹出原生菜单」，因此空实现不会被遗留到最终交付。
 
 ### Event 清单（Rust `app.emit(name, payload)`）
 
@@ -201,6 +218,9 @@ type Notice = { kind: 'info' | 'error'; message: string };
 
 ### Task 1: 仓库转为 workspace，落地 Tauri 空壳
 
+
+> **漂移提示**：本任务的 Task 1 #3 / #5 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
+
 **Files:**
 - Modify: `Cargo.toml`（根，改为虚拟 workspace）
 - Create: `src-tauri/Cargo.toml`
@@ -221,7 +241,7 @@ type Notice = { kind: 'info' | 'error'; message: string };
 - [ ] **Step 1: 用 mavis-trash 归档 egui 源码，保留可回退能力**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 "/Users/lishiguang/.minimax/bin/mavis-trash" -- "src" "build.rs"
 ```
 
@@ -249,19 +269,19 @@ opt-level = 1
 
 ```toml
 [package]
-name = "killer7"
+name = "chuaker7"
 version = "1.2.0"
 edition = "2024"
 rust-version = "1.88"
-description = "killer7 — macOS 系统工具箱（Tauri v2 + React 重写版）"
-authors = ["alishiguang <alishiguang@users.noreply.github.com>"]
+description = "Ki6 — macOS 系统工具箱（Tauri v2 + React 重写版）"
+authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
 license = "MIT"
-repository = "https://github.com/alishiguang/killer7"
+repository = "https://github.com/chuaker7/Ki6"
 keywords = ["macos", "toolbox", "tauri", "system-monitor"]
 categories = ["gui", "os::macos-apis"]
 
 [lib]
-name = "killer7_lib"
+name = "chuaker7_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -271,7 +291,8 @@ tauri-build = { version = "2.7", features = [] }
 tauri = { version = "2.12", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-dialog = "2.8"
 tauri-plugin-opener = "2.7"
-serde = { version = "1.0", features = ["derive"] }
+# rename_all_fields 自 serde 1.0.177 起可用 —— ContextTarget 的 camelCase 变体字段依赖它。
+serde = { version = "1.0.177", features = ["derive"] }
 serde_json = "1.0"
 dirs = "7.0"
 anyhow = "1.0"
@@ -294,15 +315,54 @@ custom-protocol = ["tauri/custom-protocol"]
 `src-tauri/build.rs`：
 
 ```rust
-fn main() {
-    tauri_build::build()
-}
-```
+[package]
+name = "chuaker7"
+version = "1.2.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Ki6 — macOS 系统工具箱（Tauri v2 + React 重写版）"
+authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
+license = "MIT"
+repository = "https://github.com/chuaker7/Ki6"
+keywords = ["macos", "toolbox", "tauri", "system-monitor"]
+categories = ["gui", "os::macos-apis"]
+
+[lib]
+name = "chuaker7_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = ["tray-icon", "macos-private-api"] }
+tauri-plugin-dialog = "2.8"
+tauri-plugin-opener = "2.7"
+# rename_all_fields 自 serde 1.0.177 起可用 —— ContextTarget 的 camelCase 变体字段依赖它。
+serde = { version = "1.0.177", features = ["derive"] }
+serde_json = "1.0"
+dirs = "7.0"
+anyhow = "1.0"
+arboard = "3.7"
+sysinfo = "0.38"
+notify = "8.2"
+trash = "5.4"
+open = "5.4"
+global-hotkey = "0.10"
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]```
+
+> **实际落地**：crate 名与描述在改名时同步过。
+> 上文是当前文件的**完整内容**。
 
 `src-tauri/src/lib.rs`：
 
 ```rust
-//! killer7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
+//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
@@ -318,7 +378,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
-        .expect("error while running killer7");
+        .expect("error while running Ki6");
 }
 ```
 
@@ -329,7 +389,7 @@ pub fn run() {
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    killer7_lib::run();
+    chuaker7_lib::run();
 }
 ```
 
@@ -341,7 +401,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
-        .expect("error while running killer7");
+        .expect("error while running Ki6");
 }
 ```
 
@@ -350,9 +410,9 @@ pub fn run() {
 ```json
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "killer7",
+  "productName": "Ki6",
   "version": "1.2.0",
-  "identifier": "com.igigi.killer7",
+  "identifier": "com.igigi.chuaker7",
   "build": {
     "frontendDist": "../frontend/dist",
     "devUrl": "http://localhost:1420",
@@ -364,7 +424,7 @@ pub fn run() {
     "windows": [
       {
         "label": "main",
-        "title": "killer7",
+        "title": "Ki6",
         "width": 1080,
         "height": 720,
         "minWidth": 880,
@@ -390,7 +450,7 @@ pub fn run() {
     ],
     "category": "Utility",
     "shortDescription": "macOS 系统工具箱",
-    "longDescription": "killer7 —— 进程管理、文件管理、剪贴板、系统监控、插件与设置。",
+    "longDescription": "Ki6 —— 进程管理、文件管理、剪贴板、系统监控、插件与设置。",
     "macOS": { "minimumSystemVersion": "12.0" }
   },
   "plugins": {}
@@ -403,7 +463,7 @@ pub fn run() {
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "killer7 默认权限",
+  "description": "chuaker7 默认权限",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -419,7 +479,7 @@ pub fn run() {
 - [ ] **Step 7: 写 `scripts/make-icon.mjs`（依赖无关的 PNG 生成器）**
 
 ```javascript
-// 生成 killer7 应用图标源图（1024×1024 RGBA PNG）。
+// 生成 chuaker7 应用图标源图（1024×1024 RGBA PNG）。
 // 设计语言取自 cindy.cn：近黑 ink 底 + 单一信号红强调 + 奶油色小菱形。
 // 纯 Node 实现，不依赖任何三方库；PNG 由 node:zlib 手写编码。
 import { deflateSync } from 'node:zlib';
@@ -538,23 +598,23 @@ console.log(`wrote ${out} (${SIZE}x${SIZE}, ${png.length} bytes)`);
 - [ ] **Step 8: 生成图标并跑通构建**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 node scripts/make-icon.mjs scripts/icon-source.png
 npx --yes @tauri-apps/cli@2.12.6 icon scripts/icon-source.png
-cargo build -p killer7
+cargo build -p chuaker7
 ```
 
 Expected：
 - `scripts/icon-source.png` 生成成功（文件大小 > 10KB）。
 - `src-tauri/icons/` 下出现 `32x32.png` / `128x128.png` / `128x128@2x.png` / `icon.png` / `icon.icns` / `icon.ico`。
-- `cargo build -p killer7` 输出 `Finished` 且 **0 warning**。
+- `cargo build -p chuaker7` 输出 `Finished` 且 **0 warning**。
 
 > `npx @tauri-apps/cli` 需要联网拉包；若网络不可用，改为先在根 `package.json` 安装 `@tauri-apps/cli`（Task 2 会做），此处可临时 `npm i -D @tauri-apps/cli@2.12.6` 后用 `npx tauri icon`。
 
 - [ ] **Step 9: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移到 Tauri v2 workspace 骨架
 
@@ -570,6 +630,9 @@ AI-Tool: TophantAI"
 ---
 
 ### Task 2: 前端脚手架（Vite + React + TS）与 Tauri 联通
+
+
+> **漂移提示**：本任务的 Task 2 #1 / #2 / #6 / #7 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
 
 **Files:**
 - Create: `package.json`（根）
@@ -589,7 +652,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 固定 Node 版本并写 `.nvmrc`**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 printf '24.17.0\n' > .nvmrc
 source ~/.nvm/nvm.sh && nvm use
 node -v
@@ -601,11 +664,11 @@ Expected：`v24.17.0`。
 
 ```json
 {
-  "name": "killer7",
+  "name": "chuaker7",
   "private": true,
   "version": "1.2.0",
   "type": "module",
-  "description": "killer7 —— macOS 系统工具箱（Tauri v2 + React 重写版）",
+  "description": "Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -724,7 +787,7 @@ export default defineConfig({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>killer7</title>
+    <title>Ki6</title>
   </head>
   <body>
     <div id="root"></div>
@@ -764,7 +827,7 @@ ReactDOM.createRoot(container).render(
 export function App() {
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui' }}>
-      <h1>killer7</h1>
+      <h1>chuaker7</h1>
       <p>Tauri v2 + React 脚手架已就绪。</p>
     </main>
   );
@@ -785,7 +848,7 @@ frontend/dist/
 - [ ] **Step 8: 安装依赖并验证**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm install
 npm run typecheck
@@ -801,17 +864,22 @@ Expected：
 - [ ] **Step 9: 端到端验证 Tauri 窗口**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+# 1420 端口被另一个项目的孤儿 vite dev server 占用，运行验收走 release 构建直跑：
+# default = ["custom-protocol"] 让 release 二进制直接内嵌 frontend/dist，不依赖 dev server。
+# 注意：这是 cargo **工作区**，产物在仓库根的 target/ 下，不在 src-tauri/target/。
 source ~/.nvm/nvm.sh && nvm use
-npm run tauri dev
+npm run build
+cargo build --release -p chuaker7
+./target/release/chuaker7
 ```
 
-Expected：弹出名为 killer7 的窗口，尺寸 1080×720，窗口内显示「killer7 / Tauri v2 + React 脚手架已就绪。」。用 `⌘W` 关闭后继续。
+Expected：弹出名为 chuaker7 的窗口，尺寸 1080×720，窗口内显示「chuaker7 / Tauri v2 + React 脚手架已就绪。」。用 `⌘W` 关闭后继续。
 
 - [ ] **Step 10: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 前端脚手架 —— Vite 7 + React 19 + TypeScript 5.9
 
@@ -955,7 +1023,7 @@ AI-Tool: TophantAI"
 - [ ] **Step 3: 暴露字体静态资源**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 mkdir -p frontend/public/fonts
 cp assets/fonts/Anton-Regular.ttf assets/fonts/GeistMono-Variable.ttf frontend/public/fonts/
 ```
@@ -1236,6 +1304,33 @@ ReactDOM.createRoot(container).render(
 
 ```typescript
 import '@testing-library/jest-dom/vitest';
+
+// jsdom 不实现 ResizeObserver；进程页用它测量虚拟列表视口高度。
+// 桩必须放在共享 setup 里 —— AppShell 测试也会挂载进程页，
+// 只在 Processes.test.tsx 里打桩会让 AppShell 测试炸在
+// "ResizeObserver is not defined" 上。
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
+
+// jsdom 不实现 Canvas 2D 上下文，会往 stderr 刷 "Not implemented"。
+// Sparkline 只用到下面这几个方法与属性，给一个空实现桩即可，
+// 同时保证测试输出是干净的。
+HTMLCanvasElement.prototype.getContext = (() => ({
+  setTransform: () => {},
+  clearRect: () => {},
+  beginPath: () => {},
+  moveTo: () => {},
+  lineTo: () => {},
+  stroke: () => {},
+  closePath: () => {},
+  fill: () => {},
+  strokeStyle: '',
+  lineWidth: 0,
+  fillStyle: '',
+})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 ```
 
 `frontend/src/styles/tokens.test.ts`：
@@ -1271,7 +1366,7 @@ describe('cindy.cn 设计令牌', () => {
 - [ ] **Step 7: 跑测试与类型检查**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test
 npm run typecheck
@@ -1282,7 +1377,7 @@ Expected：`tokens.test.ts` 3 个用例全 PASS；`typecheck` 退出码 0。
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 设计令牌与 macOS 化基础样式
 
@@ -1302,6 +1397,9 @@ AI-Tool: TophantAI"
 > **P1 的核心原则**：`core/` 保持「不依赖 tauri」的纯业务层。所有线程、事件、AppHandle 相关的代码一律放在 `system/` 与 `commands/`。这样 core 的单元测试可以在没有 WebView 的情况下运行，也保证将来换前端不动业务逻辑。
 
 ### Task 4: 迁移 core 的纯逻辑模块
+
+
+> **漂移提示**：本任务的 Task 4 #0 / #4 / #7 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
 
 **Files:**
 - Create: `src-tauri/src/core/mod.rs`
@@ -1460,28 +1558,34 @@ mod tests {
 
 - [ ] **Step 5: 迁移 `settings.rs`，改 camelCase 并兼容旧配置**
 
+> `migrate_data_dir` 里用 **let-chain**（`if let ... && ...`）而不是嵌套 `if`：嵌套写法会触发
+> `clippy::collapsible_if`，与本任务 Step 7「clippy 0 warning」的 Expected 直接冲突。
+> let-chain 需要 edition 2024 + Rust 1.88，本项目 `edition = "2024"`、本机 rustc 1.90，满足条件。
+
 `src-tauri/src/core/settings.rs`：
 
 ```rust
 //! 应用设置与持久化。
 //!
 //! Swift 版用 `@AppStorage` 把设置写在 `UserDefaults` 里；Rust 版写到
-//! `~/Library/Application Support/killer7/settings.json`。
+//! `~/Library/Application Support/chuaker7/settings.json`。
 //!
 //! 字段以 camelCase 落盘（与前端契约一致），同时通过 `alias` 接受 egui 版
 //! 写下的 snake_case 旧字段，用户设置不会因为改版而丢失。
+//! 数据目录同样从 egui 版的 `killer7` 换成 `chuaker7`，由 `Settings::load()`
+//! 在首次启动时做一次性目录迁移。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::core::i18n::Locale;
 use crate::core::theme::{Accent, ThemeMode};
 
-/// 应用数据目录（macOS 下为 `~/Library/Application Support/killer7`）。
+/// 应用数据目录（macOS 下为 `~/Library/Application Support/chuaker7`）。
 pub fn data_dir() -> PathBuf {
     let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
-    base.join("killer7")
+    base.join("chuaker7")
 }
 
 /// 配置文件路径。
@@ -1497,6 +1601,34 @@ pub fn clipboard_history_path() -> PathBuf {
 /// 插件目录（对应 Swift 版的 `Application Support/LuciBox/Plugins`）。
 pub fn plugins_dir() -> PathBuf {
     data_dir().join("Plugins")
+}
+
+/// 旧版（egui 时代）数据目录：`~/Library/Application Support/killer7`。
+///
+/// 项目全局改名为 `chuaker7` 后，新旧版本的配置落在**不同目录**。
+/// `Settings` 里的 `alias` 只解决**字段名**的兼容，解决不了**文件路径**——
+/// 若不迁移，egui 版用户的设置、剪贴板历史与插件目录都会静默"消失"。
+///
+/// > 这是整个代码库里**唯一**允许出现旧名 `killer7` 的地方，且只用于一次性迁移。
+pub fn legacy_data_dir() -> PathBuf {
+    let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+    base.join("killer7")
+}
+
+/// 把旧版数据目录整体改名到新版目录。
+///
+/// 仅在旧目录存在、且新版目录尚不存在时执行——绝不覆盖已有数据。
+/// 失败（例如权限不足）时静默忽略：迁移只是锦上添花，不该挡住应用启动。
+fn migrate_data_dir(from: &Path, to: &Path) -> bool {
+    if !from.exists() || to.exists() {
+        return false;
+    }
+    if let Some(parent) = to.parent()
+        && std::fs::create_dir_all(parent).is_err()
+    {
+        return false;
+    }
+    std::fs::rename(from, to).is_ok()
 }
 
 /// 全局设置。
@@ -1614,7 +1746,10 @@ impl Default for Settings {
 
 impl Settings {
     /// 从磁盘读取设置，文件缺失或损坏时返回默认值。
+    ///
+    /// 读取前先做一次性旧目录迁移（egui 版 → 本重写版）。
     pub fn load() -> Self {
+        migrate_data_dir(&legacy_data_dir(), &data_dir());
         let Ok(text) = std::fs::read_to_string(settings_path()) else {
             return Self::default();
         };
@@ -1683,6 +1818,31 @@ mod tests {
         assert!(text.contains("\"showMenuBar\""));
         assert!(text.contains("\"autoRefreshInterval\""));
     }
+
+    #[test]
+    fn migrates_legacy_data_dir_only_once() {
+        let base = std::env::temp_dir().join(format!(
+            "chuaker7-migrate-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let from = base.join("killer7");
+        let to = base.join("chuaker7");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&from).expect("应能创建旧目录");
+        std::fs::write(from.join("settings.json"), "{}").expect("应能写入旧配置");
+
+        // 旧目录存在、新目录不存在 → 迁移
+        assert!(migrate_data_dir(&from, &to));
+        assert!(to.join("settings.json").exists());
+        assert!(!from.exists());
+
+        // 新目录已存在 → 不再迁移，绝不覆盖已有数据
+        assert!(!migrate_data_dir(&from, &to));
+        assert!(to.join("settings.json").exists());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }
 ```
 
@@ -1702,7 +1862,7 @@ mod tests {
 `src-tauri/src/lib.rs` 改为：
 
 ```rust
-//! killer7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
+//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
@@ -1713,14 +1873,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
-        .expect("error while running killer7");
+        .expect("error while running Ki6");
 }
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo test -p killer7
-cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo test -p chuaker7
+cargo clippy -p chuaker7 --all-targets
 ```
 
 Expected：所有测试 PASS，`clippy` **0 warning**。
@@ -1728,13 +1888,14 @@ Expected：所有测试 PASS，`clippy` **0 warning**。
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移 core 纯逻辑模块（平台/图标/本地化/设置/主题/插件）
 
 - core/ 保持不依赖 tauri，业务逻辑可脱离 WebView 单测
 - i18n 的 include_str! 路径随 crate 迁移修正为 ../../../locales/
 - Settings 改 camelCase 落盘并用 alias 兼容 egui 版 snake_case 旧配置
+- 数据目录从 egui 版的 killer7 迁到 chuaker7，Settings::load() 首次启动做一次性目录迁移
 - theme 剥离 egui Color32，只保留 ThemeMode / Accent 设置项
 
 AI-Coding: true
@@ -1744,6 +1905,9 @@ AI-Tool: TophantAI"
 ---
 
 ### Task 5: 迁移 core 的取数模块并引入事件枚举
+
+
+> **漂移提示**：本任务的 Task 5 #17 / #19 / #20 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
 
 **Files:**
 - Create: `src-tauri/src/core/process.rs`
@@ -1759,7 +1923,7 @@ AI-Tool: TophantAI"
 - Produces:
   - `core::process::{PortInfo, ProcessInfo, ProcessManager}`，`ProcessManager::collect(&mut self, limit) -> Vec<ProcessInfo>`（同步）、`ProcessManager::load_blocking(&mut self, limit)`
   - `core::files::{FileItem, FileManager, format_bytes}`，`FileManager::{load_files, navigate_to, go_up, create_folder, create_file, delete_file, rename_file}`
-  - `core::clipboard::{HistoryEntry, ClipboardManager}`，`HistoryEntry { id: u64, content: String, timestamp: i64, kind: String }`，`ClipboardManager::{load_history, save_history, add_to_history, delete_history_item(id), clear_history, copy_to_clipboard}`
+  - `core::clipboard::{HistoryEntry, ClipboardManager}`，`HistoryEntry { id: u64, content: String, timestamp: i64, kind: String }`，`ClipboardManager::{load_history, add_to_history, delete_history_item(id), clear_history, copy_to_clipboard}`；`add_to_history` / `delete_history_item` **只改内存并返回 bool**，落盘走自由函数 `clipboard::persist_history(|| …) -> Result<(), String>`（快照在落盘锁内取，错误回传前端）
   - `core::monitor::{SystemInfo, SystemMonitor}`，`SystemMonitor::push_sample`，`core::monitor::sample(...) -> SystemInfo`
   - `events::AppEvent`（crate 级枚举，线程与 UI 之间传递用）
 
@@ -1809,7 +1973,7 @@ pub fn channel() -> (Sender<AppEvent>, Receiver<AppEvent>) {
 
 `src-tauri/src/core/process.rs` —— 以 egui 版为蓝本，**改动三处**：
 
-1. `use crate::events::AppEvent;` 保留（`AppEvent` 仍在 crate 级）。
+1. **删除** `use std::sync::mpsc::Sender;` 与 `use crate::events::AppEvent;`——egui 版里这两个 import 只服务于 `refresh`（它 `tx.send(AppEvent::…)`），而 `refresh` 已被下面的同步 `collect` 取代。留着就是**未使用 import**，clippy 会告警，与 Step 7 的「clippy 0 warning」冲突。
 2. `ProcessManager::refresh` 由「内部 spawn 线程 + 发事件」改为**同步采集并直接返回结果**：
 
 ```rust
@@ -1837,7 +2001,63 @@ pub fn channel() -> (Sender<AppEvent>, Receiver<AppEvent>) {
     }
 ```
 
-3. 保留 `load_blocking`（首次启动同步采样一次，窗口打开即有数据）与 `kill_process`、`set_port_cache`；保留原有两个单元测试。
+3. 保留 `load_blocking`（首次启动同步采样一次，窗口打开即有数据）与 `set_port_cache`；保留原有两个单元测试。
+4. `kill_process` **必须加非正 pid 守卫**（`kill(1)` 把 `0` 解释为「调用者所在进程组」、把 `-1` 解释为「该用户的所有进程」，直接透传会造成误杀）：
+
+```rust
+    /// 结束指定进程，返回是否成功。
+    ///
+    /// `kill(1)` 把 `0` 解释为「调用者所在进程组」、把 `-1` 解释为「该用户的所有
+    /// 进程」，直接透传会造成误杀，因此非正 pid 一律拒绝。
+    pub fn kill_process(pid: i32) -> bool {
+        if pid <= 0 {
+            return false;
+        }
+
+        let status = Command::new("/bin/kill")
+            .arg("-9")
+            .arg(pid.to_string())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+
+        matches!(status, Ok(status) if status.success())
+    }
+```
+
+5. 新增 `collect_and_store`，把「采集 → 回写」收口到单一入口。`collect()` 只更新端口缓存、**不写** `self.processes`，而 `list_processes` 命令读的正是 `self.processes` —— 后台循环与手动刷新命令都需要这对操作，落在两处就容易漏掉回写：
+
+```rust
+    /// 采集一次进程列表并写回缓存。
+    ///
+    /// `collect()` 只更新端口缓存、**不写** `self.processes`；而 `list_processes`
+    /// 命令读的正是 `self.processes`。后台循环与手动刷新命令都需要「采集 → 回写」
+    /// 成对出现，收口到这里，避免两处各写一份而漏掉回写。
+    pub fn collect_and_store(&mut self, limit: usize) {
+        let list = self.collect(limit);
+        self.processes = list;
+    }
+```
+
+6. 补两条单元测试，把上面两条不变量钉死（`collect()` 单独调用不得写缓存；非正 pid 必须被拒）：
+
+```rust
+    #[test]
+    fn collect_alone_does_not_fill_cache() {
+        let mut manager = ProcessManager::default();
+        let _ = manager.collect(4);
+        assert!(
+            manager.processes.is_empty(),
+            "collect() 不得写缓存，缓存只由 load_blocking / collect_and_store 写入"
+        );
+    }
+
+    #[test]
+    fn kill_process_rejects_non_positive_pid() {
+        assert!(!ProcessManager::kill_process(0));
+        assert!(!ProcessManager::kill_process(-1));
+    }
+```
 
 - [ ] **Step 3: 迁移 `files.rs`**
 
@@ -1884,14 +2104,20 @@ pub struct HistoryEntry {
 }
 ```
 
-`ClipboardManager` 的 `add_to_history` 改为分配 id：
+`ClipboardManager` 的 `add_to_history` 改为分配 id，**并且只改内存、不落盘**：
+
+> 落盘被拆到自由函数 [`persist_history`]，由调用方在**释放剪贴板锁之后**再执行。
+> 磁盘 IO 可能耗时几十毫秒，持锁期间会把剪贴板轮询与所有剪贴板命令一起堵住。
 
 ```rust
     /// 向历史记录头部插入一条内容，并裁剪到上限。
-    pub fn add_to_history(&mut self, content: &str, kind: &str) {
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]，
+    /// 避免磁盘 IO 期间占着剪贴板锁。返回是否真的插入了一条。
+    pub fn add_to_history(&mut self, content: &str, kind: &str) -> bool {
         // 与 Swift 版一致：不重复记录与上一条相同的内容。
         if self.history.first().map(|item| item.content.as_str()) == Some(content) {
-            return;
+            return false;
         }
 
         self.next_id += 1;
@@ -1909,7 +2135,7 @@ pub struct HistoryEntry {
             self.history.truncate(self.max_history_count);
         }
 
-        self.save_history();
+        true
     }
 ```
 
@@ -1930,23 +2156,115 @@ pub struct HistoryEntry {
     }
 ```
 
-`delete_history_item` 改为按 id 删除：
+`delete_history_item` 改为按 id 删除，`clear_history` 一并改成**只改内存、不落盘**：
 
 ```rust
     /// 删除某条历史（按稳定 id）。
-    pub fn delete_history_item(&mut self, id: u64) {
-        if let Some(index) = self.history.iter().position(|item| item.id == id) {
-            self.history.remove(index);
-            self.save_history();
-        }
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]。
+    /// 返回是否真的删掉了一条。
+    pub fn delete_history_item(&mut self, id: u64) -> bool {
+        let Some(index) = self.history.iter().position(|item| item.id == id) else {
+            return false;
+        };
+        self.history.remove(index);
+        true
+    }
+
+    /// 清空历史。
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]。
+    pub fn clear_history(&mut self) {
+        self.history.clear();
     }
 ```
 
 在文件末尾（`#[cfg(test)]` 之前）加自由函数：
 
+`persist_history` 是落盘的唯一出口——`ClipboardManager` 的方法只改内存，
+调用方在释放锁之后把历史快照交给它：
+
+```rust
+/// 落盘的串行锁：保证同一时刻只有一个写者在改写历史文件。
+static PERSIST_LOCK: Mutex<()> = Mutex::new(());
+
+/// 把当前历史写到磁盘，返回失败原因。
+///
+/// `snapshot` 在**落盘锁内**被调用：快照必须取自「即将写入的那一刻」的内存状态。
+/// 否则两个写者（后台轮询 / 命令层）各自取快照再各自写，后写的旧快照会把先写的
+/// 新数据盖掉 —— 刚删掉的剪贴板条目会复活，新复制的条目会丢失。
+///
+/// 锁顺序固定为「落盘锁 → 剪贴板锁」，且任何路径都不会在持有剪贴板锁时去拿
+/// 落盘锁，因此不会死锁。
+pub fn persist_history<F>(snapshot: F) -> Result<(), String>
+where
+    F: FnOnce() -> Vec<HistoryEntry>,
+{
+    let _guard = PERSIST_LOCK.lock().map_err(|_| "落盘锁中毒".to_string())?;
+    let history = snapshot();
+    let text = serde_json::to_string_pretty(&history).map_err(|err| err.to_string())?;
+    let path = clipboard_history_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    std::fs::write(path, text).map_err(|err| err.to_string())
+}
+```
+
+> `snapshot` 是个闭包而不是切片：快照必须在**落盘锁内、写入之前**才取，
+> 这样「后写者」写的一定是最新状态，两个写者不会互相覆盖。
+> 落盘失败**要回传错误**（返回 `Result`），不能静默吞掉 ——
+> 磁盘满 / 权限不足时静默失败会让用户以为删掉了，重启后条目原样回来。
+
+`ClipboardManager` 的三个改内存方法都要返回「有没有真的改动」，
+调用方据此决定要不要落盘：
+
+```rust
+    /// 向历史记录头部插入一条内容，并裁剪到上限。
+    ///
+    /// 只改内存，**不落盘** —— 落盘由调用方在释放锁之后调用 [`persist_history`]，
+    /// 避免磁盘 IO 期间占着剪贴板锁。返回是否真的插入了一条。
+    pub fn add_to_history(&mut self, content: &str, kind: &str) -> bool {
+```
+
+补两条单元测试，把「有没有真的改动」这个语义钉死：
+
+```rust
+    #[test]
+    fn add_to_history_reports_whether_it_changed() {
+        let mut manager = ClipboardManager::default();
+        assert!(manager.add_to_history("hello", "text"));
+        assert!(
+            !manager.add_to_history("hello", "text"),
+            "与上一条相同的内容不应重复记录"
+        );
+    }
+
+    #[test]
+    fn delete_history_item_reports_whether_it_changed() {
+        let mut manager = ClipboardManager::default();
+        assert!(manager.add_to_history("hello", "text"));
+        let id = manager.history[0].id;
+        assert!(manager.delete_history_item(id));
+        assert!(
+            !manager.delete_history_item(id),
+            "已经删掉的 id 再删一次应返回 false"
+        );
+    }
+```
+
+> 参数用 `&mut [HistoryEntry]` 而不是 `&mut Vec<HistoryEntry>`：后者会触发 `clippy::ptr_arg`，
+> 与本任务 Step 7「clippy 0 warning」的 Expected 冲突。调用点传 `&mut history`（`history` 是 `Vec`）
+> 靠 deref coercion 即可，无需改动。
+>
+> 语义提醒：只有在 id **缺失或重复**时才重排。已经是稀疏但唯一的 id 会原样保留，
+> 因此 id **不保证连续**——命令层不要假设 id 连续，`next_id` 取现有最大值。
+> 另外 `load_history` 规范化后**不写回磁盘**，磁盘上仍是旧 id，
+> 直到下一次 `add_to_history` / `delete_history_item` 才落盘（规范化是幂等的，无数据丢失）。
+
 ```rust
 /// 规范化历史条目的 id：缺失（为 0）或重复时按顺序重排为 `1..=n`。
-pub fn normalize_ids(history: &mut Vec<HistoryEntry>) {
+pub fn normalize_ids(history: &mut [HistoryEntry]) {
     let mut seen: Vec<u64> = Vec::with_capacity(history.len());
     let mut needs_rewrite = false;
 
@@ -1969,7 +2287,6 @@ pub fn normalize_ids(history: &mut Vec<HistoryEntry>) {
 ```
 
 `ClipboardManager` 结构体加字段：
-
 ```rust
 pub struct ClipboardManager {
     /// 当前剪贴板文本。
@@ -1986,6 +2303,12 @@ pub struct ClipboardManager {
 `Default` 实现同步补 `next_id: 0`。
 
 **删除** egui 版里的 `pub fn spawn_monitor(tx: Sender<AppEvent>)`（线程归 `system::tasks` 管），改为在 `core::clipboard` 里只留纯读取：
+
+同时**删除** `use std::sync::mpsc::Sender;` 与 `use crate::events::AppEvent;`——它们只服务于被删掉的 `spawn_monitor`，留着就是未使用 import（clippy 告警）。`use crate::settings::clipboard_history_path;` 改成 `use crate::core::settings::clipboard_history_path;`。
+
+`spawn_monitor` 用到的 `Duration` 也只服务于它，`use std::time::{Duration, SystemTime, UNIX_EPOCH};` 要改成 `use std::time::{SystemTime, UNIX_EPOCH};`（`SystemTime` / `UNIX_EPOCH` 仍被 `HistoryEntry::now()` 使用）。
+
+`ClipboardManager::copy_to_clipboard` 里那一处 `crate::platform::copy_to_clipboard(content)` 也要改成 `crate::core::platform::copy_to_clipboard(content)`。
 
 ```rust
 /// 读取系统剪贴板文本。
@@ -2096,7 +2419,17 @@ pub struct SystemInfo {
 }
 ```
 
-`SystemMonitor` 保留 `push_sample` 与 120 点上限逻辑。删除 `use std::sync::mpsc::Sender;` 与 `use crate::events::AppEvent;`。
+`SystemMonitor` 保留 `push_sample` 与 120 点上限逻辑。
+
+删除 `spawn_monitor` 后，egui 版里**只服务于它**的 import 全部变成未使用，必须一并删掉，否则 clippy 报 unused import、违反 Step 7 的「clippy 0 warning」：
+
+- `use std::sync::mpsc::Sender;`
+- `use crate::events::AppEvent;`
+- `use std::sync::Arc;`
+- `use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};`
+- `use std::time::Duration;`
+
+`use sysinfo::System;` **保留**——`average_cpu_usage` / `memory_usage` 与新的 `sample()` 都要用。线程与采样间隔的共享原子变量改由 `system::tasks` 持有。
 
 - [ ] **Step 6: 补齐 `core/mod.rs` 与 `lib.rs`**
 
@@ -2118,10 +2451,10 @@ pub mod events;
 - [ ] **Step 7: 跑测试与静态检查**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 cargo fmt
-cargo test -p killer7
-cargo clippy -p killer7 --all-targets
+cargo test -p chuaker7
+cargo clippy -p chuaker7 --all-targets
 ```
 
 Expected：测试数 ≥ 19（egui 版基线）且全 PASS；`clippy` 0 warning；`cargo fmt --check` 干净。
@@ -2129,7 +2462,7 @@ Expected：测试数 ≥ 19（egui 版基线）且全 PASS；`clippy` 0 warning�
 - [ ] **Step 8: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 迁移 core 取数模块并解耦线程调度
 
@@ -2147,6 +2480,9 @@ AI-Tool: TophantAI"
 ## P2 命令、事件与原生集成
 
 ### Task 6: DTO 契约层
+
+
+> **漂移提示**：本任务的 Task 6 #1 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
 
 **Files:**
 - Create: `src-tauri/src/commands/mod.rs`
@@ -2248,6 +2584,8 @@ pub struct SystemInfoDto {
     pub cpu_history: Vec<f64>,
     /// 内存采样历史。
     pub memory_history: Vec<f64>,
+    /// 当前进程总数（取自进程缓存，不额外采集）。
+    pub process_count: usize,
 }
 
 /// 插件列表的一行。
@@ -2285,8 +2623,21 @@ pub struct Notice {
 }
 
 /// 原生右键菜单的目标对象。
+///
+/// `rename_all` 在 enum 上只改**变体名**，`rename_all_fields` 才改**变体内部字段**。
+/// 前端发的是 camelCase 的 payload（`{ pid, displayName, fullPath }`），
+/// Task 25 会用 `serde_json::from_value::<ContextTarget>` 反序列化它——
+/// 少了 `rename_all_fields` 会解析失败（`missing field 'display_name'`），
+/// 右键菜单永远弹不出来。
+///
+/// `rename_all_fields` 自 serde 1.0.177 起可用；本项目依赖下限取 1.0.177，锁定 serde 1.0.229。
 #[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "kind", content = "payload", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    content = "payload",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ContextTarget {
     /// 进程行。
     Process {
@@ -2372,6 +2723,7 @@ impl From<&SystemInfo> for SystemInfoDto {
             network_download: value.network_download,
             cpu_history: Vec::new(),
             memory_history: Vec::new(),
+            process_count: 0,
         }
     }
 }
@@ -2439,8 +2791,7 @@ mod tests {
             _ => panic!("应解析为进程目标"),
         }
     }
-}
-```
+}```
 
 - [ ] **Step 2: 写 `src-tauri/src/commands/mod.rs`**
 
@@ -2458,8 +2809,8 @@ pub mod dto;
 `src-tauri/src/lib.rs` 追加 `pub mod commands;`。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo test -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo test -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 ```
 
 Expected：DTO 三个测试 PASS；`clippy` 0 warning。
@@ -2467,7 +2818,7 @@ Expected：DTO 三个测试 PASS；`clippy` 0 warning。
 - [ ] **Step 4: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 新增前后端 DTO 契约层
 
@@ -2482,6 +2833,9 @@ AI-Tool: TophantAI"
 ---
 
 ### Task 7: AppState 与后台任务循环
+
+
+> **漂移提示**：本任务的 Task 7 #0 / #1 / #2 / #4 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
 
 **Files:**
 - Create: `src-tauri/src/state.rs`
@@ -2503,12 +2857,15 @@ AI-Tool: TophantAI"
 //!
 //! 所有 command 与后台线程共享同一个 `AppState`（通过 `tauri::State`），
 //! 内部用 `Mutex` 保护可变部分，采样间隔与网络开关用原子变量以便热改。
+//!
+//! `AppState` 本身由 `Arc` 托管（`Arc<AppState>`），**不再外套一层 `Mutex`**：
+//! 每个可变字段各自带 `Mutex`，套一层只会把所有子系统串行化——
+//! 进程采集要跑 `ps`（几十毫秒），期间不该把设置、剪贴板命令一起卡住。
 
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
 
-use notify::Watcher;
-
+use crate::commands::dto::ContextTarget;
 use crate::core::clipboard::ClipboardManager;
 use crate::core::files::FileManager;
 use crate::core::i18n::I18n;
@@ -2539,6 +2896,11 @@ pub struct AppState {
     pub network_enabled: Arc<AtomicBool>,
     /// 当前目录的文件变更监听器。
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
+    /// 当前弹出的原生右键菜单所对应的目标。
+    ///
+    /// 菜单项的点击事件只带 id，不带目标对象，所以弹出菜单时把目标
+    /// 暂存到这里，点击时再取出来用。
+    pub pending_context: Mutex<Option<ContextTarget>>,
 }
 
 impl AppState {
@@ -2556,9 +2918,15 @@ impl AppState {
         let mut plugins = PluginManager::default();
         plugins.load_plugins();
 
+        // 启动时同步采一次进程列表：窗口一打开就有数据，不必等后台循环的第一轮。
+        // 实测 `ps` 约 30ms、`lsof` 约 55ms，这个代价可以接受；
+        // 不这么做的话 `list_processes` 会拿到空列表，进程页要空好几秒。
+        let mut processes = ProcessManager::default();
+        processes.load_blocking(settings.process_list_limit);
+
         Self {
             i18n: Mutex::new(I18n::new(locale)),
-            processes: Mutex::new(ProcessManager::default()),
+            processes: Mutex::new(processes),
             files: Mutex::new(FileManager::default()),
             clipboard: Mutex::new(clipboard),
             monitor: Mutex::new(SystemMonitor::default()),
@@ -2567,10 +2935,13 @@ impl AppState {
             network_enabled,
             watcher: Mutex::new(None),
             settings: Mutex::new(settings),
+            pending_context: Mutex::new(None),
         }
     }
-}
-```
+}```
+
+> **实际落地**：Task 25 新增 `pending_context` 字段。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 写 `src-tauri/src/system/tasks.rs`**
 
@@ -2580,45 +2951,65 @@ impl AppState {
 //! 所有周期性与监听型后台任务都在这里启动。线程只做取数与派发，
 //! 不直接操作界面；界面通过 Tauri 事件收到更新。
 
+use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use notify::{Event, RecursiveMode, Watcher};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 use crate::core::clipboard;
 use crate::core::monitor;
 use crate::events::{EV_CLIPBOARD, EV_FILES_CHANGED, EV_PROCESSES, EV_SYSTEM_INFO};
 use crate::state::AppState;
 
+/// 判断事件是否属于「当前目录内容变了」。
+///
+/// 契约里 `files-changed` 只在目录增删改时触发：新建、删除、重命名都要触发，
+/// 读取与元数据变化不触发——否则一次目录遍历就能引发刷新风暴。
+pub fn is_content_change(kind: &notify::EventKind) -> bool {
+    matches!(
+        kind,
+        notify::EventKind::Create(_)
+            | notify::EventKind::Remove(_)
+            | notify::EventKind::Modify(notify::event::ModifyKind::Name(_))
+    )
+}
+
 /// 启动进程列表定时刷新循环。
-pub fn spawn_process_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
-    std::thread::spawn(move || loop {
-        let (limit, interval_ms) = {
-            let guard = state.lock().expect("状态锁中毒");
-            let settings = guard.settings.lock().expect("设置锁中毒");
-            (settings.process_list_limit, guard.sample_interval_ms.load(Ordering::Relaxed))
-        };
+pub fn spawn_process_loop(app: AppHandle, state: Arc<AppState>) {
+    std::thread::spawn(move || {
+        loop {
+            let (limit, interval_ms) = {
+                let settings = state.settings.lock().expect("设置锁中毒");
+                (
+                    settings.process_list_limit,
+                    state.sample_interval_ms.load(Ordering::Relaxed),
+                )
+            };
 
-        let rows = {
-            let mut guard = state.lock().expect("状态锁中毒");
-            let mut processes = guard.processes.lock().expect("进程锁中毒");
-            processes
-                .collect(limit)
-                .iter()
-                .map(crate::commands::dto::ProcessRow::from)
-                .collect::<Vec<_>>()
-        };
+            let rows = {
+                let mut processes = state.processes.lock().expect("进程锁中毒");
+                // 采集与回写由 core 的单一入口完成，漏掉回写会让
+                // `list_processes` 永远返回空列表。
+                processes.collect_and_store(limit);
+                processes
+                    .processes
+                    .iter()
+                    .map(crate::commands::dto::ProcessRow::from)
+                    .collect::<Vec<_>>()
+            };
 
-        let _ = app.emit(EV_PROCESSES, rows);
+            let _ = app.emit(EV_PROCESSES, rows);
 
-        std::thread::sleep(Duration::from_millis(interval_ms.max(500)));
+            std::thread::sleep(Duration::from_millis(interval_ms.max(500)));
+        }
     });
 }
 
 /// 启动剪贴板轮询循环。
-pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
+pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<AppState>) {
     std::thread::spawn(move || {
         let mut last = String::new();
         loop {
@@ -2632,10 +3023,24 @@ pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
             }
             last = text.clone();
 
-            {
-                let guard = state.lock().expect("状态锁中毒");
-                let mut manager = guard.clipboard.lock().expect("剪贴板锁中毒");
-                manager.add_to_history(&text, "text");
+            let changed = {
+                let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
+                manager.add_to_history(&text, "text")
+            };
+
+            // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
+            if changed {
+                let result = clipboard::persist_history(|| {
+                    state
+                        .clipboard
+                        .lock()
+                        .expect("剪贴板锁中毒")
+                        .history
+                        .clone()
+                });
+                if let Err(err) = result {
+                    eprintln!("[clipboard] 落盘失败: {err}");
+                }
             }
 
             let _ = app.emit(EV_CLIPBOARD, text);
@@ -2646,7 +3051,7 @@ pub fn spawn_clipboard_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
 /// 启动系统指标采样循环。
 pub fn spawn_monitor_loop(
     app: AppHandle,
-    state: Arc<Mutex<AppState>>,
+    state: Arc<AppState>,
     interval_ms: Arc<AtomicU64>,
     network_enabled: Arc<AtomicBool>,
 ) {
@@ -2676,8 +3081,7 @@ pub fn spawn_monitor_loop(
             );
 
             let dto = {
-                let guard = state.lock().expect("状态锁中毒");
-                let mut mon = guard.monitor.lock().expect("监控锁中毒");
+                let mut mon = state.monitor.lock().expect("监控锁中毒");
                 mon.push_sample(info);
                 crate::commands::dto::SystemInfoDto {
                     cpu_usage: mon.system_info.cpu_usage,
@@ -2687,8 +3091,12 @@ pub fn spawn_monitor_loop(
                     network_download: mon.system_info.network_download,
                     cpu_history: mon.cpu_history.clone(),
                     memory_history: mon.memory_history.clone(),
+                    // 进程总数直接读进程缓存的长度，不额外采集。
+                    process_count: state.processes.lock().expect("进程锁中毒").processes.len(),
                 }
             };
+
+            crate::system::tray::update_metrics(&app, &info);
 
             let _ = app.emit(EV_SYSTEM_INFO, dto);
         }
@@ -2696,51 +3104,56 @@ pub fn spawn_monitor_loop(
 }
 
 /// 启动当前目录的变更监听。
-pub fn spawn_watcher(app: AppHandle, state: Arc<Mutex<AppState>>) {
+pub fn spawn_watcher(app: AppHandle, state: Arc<AppState>) {
     let path = {
-        let guard = state.lock().expect("状态锁中毒");
-        let files = guard.files.lock().expect("文件锁中毒");
+        let files = state.files.lock().expect("文件锁中毒");
         files.current_path.clone()
     };
 
-    let target = path.clone();
+    watch_path(&app, &state, &path);
+}
+
+/// 把监听器挂到指定目录，成功返回 true。
+///
+/// 监听器**只有一个槽位**：换目录就是替换，旧的 `RecommendedWatcher` 被 drop 时
+/// 会自动解除对旧目录的监听。失败时**保留旧监听器**，并把原因打到 stderr ——
+/// 静默失败会让前端以为已经切到新目录，实际却还在监听旧目录。
+pub fn watch_path(app: &AppHandle, state: &Arc<AppState>, path: &Path) -> bool {
+    let emitter = app.clone();
     let watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
-        if let Ok(event) = result {
-            if event.kind == notify::EventKind::Remove(_) {
-                let _ = app.emit(EV_FILES_CHANGED, ());
-            }
+        if let Ok(event) = result
+            && is_content_change(&event.kind)
+        {
+            let _ = emitter.emit(EV_FILES_CHANGED, ());
         }
     });
 
     let Ok(mut watcher) = watcher else {
         eprintln!("[watcher] 无法创建目录监听器");
-        return;
+        return false;
     };
 
-    if let Err(err) = watcher.watch(&target, RecursiveMode::NonRecursive) {
-        eprintln!("[watcher] 监听 {} 失败: {err}", target.display());
-        return;
+    if let Err(err) = watcher.watch(path, RecursiveMode::NonRecursive) {
+        eprintln!("[watcher] 监听 {} 失败: {err}", path.display());
+        return false;
     }
 
-    let guard = state.lock().expect("状态锁中毒");
-    *guard.watcher.lock().expect("监听锁中毒") = Some(watcher);
-}
-```
+    *state.watcher.lock().expect("监听锁中毒") = Some(watcher);
+    true
+}```
+
+> **实际落地**：Task 25 在采样循环里加了「结束进程后立刻重采并推送」。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 3: 写 `src-tauri/src/system/mod.rs`**
 
 ```rust
 //! 原生集成：菜单栏、托盘、快捷键、自启、激活策略与后台任务。
 
-pub mod activation;
-pub mod autolaunch;
-pub mod menu;
-pub mod shortcut;
 pub mod tasks;
-pub mod tray;
 ```
 
-> `activation.rs` / `autolaunch.rs` / `menu.rs` / `shortcut.rs` / `tray.rs` 在 Task 12–15 创建。本步骤**先只写** `pub mod tasks;`，其余在对应任务补齐（否则编译不过）。
+> `activation.rs` / `autolaunch.rs` / `menu.rs` / `shortcut.rs` / `tray.rs` 在 Task 11–14 创建。本步骤**先只写** `pub mod tasks;`，其余在对应任务补齐（否则编译不过）。
 
 - [ ] **Step 4: 在 `events.rs` 追加事件名常量**
 
@@ -2764,7 +3177,7 @@ pub const EV_NOTICE: &str = "notice";
 - [ ] **Step 5: 接入 `lib.rs`，让应用能真正跑起来**
 
 ```rust
-//! killer7 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
+//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。
 //!
 //! 业务逻辑在 `core/`，Tauri 命令门面在 `commands/`，原生集成在 `system/`。
 
@@ -2774,7 +3187,7 @@ pub mod events;
 pub mod state;
 pub mod system;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::Manager;
 
@@ -2788,10 +3201,43 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(Arc::new(Mutex::new(app_state)))
+        .manage(Arc::new(app_state))
+        .invoke_handler(commands::handler())
         .setup(|app| {
             let handle = app.handle().clone();
-            let state = app.state::<Arc<Mutex<AppState>>>().inner().clone();
+            let state = app.state::<Arc<AppState>>().inner().clone();
+
+            // 菜单文案跟着设置里的语言走。
+            let locale = state.settings.lock().expect("设置锁中毒").locale;
+            crate::system::menu::build(&handle, locale)?;
+            crate::system::tray::build(&handle, locale)?;
+
+            // 全局快捷键 ⌘L：**默认开启**（core/settings.rs 的默认值是 true），
+            // 设置项可热更新。注册失败必须留下痕迹，否则「显示已开启但毫无反应」
+            // 会变成无法排查的静默失效。
+            {
+                let shortcut_enabled = state
+                    .settings
+                    .lock()
+                    .expect("设置锁中毒")
+                    .global_shortcut_enabled;
+                if shortcut_enabled && let Err(err) = crate::system::shortcut::register(&handle) {
+                    eprintln!("[shortcut] 注册 ⌘L 失败: {err}");
+                }
+            }
+
+            // Dock / 菜单栏模式必须在启动时按已保存的设置复现一次。
+            // 只在 `update_settings` / `set_menu_bar_mode` 里应用是不够的：
+            // 那两条路径只覆盖「本次运行中切换」的情况，用户开启菜单栏模式后
+            // 重启应用会重新变回常规 Dock 模式，设置形同虚设。
+            // 这里的顺序与 `commands::system::set_menu_bar_mode` 保持一致。
+            {
+                let show_menu_bar = state.settings.lock().expect("设置锁中毒").show_menu_bar;
+                if show_menu_bar {
+                    crate::system::activation::set_accessory_mode(true, &handle);
+                    let _ = app.get_webview_window("main").map(|w| w.hide());
+                }
+            }
 
             crate::system::tasks::spawn_process_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_clipboard_loop(handle.clone(), state.clone());
@@ -2805,28 +3251,44 @@ pub fn run() {
 
             Ok(())
         })
+        .on_menu_event(|app, event| {
+            let id = event.id().as_ref();
+            crate::system::menu::on_menu_event(app, id);
+            // 右键菜单的 id 统一以 `ctx.` 开头，与应用菜单的 `nav:` / `app:` 区分开。
+            if id.starts_with("ctx.") {
+                crate::system::menu::on_context_menu_event(app, id);
+            }
+        })
+        .on_tray_icon_event(|app, event| {
+            crate::system::tray::on_tray_event(app, &event);
+        })
         .run(tauri::generate_context!())
-        .expect("error while running killer7");
+        .expect("error while running Ki6");
 }
 ```
 
-> `app.state::<Arc<Mutex<AppState>>>()` 需要 `tauri::Manager` trait 的 `state()` 方法；`Arc<Mutex<AppState>>` 本身实现了 `Send + Sync + 'static`，可作为 Tauri 状态。
+> **实际落地**：后续任务给 lib.rs 追加了 system / commands / setup 装配。
+> 上文是当前文件的**完整内容**。
+
+> `app.state::<Arc<AppState>>()` 需要 `tauri::Manager` trait 的 `state()` 方法；`Arc<AppState>` 本身实现了 `Send + Sync + 'static`，可作为 Tauri 状态。
+>
+> **不要写成 `Arc<Mutex<AppState>>`**：`std::sync::Mutex` 不参与字段访问的 autoderef，`state.sample_interval_ms` 这类写法会直接编译失败（E0609）；而且外套一层全局锁会把设置、剪贴板、插件等互不相关的子系统串成一条流水线——进程采集要跑 `ps`（几十毫秒），期间不该把别的命令一起卡住。`AppState` 的每个可变字段各自带 `Mutex`，已经足够。
 
 - [ ] **Step 6: 编译验证**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 ```
 
 Expected：编译通过，0 warning。
 
-> 若 `tauri::State` 无法从 `Arc<Mutex<AppState>>` 取值，改为 `manage(Mutex::new(app_state))` 并在 command 里用 `state.0.lock()`。本步骤先按上面的写法试；`cargo build` 的真实报错为准。
+> **前置条件**：`frontend/dist` 必须存在（`default = ["custom-protocol"]` 会让 `generate_context!` 无条件校验它），因此先在仓库根执行 `npm run build`，再跑 cargo 命令。
 
 - [ ] **Step 7: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 引入 AppState 与后台任务循环
 
@@ -2842,6 +3304,9 @@ AI-Tool: TophantAI"
 
 ### Task 8: 进程命令
 
+
+> **漂移提示**：本任务的 Task 8 #1 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
+
 **Files:**
 - Create: `src-tauri/src/commands/processes.rs`
 - Modify: `src-tauri/src/commands/mod.rs`
@@ -2856,7 +3321,7 @@ AI-Tool: TophantAI"
 ```rust
 //! 进程管理命令。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::State;
 
@@ -2866,36 +3331,36 @@ use crate::state::AppState;
 
 /// 列出当前进程列表。
 #[tauri::command]
-pub fn list_processes(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<ProcessRow> {
-    let guard = state.lock().expect("状态锁中毒");
-    let processes = guard.processes.lock().expect("进程锁中毒");
-    processes
-        .processes
-        .iter()
-        .map(ProcessRow::from)
-        .collect()
+pub fn list_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
+    let processes = state.processes.lock().expect("进程锁中毒");
+    processes.processes.iter().map(ProcessRow::from).collect()
 }
 
 /// 触发一次进程列表刷新（同步采集后立即返回）。
-#[tauri::command]
-pub fn refresh_processes(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<ProcessRow> {
-    let guard = state.lock().expect("状态锁中毒");
-    let limit = guard
+///
+/// 采集要跑 `ps` 与 `lsof`，几十毫秒起步；`async` 让它走线程池，
+/// 不占用 Tauri 主线程，窗口拖拽与动画不会被卡住。
+#[tauri::command(async)]
+pub fn refresh_processes(state: State<'_, Arc<AppState>>) -> Vec<ProcessRow> {
+    let limit = state
         .settings
         .lock()
         .expect("设置锁中毒")
         .process_list_limit;
-    let mut processes = guard.processes.lock().expect("进程锁中毒");
-    processes
-        .collect(limit)
-        .iter()
-        .map(ProcessRow::from)
-        .collect()
+    let mut processes = state.processes.lock().expect("进程锁中毒");
+    // 采集与回写由 core 的单一入口完成，命令侧只负责取数与映射。
+    processes.collect_and_store(limit);
+    processes.processes.iter().map(ProcessRow::from).collect()
 }
 
 /// 结束指定进程。
 #[tauri::command]
 pub fn kill_process(pid: i32) -> Result<bool, String> {
+    // `kill -1` 会广播到该用户的全部进程，`kill 0` 会打到进程组，
+    // 两者都不能透传。
+    if pid <= 0 {
+        return Err(format!("非法 pid {pid}"));
+    }
     if ProcessManager::kill_process(pid) {
         Ok(true)
     } else {
@@ -2913,10 +3378,8 @@ pub fn kill_process(pid: i32) -> Result<bool, String> {
 ```rust
 pub mod processes;
 
-use tauri::ipc::InvokeHandler;
-
 /// 汇总所有 command。
-pub fn handler() -> InvokeHandler {
+pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         processes::list_processes,
         processes::refresh_processes,
@@ -2927,11 +3390,22 @@ pub fn handler() -> InvokeHandler {
 
 `src-tauri/src/lib.rs` 的 Builder 追加 `.invoke_handler(commands::handler())`。
 
+> **为什么不能写 `-> InvokeHandler`**：`tauri::ipc::InvokeHandler<R>` 是个**类型别名**，
+> 指向 `dyn Fn(Invoke<R>) -> bool + Send + Sync + 'static`——无尺寸（unsized），
+> 既缺泛型实参、又不能按值返回（编译器报 E0107 / E0277）。
+> `Builder::invoke_handler` 要的只是 `F: Fn(Invoke<R>) -> bool + Send + Sync + 'static`，
+> 所以返回 `impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static` 即可。
+> `tauri::Wry` 是本应用默认运行时（`tauri::Builder::default()` 即 `Builder<Wry>`），
+> 本项目只跑 macOS，不做跨平台适配，显式写死它是准确的。
+>
+> 后续 Task 9、10 与 Task 15 继续**往这一个 `generate_handler!` 列表里追加条目**，
+> 不要另起一个 `handler()` 函数（会与本函数重复定义）。
+
 - [ ] **Step 3: 编译并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 进程管理命令
 
@@ -2949,7 +3423,6 @@ AI-Tool: TophantAI"
 **Files:**
 - Create: `src-tauri/src/commands/files.rs`
 - Modify: `src-tauri/src/commands/mod.rs`
-- Modify: `src-tauri/src/lib.rs`
 
 **Interfaces:**
 - Consumes: `core::files::FileManager`、`core::platform`、`state::AppState`
@@ -2961,9 +3434,8 @@ AI-Tool: TophantAI"
 //! 文件管理命令。
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use notify::{RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::commands::dto::FileRow;
@@ -2989,13 +3461,12 @@ pub fn list_dir(path: String) -> Vec<FileRow> {
 #[tauri::command]
 pub fn create_folder(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     dir: String,
     name: String,
 ) -> Result<(), String> {
     let created = {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut files = guard.files.lock().expect("文件锁中毒");
+        let mut files = state.files.lock().expect("文件锁中毒");
         files.navigate_to(PathBuf::from(dir));
         files.create_folder(&name)
     };
@@ -3012,13 +3483,12 @@ pub fn create_folder(
 #[tauri::command]
 pub fn create_file(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     dir: String,
     name: String,
 ) -> Result<(), String> {
     let created = {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut files = guard.files.lock().expect("文件锁中毒");
+        let mut files = state.files.lock().expect("文件锁中毒");
         files.navigate_to(PathBuf::from(dir));
         files.create_file(&name)
     };
@@ -3035,13 +3505,12 @@ pub fn create_file(
 #[tauri::command]
 pub fn rename_path(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     path: String,
     new_name: String,
 ) -> Result<(), String> {
     let renamed = {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut files = guard.files.lock().expect("文件锁中毒");
+        let mut files = state.files.lock().expect("文件锁中毒");
         files.rename_file(Path::new(&path), &new_name)
     };
 
@@ -3057,12 +3526,11 @@ pub fn rename_path(
 #[tauri::command]
 pub fn delete_to_trash(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     path: String,
 ) -> Result<(), String> {
     let deleted = {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut files = guard.files.lock().expect("文件锁中毒");
+        let mut files = state.files.lock().expect("文件锁中毒");
         files.delete_file(Path::new(&path))
     };
 
@@ -3086,6 +3554,8 @@ pub fn parent_dir(path: String) -> Option<String> {
     Path::new(&path)
         .parent()
         .filter(|parent| *parent != Path::new(&path))
+        // 相对路径的 parent 是空串，空串不是有效目录，要一并挡掉。
+        .filter(|parent| !parent.as_os_str().is_empty())
         .map(|parent| parent.to_string_lossy().to_string())
 }
 
@@ -3112,30 +3582,11 @@ pub fn home_dir() -> String {
 ```rust
 /// 切换监听目录并重新挂载监听器。
 #[tauri::command]
-pub fn watch_dir(
-    app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
-    path: String,
-) {
+pub fn watch_dir(app: AppHandle, state: State<'_, Arc<AppState>>, path: String) {
     let target = PathBuf::from(path);
-
-    let watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-        if let Ok(event) = result {
-            if event.kind == notify::EventKind::Remove(_) {
-                let _ = app.emit(EV_FILES_CHANGED, ());
-            }
-        }
-    });
-
-    let Ok(mut watcher) = watcher else {
-        return;
-    };
-    if watcher.watch(&target, RecursiveMode::NonRecursive).is_err() {
-        return;
-    }
-
-    let guard = state.lock().expect("状态锁中毒");
-    *guard.watcher.lock().expect("监听锁中毒") = Some(watcher);
+    // 监听器的创建与挂载统一在 system::tasks::watch_path 里，
+    // 失败原因由它打到 stderr —— 静默失败会让前端以为已经切到新目录。
+    crate::system::tasks::watch_path(&app, state.inner(), &target);
 }
 ```
 
@@ -3159,8 +3610,8 @@ pub fn watch_dir(
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 文件管理命令与目录监听重建
 
@@ -3191,7 +3642,7 @@ AI-Tool: TophantAI"
 ```rust
 //! 剪贴板命令。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::State;
 
@@ -3207,29 +3658,52 @@ pub fn clipboard_current() -> String {
 
 /// 读取剪贴板历史。
 #[tauri::command]
-pub fn clipboard_history(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<HistoryRow> {
-    let guard = state.lock().expect("状态锁中毒");
-    let manager = guard.clipboard.lock().expect("剪贴板锁中毒");
+pub fn clipboard_history(state: State<'_, Arc<AppState>>) -> Vec<HistoryRow> {
+    let manager = state.clipboard.lock().expect("剪贴板锁中毒");
     manager.history.iter().map(HistoryRow::from).collect()
 }
 
 /// 删除一条历史（按稳定 id）。
+///
+/// 只在锁内改内存，落盘在锁外 —— 磁盘 IO 不该占着剪贴板锁。
+/// 落盘失败会把错误回给前端：静默失败会让用户以为删掉了，重启后条目原样回来。
 #[tauri::command]
-pub fn remove_history_item(
-    state: State<'_, Arc<Mutex<AppState>>>,
-    id: u64,
-) {
-    let guard = state.lock().expect("状态锁中毒");
-    let mut manager = guard.clipboard.lock().expect("剪贴板锁中毒");
-    manager.delete_history_item(id);
+pub fn remove_history_item(state: State<'_, Arc<AppState>>, id: u64) -> Result<(), String> {
+    let changed = {
+        let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
+        manager.delete_history_item(id)
+    };
+    if !changed {
+        return Ok(());
+    }
+    clipboard::persist_history(|| {
+        state
+            .clipboard
+            .lock()
+            .expect("剪贴板锁中毒")
+            .history
+            .clone()
+    })
 }
 
 /// 清空历史。
+///
+/// 只在锁内改内存，落盘在锁外 —— 磁盘 IO 不该占着剪贴板锁。
+/// 落盘失败会把错误回给前端。
 #[tauri::command]
-pub fn clear_history(state: State<'_, Arc<Mutex<AppState>>>) {
-    let guard = state.lock().expect("状态锁中毒");
-    let mut manager = guard.clipboard.lock().expect("剪贴板锁中毒");
-    manager.clear_history();
+pub fn clear_history(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    {
+        let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
+        manager.clear_history();
+    }
+    clipboard::persist_history(|| {
+        state
+            .clipboard
+            .lock()
+            .expect("剪贴板锁中毒")
+            .history
+            .clone()
+    })
 }
 ```
 
@@ -3238,7 +3712,7 @@ pub fn clear_history(state: State<'_, Arc<Mutex<AppState>>>) {
 ```rust
 //! 系统监控命令。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::State;
 
@@ -3247,9 +3721,8 @@ use crate::state::AppState;
 
 /// 读取一次系统指标快照（含采样历史）。
 #[tauri::command]
-pub fn system_snapshot(state: State<'_, Arc<Mutex<AppState>>>) -> SystemInfoDto {
-    let guard = state.lock().expect("状态锁中毒");
-    let monitor = guard.monitor.lock().expect("监控锁中毒");
+pub fn system_snapshot(state: State<'_, Arc<AppState>>) -> SystemInfoDto {
+    let monitor = state.monitor.lock().expect("监控锁中毒");
     SystemInfoDto {
         cpu_usage: monitor.system_info.cpu_usage,
         memory_usage: monitor.system_info.memory_usage,
@@ -3267,7 +3740,7 @@ pub fn system_snapshot(state: State<'_, Arc<Mutex<AppState>>>) -> SystemInfoDto 
 ```rust
 //! 插件命令。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tauri::State;
 
@@ -3275,11 +3748,8 @@ use crate::commands::dto::PluginRow;
 use crate::core::plugin::PluginManager;
 use crate::state::AppState;
 
-/// 列出已加载的插件。
-#[tauri::command]
-pub fn list_plugins(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<PluginRow> {
-    let guard = state.lock().expect("状态锁中毒");
-    let plugins = guard.plugins.lock().expect("插件锁中毒");
+/// 把插件清单映射成 DTO 行，并补上插件根目录。
+fn to_rows(plugins: &PluginManager) -> Vec<PluginRow> {
     let dir = plugins.plugins_dir().to_string_lossy().to_string();
     plugins
         .loaded_plugins
@@ -3292,28 +3762,28 @@ pub fn list_plugins(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<PluginRow> {
         .collect()
 }
 
+/// 列出已加载的插件。
+#[tauri::command]
+pub fn list_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
+    let plugins = state.plugins.lock().expect("插件锁中毒");
+    to_rows(&plugins)
+}
+
 /// 重新扫描插件目录。
 #[tauri::command]
-pub fn reload_plugins(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<PluginRow> {
-    let guard = state.lock().expect("状态锁中毒");
-    let mut plugins = guard.plugins.lock().expect("插件锁中毒");
+pub fn reload_plugins(state: State<'_, Arc<AppState>>) -> Vec<PluginRow> {
+    let mut plugins = state.plugins.lock().expect("插件锁中毒");
     plugins.load_plugins();
-    let dir = plugins.plugins_dir().to_string_lossy().to_string();
-    plugins
-        .loaded_plugins
-        .iter()
-        .map(|manifest| {
-            let mut row = PluginRow::from(manifest);
-            row.dir = dir.clone();
-            row
-        })
-        .collect()
+    to_rows(&plugins)
 }
 
 /// 插件目录路径。
 #[tauri::command]
 pub fn plugins_dir() -> String {
-    PluginManager::default().plugins_dir().to_string_lossy().to_string()
+    PluginManager::default()
+        .plugins_dir()
+        .to_string_lossy()
+        .to_string()
 }
 ```
 
@@ -3335,8 +3805,8 @@ pub fn plugins_dir() -> String {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 剪贴板 / 监控 / 插件命令
 
@@ -3350,233 +3820,22 @@ AI-Tool: TophantAI"
 
 ---
 
-### Task 11: 设置、文案与系统命令
+### Task 11: 原生应用菜单栏
 
-**Files:**
-- Create: `src-tauri/src/commands/settings.rs`
-- Create: `src-tauri/src/commands/system.rs`
-- Modify: `src-tauri/src/commands/mod.rs`
-- Modify: `src-tauri/src/lib.rs`
 
-**Interfaces:**
-- Consumes: `core::settings::{Settings, SettingsPatch}`、`core::i18n::Locale`
-- Produces: command `get_settings` / `update_settings` / `get_strings` / `set_menu_bar_mode` / `set_shortcut_enabled` / `set_auto_launch` / `hide_main_window` / `show_main_window` / `popup_context_menu`（本任务注册空实现，完整菜单逻辑在 Task 25 落地）
-
-- [ ] **Step 1: 写 `src-tauri/src/commands/settings.rs`**
-
-```rust
-//! 设置与文案命令。
-
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
-use tauri::{AppHandle, State};
-
-use crate::core::i18n::{I18n, Locale};
-use crate::core::settings::{Settings, SettingsPatch};
-use crate::state::AppState;
-
-/// 读取当前设置。
-#[tauri::command]
-pub fn get_settings(state: State<'_, Arc<Mutex<AppState>>>) -> Settings {
-    let guard = state.lock().expect("状态锁中毒");
-    let settings = guard.settings.lock().expect("设置锁中毒");
-    settings.clone()
-}
-
-/// 提交设置补丁，返回合并后的完整设置。
-#[tauri::command]
-pub fn update_settings(
-    app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
-    patch: SettingsPatch,
-) -> Settings {
-    let next = {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut settings = guard.settings.lock().expect("设置锁中毒");
-        let next = patch.apply(&settings);
-        next.save();
-        *settings = next.clone();
-        next
-    };
-
-    // 语言变了要换文案表。
-    {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut i18n = guard.i18n.lock().expect("文案锁中毒");
-        if i18n.locale() != next.locale {
-            i18n.set_locale(next.locale);
-        }
-    }
-
-    // 采样间隔与网络开关热更新。
-    {
-        let guard = state.lock().expect("状态锁中毒");
-        guard
-            .sample_interval_ms
-            .store((next.auto_refresh_interval * 1000.0) as u64, std::sync::atomic::Ordering::Relaxed);
-        guard
-            .network_enabled
-            .store(next.enable_network_monitor, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    // 菜单栏模式与全局快捷键的变化需要立即作用到原生层。
-    let previous = {
-        let guard = state.lock().expect("状态锁中毒");
-        guard.settings.lock().expect("设置锁中毒").clone()
-    };
-
-    if previous.show_menu_bar != next.show_menu_bar {
-        crate::system::activation::set_accessory_mode(next.show_menu_bar, &app);
-    }
-
-    if previous.global_shortcut_enabled != next.global_shortcut_enabled {
-        crate::system::shortcut::set_enabled(&app, next.global_shortcut_enabled);
-    }
-
-    next
-}
-
-/// 取指定语言的整张文案表。
-#[tauri::command]
-pub fn get_strings(locale: String) -> HashMap<String, String> {
-    let parsed = match locale.as_str() {
-        "en" => Locale::En,
-        _ => Locale::ZhHans,
-    };
-    I18n::new(parsed).table()
-}
-```
-
-- [ ] **Step 2: 写 `src-tauri/src/commands/system.rs`**
-
-```rust
-//! 系统级命令：窗口显隐、菜单栏模式、快捷键、自启。
-
-use std::sync::{Arc, Mutex};
-
-use tauri::{AppHandle, Manager, State};
-
-use crate::state::AppState;
-
-/// 隐藏主窗口。
-#[tauri::command]
-pub fn hide_main_window(app: AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-    }
-}
-
-/// 显示主窗口并置前。
-#[tauri::command]
-pub fn show_main_window(app: AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-}
-
-/// 切换菜单栏模式（隐藏 Dock 图标）。
-#[tauri::command]
-pub fn set_menu_bar_mode(
-    app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
-    enabled: bool,
-) {
-    {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut settings = guard.settings.lock().expect("设置锁中毒");
-        settings.show_menu_bar = enabled;
-        settings.save();
-    }
-
-    crate::system::activation::set_accessory_mode(enabled, &app);
-
-    if enabled {
-        let _ = app.get_webview_window("main").map(|w| w.hide());
-    } else {
-        let _ = app.get_webview_window("main").map(|w| w.show());
-    }
-}
-
-/// 启用或停用全局快捷键。
-#[tauri::command]
-pub fn set_shortcut_enabled(
-    app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
-    enabled: bool,
-) {
-    {
-        let guard = state.lock().expect("状态锁中毒");
-        let mut settings = guard.settings.lock().expect("设置锁中毒");
-        settings.global_shortcut_enabled = enabled;
-        settings.save();
-    }
-
-    crate::system::shortcut::set_enabled(&app, enabled);
-}
-
-/// 启用或停用开机自启。
-#[tauri::command]
-pub fn set_auto_launch(enabled: bool) -> Result<(), String> {
-    if enabled {
-        crate::system::autolaunch::enable().map_err(|err| err.to_string())
-    } else {
-        crate::system::autolaunch::disable().map_err(|err| err.to_string())
-    }
-}
-
-/// 弹出原生右键菜单（Task 25 实现完整逻辑）。
-#[tauri::command]
-pub fn popup_context_menu(app: AppHandle, kind: String, payload: serde_json::Value) {
-    let _ = (app, kind, payload);
-}
-```
-
-- [ ] **Step 3: 挂到 invoke_handler 并提交**
-
-`commands/mod.rs` 追加 `pub mod settings;` / `pub mod system;` 与 handler 列表：
-
-```rust
-        settings::get_settings,
-        settings::update_settings,
-        settings::get_strings,
-        system::hide_main_window,
-        system::show_main_window,
-        system::set_menu_bar_mode,
-        system::set_shortcut_enabled,
-        system::set_auto_launch,
-        system::popup_context_menu,
-```
-
-```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
-git add -A
-git commit -m "feat: 设置、文案与系统命令
-
-- get_settings / update_settings 采用补丁合并语义，语言变更同步换文案表
-- 采样间隔与网络开关热更新到原子变量，无需重启线程
-- 窗口显隐、菜单栏模式、快捷键、自启命令接入原生层
-
-AI-Coding: true
-AI-Tool: TophantAI"
-```
-
----
-
-### Task 12: 原生应用菜单栏
+> **漂移提示**：本任务的 Task 11 #1 / #2 / #4 代码块已被后续任务扩展/修改，与仓库里的当前文件不再逐字节一致 —— **以实际文件为准**，详见附录 A。
 
 **Files:**
 - Create: `src-tauri/src/system/menu.rs`
 - Modify: `src-tauri/src/system/mod.rs`
 - Modify: `src-tauri/src/lib.rs`
 - Modify: `src-tauri/src/events.rs`
+- Modify: `locales/zh-Hans.lproj/Localizable.strings`
+- Modify: `locales/en.lproj/Localizable.strings`
 
 **Interfaces:**
 - Consumes: `core::i18n`（菜单文案）、`tauri::menu::*`
-- Produces: `system::menu::build(app: &AppHandle) -> tauri::Result<()>`；事件 `menu-action`（负载 `String`）
+- Produces: `system::menu::build(app: &AppHandle, locale: Locale) -> tauri::Result<()>`；事件 `menu-action`（负载 `String`）
 
 - [ ] **Step 1: 追加事件常量**
 
@@ -3595,83 +3854,140 @@ pub const EV_MENU_ACTION: &str = "menu-action";
 //! 使用 Tauri 的 `Menu::set_as_app_menu()` 构建真正的 macOS 菜单栏：
 //! 关于、设置、隐藏、退出走 `PredefinedMenuItem`（系统原生行为），
 //! 视图切换走带 `Cmd+数字` 加速器的自定义项。
+//!
+//! 菜单文案全部走 `core::i18n`。muda 0.20 在 `text=None` 时用的是它自己写死的
+//! 英文表（`muda-0.20.0/src/items/predefined.rs:305-308,434-487`），而 macOS 后端
+//! 用 `initWithTitle:` 显式设标题，AppKit 不再本地化 —— 实测本机 AppleLocale=zh_CN，
+//! 菜单仍然显示英文的 Hide / Hide Others / Show All / Undo / Cut / Minimize。
+//! 因此**每一个**预定义项都必须显式传文案，`locales/*.strings` 里为此备了
+//! `menubar.*` / `edit.*` / `window.*` / `view.fullscreen` 等 key。
+//!
+//! 「关于 / 隐藏 / 退出」三项按 macOS 惯例带应用名后缀，在 Rust 侧拼成
+//! `<动词> chuaker7`；应用名本身取自 `menubar.title`（= "chuaker7"）。
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
+use crate::commands::dto::ContextTarget;
+use crate::core::i18n::{I18n, Locale};
 use crate::events::EV_MENU_ACTION;
+use crate::events::EV_NOTICE;
 
 /// 构建并安装应用菜单栏。
-pub fn build(app: &AppHandle) -> tauri::Result<()> {
+pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
+    let i18n = I18n::new(locale);
+
+    // 应用名（"chuaker7"），用于拼「关于 / 隐藏 / 退出」三项。
+    let app_name = i18n.t("menubar.title");
+    let about_text = format!("{} {}", i18n.t("settings.about"), app_name);
+    let hide_text = format!("{} {}", i18n.t("menubar.hide"), app_name);
+    let quit_text = format!("{} {}", i18n.t("menubar.quitApp"), app_name);
+
     let app_menu = Submenu::with_items(
         app,
-        "killer7",
+        i18n.t("menubar.title"),
         true,
         &[
-            &PredefinedMenuItem::about(app, Some("killer7"), None)?,
+            &PredefinedMenuItem::about(app, Some(about_text.as_str()), None)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "app:settings", "设置…", true, Some("CmdOrCtrl+,"))?,
+            &MenuItem::with_id(
+                app,
+                "app:settings",
+                i18n.t("nav.settings"),
+                true,
+                Some("CmdOrCtrl+,"),
+            )?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::hide(app, Some("隐藏 killer7"), Some("CmdOrCtrl+H"))?,
-            &PredefinedMenuItem::hide_others(app, Some("隐藏其他"), Some("CmdOrCtrl+Alt+H"))?,
-            &PredefinedMenuItem::show_all(app, Some("显示全部"), None)?,
+            &PredefinedMenuItem::hide(app, Some(hide_text.as_str()))?,
+            &PredefinedMenuItem::hide_others(app, Some(&i18n.t("menubar.hideOthers")))?,
+            &PredefinedMenuItem::show_all(app, Some(&i18n.t("menubar.showAll")))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some("退出 killer7"), Some("CmdOrCtrl+Q"))?,
+            &PredefinedMenuItem::quit(app, Some(quit_text.as_str()))?,
         ],
     )?;
 
     let edit_menu = Submenu::with_items(
         app,
-        "编辑",
+        i18n.t("menubar.edit"),
         true,
         &[
-            &PredefinedMenuItem::undo(app, None)?,
-            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::undo(app, Some(&i18n.t("edit.undo")))?,
+            &PredefinedMenuItem::redo(app, Some(&i18n.t("edit.redo")))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::cut(app, None)?,
-            &PredefinedMenuItem::copy(app, None)?,
-            &PredefinedMenuItem::paste(app, None)?,
-            &PredefinedMenuItem::select_all(app, None)?,
+            &PredefinedMenuItem::cut(app, Some(&i18n.t("edit.cut")))?,
+            &PredefinedMenuItem::copy(app, Some(&i18n.t("edit.copy")))?,
+            &PredefinedMenuItem::paste(app, Some(&i18n.t("edit.paste")))?,
+            &PredefinedMenuItem::select_all(app, Some(&i18n.t("edit.selectAll")))?,
         ],
     )?;
 
+    // 「设置」的 Cmd+, 加速键只留给应用菜单里的那一项；视图菜单里再挂一次
+    // 会让同一个快捷键指向两个菜单项，macOS 只能二选一。
     let view_menu = Submenu::with_items(
         app,
-        "视图",
+        i18n.t("menubar.view"),
         true,
         &[
-            &MenuItem::with_id(app, "nav:processes", "进程管理", true, Some("CmdOrCtrl+1"))?,
-            &MenuItem::with_id(app, "nav:files", "文件管理", true, Some("CmdOrCtrl+2"))?,
-            &MenuItem::with_id(app, "nav:clipboard", "剪贴板", true, Some("CmdOrCtrl+3"))?,
-            &MenuItem::with_id(app, "nav:monitor", "系统监控", true, Some("CmdOrCtrl+4"))?,
-            &MenuItem::with_id(app, "nav:plugins", "插件", true, Some("CmdOrCtrl+5"))?,
+            &MenuItem::with_id(
+                app,
+                "nav:processes",
+                i18n.t("nav.process"),
+                true,
+                Some("CmdOrCtrl+1"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:files",
+                i18n.t("nav.file"),
+                true,
+                Some("CmdOrCtrl+2"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:clipboard",
+                i18n.t("nav.clipboard"),
+                true,
+                Some("CmdOrCtrl+3"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:monitor",
+                i18n.t("nav.monitor"),
+                true,
+                Some("CmdOrCtrl+4"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "nav:plugins",
+                i18n.t("nav.plugins"),
+                true,
+                Some("CmdOrCtrl+5"),
+            )?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "nav:settings", "设置", true, Some("CmdOrCtrl+,"))?,
+            &MenuItem::with_id(
+                app,
+                "nav:settings",
+                i18n.t("nav.settings"),
+                true,
+                None::<&str>,
+            )?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::fullscreen(app, None)?,
+            &PredefinedMenuItem::fullscreen(app, Some(&i18n.t("view.fullscreen")))?,
         ],
     )?;
 
     let window_menu = Submenu::with_items(
         app,
-        "窗口",
+        i18n.t("menubar.window"),
         true,
         &[
-            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::minimize(app, Some(&i18n.t("window.minimize")))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(app, None)?,
+            &PredefinedMenuItem::close_window(app, Some(&i18n.t("window.close")))?,
         ],
     )?;
 
-    let menu = Menu::with_items(
-        app,
-        &[
-            &app_menu,
-            &edit_menu,
-            &view_menu,
-            &window_menu,
-        ],
-    )?;
+    let menu = Menu::with_items(app, &[&app_menu, &edit_menu, &view_menu, &window_menu])?;
 
     menu.set_as_app_menu()?;
     Ok(())
@@ -3683,25 +3999,181 @@ pub fn on_menu_event(app: &AppHandle, id: &str) {
         let _ = app.emit(EV_MENU_ACTION, id);
     }
 }
+
+/// 处理原生右键菜单项点击。
+///
+/// 右键菜单的目标对象在弹出时被暂存进 `AppState::pending_context`
+/// （菜单事件本身只带 id，不带目标），这里取出来执行对应动作。
+pub fn on_context_menu_event(app: &AppHandle, id: &str) {
+    use crate::core::clipboard;
+    use crate::core::platform;
+    use crate::core::process::ProcessManager;
+
+    let state = app.state::<std::sync::Arc<crate::state::AppState>>();
+    let target = {
+        let mut pending = state.pending_context.lock().expect("右键目标锁中毒");
+        pending.take()
+    };
+
+    let Some(target) = target else {
+        return;
+    };
+
+    let locale = state.i18n.lock().expect("文案锁中毒").locale();
+    let i18n = I18n::new(locale);
+
+    match (id, &target) {
+        ("ctx.process.copyPath", ContextTarget::Process { full_path, .. }) => {
+            platform::copy_to_clipboard(full_path);
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
+        }
+        (
+            "ctx.process.kill",
+            ContextTarget::Process {
+                pid, display_name, ..
+            },
+        ) => {
+            if ProcessManager::kill_process(*pid) {
+                notify(
+                    app,
+                    &i18n,
+                    "info",
+                    &i18n.tf("process.kill.done", &[display_name]),
+                );
+                // 立刻重采一次并把新列表推给前端，不要等下一个刷新周期。
+                let rows = {
+                    let limit = state
+                        .settings
+                        .lock()
+                        .expect("设置锁中毒")
+                        .process_list_limit;
+                    let mut processes = state.processes.lock().expect("进程锁中毒");
+                    processes
+                        .collect(limit)
+                        .iter()
+                        .map(crate::commands::dto::ProcessRow::from)
+                        .collect::<Vec<_>>()
+                };
+                let _ = app.emit(crate::events::EV_PROCESSES, rows);
+            } else {
+                notify(app, &i18n, "error", &i18n.t("process.kill.failed"));
+            }
+        }
+        ("ctx.file.reveal", ContextTarget::File { path, .. }) => {
+            platform::reveal_in_finder(std::path::Path::new(path));
+        }
+        ("ctx.file.copyPath", ContextTarget::File { path, .. }) => {
+            platform::copy_to_clipboard(path);
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
+        }
+        ("ctx.file.rename", ContextTarget::File { .. }) => {
+            let _ = app.emit(EV_MENU_ACTION, "file:rename");
+        }
+        ("ctx.file.delete", ContextTarget::File { .. }) => {
+            let _ = app.emit(EV_MENU_ACTION, "file:delete");
+        }
+        ("ctx.clipboard.copy", ContextTarget::Clipboard { content, .. }) => {
+            platform::copy_to_clipboard(content);
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
+        }
+        ("ctx.clipboard.delete", ContextTarget::Clipboard { id, .. }) => {
+            let changed = {
+                let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
+                manager.delete_history_item(*id)
+            };
+            // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
+            if changed {
+                let result = clipboard::persist_history(|| {
+                    state
+                        .clipboard
+                        .lock()
+                        .expect("剪贴板锁中毒")
+                        .history
+                        .clone()
+                });
+                if let Err(err) = result {
+                    eprintln!("[clipboard] 落盘失败: {err}");
+                }
+            }
+            notify(app, &i18n, "info", &i18n.t("clipboard.deleted"));
+        }
+        _ => {}
+    }
+}
+
+/// 向前端回传提示。
+fn notify(app: &AppHandle, _i18n: &I18n, kind: &str, message: &str) {
+    let _ = app.emit(
+        EV_NOTICE,
+        crate::commands::dto::Notice {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        },
+    );
+}```
+
+> **实际落地**：Task 25 新增 `on_context_menu_event`（原生右键菜单）。
+> 上文是当前文件的**完整内容**。
+
+> **本任务必须同时改两个 `locales/*.lproj/Localizable.strings`**，追加下列 key
+> （zh-Hans / en 各一份）。原因：muda 0.20 在 `text=None` 时用的是它写死的英文表，
+> 而 macOS 后端用 `initWithTitle:` 显式设标题 —— **预定义项永远不会是系统语言**，
+> 只有我们自己显式传文案才能本地化。
+>
+> ```
+> "menubar.edit"      = "编辑"        / "Edit"
+> "menubar.view"      = "视图"        / "View"
+> "menubar.window"    = "窗口"        / "Window"
+> "menubar.hide"      = "隐藏"        / "Hide"
+> "menubar.hideOthers"= "隐藏其他"    / "Hide Others"
+> "menubar.showAll"   = "显示全部"    / "Show All"
+> "menubar.quitApp"   = "退出"        / "Quit"
+> "edit.undo"         = "撤销"        / "Undo"
+> "edit.redo"         = "重做"        / "Redo"
+> "edit.cut"          = "剪切"        / "Cut"
+> "edit.copy"         = "拷贝"        / "Copy"
+> "edit.paste"        = "粘贴"        / "Paste"
+> "edit.selectAll"    = "全选"        / "Select All"
+> "window.minimize"   = "最小化"      / "Minimize"
+> "window.close"      = "关闭窗口"    / "Close Window"
+> "view.fullscreen"   = "全屏"        / "Toggle Full Screen"
+> ```
+>
+> 「关于 / 隐藏 / 退出」三项按 macOS 惯例带应用名后缀，在 Rust 侧拼成
+> `<动词> chuaker7`：关于用**已存在**的 `settings.about`（"关于" / "About"），
+> 应用名取 `menubar.title`（= "Ki6"）。托盘菜单的「退出」继续用
+> `menubar.quit`（不带应用名，托盘里更自然）。
+
+`src-tauri/src/system/mod.rs` 追加模块声明：
+
+```rust
+pub mod menu;
 ```
+
+> **不写这一行，`menu.rs` 根本不会被编译**——`crate::system::menu::build` 会报
+> E0433（could not find `menu` in `system`）。`system/mod.rs` 在 Task 7 里只有
+> `pub mod tasks;`，其余模块各自的任务负责补。
+> **`PredefinedMenuItem` 只接受 `(manager, Option<&str>)` 两个参数**，没有加速键参数——
+> 计划早前的写法多传了第三个实参，编译会报 E0061。macOS 把「隐藏 / 隐藏其他 / 显示全部 / 退出」
+> 放进应用菜单后，系统会自动给它们分配 ⌘H / ⌥⌘H / ⌘Q，无需手写加速键。
+> 需要自定义加速键的项（视图菜单的 Cmd+1..5）用 `MenuItem::with_id(app, id, 文案, enabled, 加速键)`。
 
 - [ ] **Step 3: 接入 Builder**
 
-`src-tauri/src/lib.rs`：
+> `lib.rs` 里**已经**有 `use tauri::Manager;`（Task 1 建壳时就写了，`app.state::<Arc<AppState>>()` 要用它）。
+> **不要再加一遍** —— 同名 `use` 重复导入会报 E0252。
 
-```rust
-use tauri::Manager;
-```
-
-Builder 追加：
+`src-tauri/src/lib.rs` 的 setup 闭包改成：
 
 ```rust
         .setup(|app| {
             let handle = app.handle().clone();
+            let state = app.state::<Arc<AppState>>().inner().clone();
 
-            crate::system::menu::build(&handle)?;
+            // 菜单文案跟着设置里的语言走。
+            let locale = state.settings.lock().expect("设置锁中毒").locale;
+            crate::system::menu::build(&handle, locale)?;
 
-            let state = app.state::<Arc<Mutex<AppState>>>().inner().clone();
             crate::system::tasks::spawn_process_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_clipboard_loop(handle.clone(), state.clone());
             crate::system::tasks::spawn_monitor_loop(
@@ -3722,21 +4194,27 @@ Builder 追加：
 - [ ] **Step 4: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7
-npm run tauri dev
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7
+# 1420 端口被另一个项目的孤儿 vite dev server 占用，运行验收走 release 构建直跑：
+# default = ["custom-protocol"] 让 release 二进制直接内嵌 frontend/dist，不依赖 dev server。
+# 注意：这是 cargo **工作区**，产物在仓库根的 target/ 下，不在 src-tauri/target/。
+source ~/.nvm/nvm.sh && nvm use
+npm run build
+cargo build --release -p chuaker7
+./target/release/chuaker7
 ```
 
-Expected：窗口出现后，屏幕顶部出现 macOS 菜单栏，含「killer7 / 编辑 / 视图 / 窗口」四个下拉；点「视图 → 进程管理」无报错。
+Expected：窗口出现后，屏幕顶部出现 macOS 菜单栏，含「chuaker7 / 编辑 / 视图 / 窗口」四个下拉；点「视图 → 进程管理」无报错。
 
 - [ ] **Step 5: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 原生 macOS 应用菜单栏
 
-- set_as_app_menu 构建 killer7/编辑/视图/窗口四个原生菜单
+- set_as_app_menu 构建 chuaker7/编辑/视图/窗口四个原生菜单
 - 关于/隐藏/退出/剪切/拷贝/粘贴/全选走 PredefinedMenuItem
 - 视图项带 Cmd+1..5 加速器，点击后发 menu-action 事件驱动前端切换
 
@@ -3746,7 +4224,7 @@ AI-Tool: TophantAI"
 
 ---
 
-### Task 13: 托盘图标与托盘菜单
+### Task 12: 托盘图标与托盘菜单
 
 **Files:**
 - Create: `src-tauri/src/system/tray.rs`
@@ -3765,13 +4243,19 @@ AI-Tool: TophantAI"
 //! 图标沿用 egui 版的「小鸟」像素画（`core::icon::bird_rgba`），
 //! 以 macOS 模板图方式挂载，系统自动适配深浅色。
 
+use std::sync::Mutex;
+
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
+use crate::core::i18n::{I18n, Locale};
 use crate::core::icon::bird_rgba;
 use crate::events::{EV_TRAY_OPEN, EV_TRAY_QUIT};
+
+/// 托盘图标的 id。
+const TRAY_ID: &str = "main";
 
 /// 托盘里需要动态刷新的菜单项。
 struct TrayItems<R: Runtime> {
@@ -3780,19 +4264,80 @@ struct TrayItems<R: Runtime> {
     disk: MenuItem<R>,
     upload: MenuItem<R>,
     download: MenuItem<R>,
+    /// 托盘标题项（应用名）。
+    title: MenuItem<R>,
+    /// 「打开」项。
+    open: MenuItem<R>,
+    /// 「退出」项。
+    quit: MenuItem<R>,
+    /// 本地化后的指标名称，刷新时拼在数值前面。
+    labels: Mutex<TrayLabels>,
+}
+
+/// 指标项的本地化前缀。
+struct TrayLabels {
+    cpu: String,
+    memory: String,
+    disk: String,
+    upload: String,
+    download: String,
 }
 
 /// 构建托盘图标与菜单。
-pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+pub fn build<R: Runtime>(app: &AppHandle<R>, locale: Locale) -> tauri::Result<()> {
     let (pixels, width, height) = bird_rgba(22);
     let icon = Image::new_owned(pixels, width, height);
 
-    let title = MenuItem::with_id(app, "tray:title", "killer7", false, None::<&str>)?;
-    let cpu = MenuItem::with_id(app, "tray:cpu", "CPU  —", false, None::<&str>)?;
-    let memory = MenuItem::with_id(app, "tray:memory", "内存  —", false, None::<&str>)?;
-    let disk = MenuItem::with_id(app, "tray:disk", "磁盘  —", false, None::<&str>)?;
-    let upload = MenuItem::with_id(app, "tray:upload", "上传  —", false, None::<&str>)?;
-    let download = MenuItem::with_id(app, "tray:download", "下载  —", false, None::<&str>)?;
+    let i18n = I18n::new(locale);
+    // 应用名（展示名 "Ki6"），托盘标题项与 tooltip 共用。
+    let app_name = i18n.t("menubar.title");
+    let cpu_label = i18n.t("monitor.cpu");
+    let memory_label = i18n.t("monitor.memory");
+    let disk_label = i18n.t("monitor.disk");
+    let upload_label = i18n.t("monitor.upload");
+    let download_label = i18n.t("monitor.download");
+
+    let title = MenuItem::with_id(app, "tray:title", app_name.clone(), false, None::<&str>)?;
+    let cpu = MenuItem::with_id(
+        app,
+        "tray:cpu",
+        format!("{cpu_label}  —"),
+        false,
+        None::<&str>,
+    )?;
+    let memory = MenuItem::with_id(
+        app,
+        "tray:memory",
+        format!("{memory_label}  —"),
+        false,
+        None::<&str>,
+    )?;
+    let disk = MenuItem::with_id(
+        app,
+        "tray:disk",
+        format!("{disk_label}  —"),
+        false,
+        None::<&str>,
+    )?;
+    let upload = MenuItem::with_id(
+        app,
+        "tray:upload",
+        format!("{upload_label}  —"),
+        false,
+        None::<&str>,
+    )?;
+    let download = MenuItem::with_id(
+        app,
+        "tray:download",
+        format!("{download_label}  —"),
+        false,
+        None::<&str>,
+    )?;
+    let open = MenuItem::with_id(app, "tray:open", i18n.t("menubar.open"), true, None::<&str>)?;
+    // 用**自定义**项而不是 `PredefinedMenuItem::quit`：预定义项由系统直接
+    // 退出应用，走不到下面的 `on_tray_menu_event`，`tray-quit` 事件就永远
+    // 发不出去（契约里写了托盘「退出」要发这个事件）。
+    let quit = MenuItem::with_id(app, "tray:quit", i18n.t("menubar.quit"), true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
@@ -3804,18 +4349,28 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             &upload,
             &download,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "tray:open", "打开 killer7", true, None::<&str>)?,
+            &open,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some("退出"), None)?,
+            &quit,
         ],
     )?;
 
-    TrayIconBuilder::with_id("main")
+    TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .icon_as_template(true)
-        .tooltip("killer7")
-        .menu_on_left_click(false)
+        .tooltip(&app_name)
+        .show_menu_on_left_click(false)
         .menu(&menu)
+        // Tauri 2.12.7 的 `TrayIconBuilder::on_menu_event` **同样是全局监听器**：
+        // 它与 `Builder::on_menu_event` 共用 `manager.menu.global_event_listeners`，
+        // 会收到应用菜单、窗口菜单与所有托盘菜单的事件（Tauri 官方文档明写
+        // "This handler is not specific to this tray icon"）。真正把范围限定在
+        // 托盘菜单的，靠的是下面 `on_tray_menu_event` 里按 id 的 `match` 门控。
+        // **不要把未知 id 转发给 `system::menu::on_menu_event`** —— 那会让每一次
+        // 应用菜单点击都被处理两次（Tauri 文档警告的重复处理）。
+        .on_menu_event(|app, event| {
+            on_tray_menu_event(app, event.id().as_ref());
+        })
         .build(app)?;
 
     // 把可更新的菜单项挂到全局状态上，供采样循环更新。
@@ -3825,9 +4380,55 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         disk,
         upload,
         download,
+        title,
+        open,
+        quit,
+        labels: Mutex::new(TrayLabels {
+            cpu: cpu_label,
+            memory: memory_label,
+            disk: disk_label,
+            upload: upload_label,
+            download: download_label,
+        }),
     });
 
     Ok(())
+}
+
+/// 换语言后更新托盘菜单的文案。
+///
+/// 托盘菜单的**结构**在两种语言下完全一致（同样的项、同样的顺序），
+/// 只有文案不同，所以这里不重建菜单、只改各菜单项的文本。
+///
+/// 也不能走 `build()` 重来一遍：那会 `app.manage(TrayItems{..})` 第二次托管
+/// 同类型状态（`manage` 对已托管类型是静默 no-op），并且 `TrayIconBuilder`
+/// 不检查重复 id，会多出一个托盘图标。
+pub fn update_locale<R: Runtime>(app: &AppHandle<R>, locale: Locale) {
+    let Some(items) = app.try_state::<TrayItems<R>>() else {
+        return;
+    };
+
+    let i18n = I18n::new(locale);
+    let _ = items.title.set_text(i18n.t("menubar.title"));
+    let _ = items.open.set_text(i18n.t("menubar.open"));
+    let _ = items.quit.set_text(i18n.t("menubar.quit"));
+
+    let mut labels = items
+        .labels
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    labels.cpu = i18n.t("monitor.cpu");
+    labels.memory = i18n.t("monitor.memory");
+    labels.disk = i18n.t("monitor.disk");
+    labels.upload = i18n.t("monitor.upload");
+    labels.download = i18n.t("monitor.download");
+
+    // 指标项的前缀换掉，数值留到下一次采样刷新（约 1 秒内）。
+    let _ = items.cpu.set_text(format!("{}  —", labels.cpu));
+    let _ = items.memory.set_text(format!("{}  —", labels.memory));
+    let _ = items.disk.set_text(format!("{}  —", labels.disk));
+    let _ = items.upload.set_text(format!("{}  —", labels.upload));
+    let _ = items.download.set_text(format!("{}  —", labels.download));
 }
 
 /// 更新托盘里的实时指标。
@@ -3835,15 +4436,27 @@ pub fn update_metrics<R: Runtime>(app: &AppHandle<R>, info: &crate::core::monito
     let Some(items) = app.try_state::<TrayItems<R>>() else {
         return;
     };
-    let _ = items.cpu.set_text(format!("CPU  {:.1}%", info.cpu_usage));
-    let _ = items.memory.set_text(format!("内存  {:.1}%", info.memory_usage));
-    let _ = items.disk.set_text(format!("磁盘  {:.1}%", info.disk_usage));
+    let labels = items
+        .labels
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let _ = items
-        .upload
-        .set_text(format!("上传  {:.2} MB/s", info.network_upload));
+        .cpu
+        .set_text(format!("{}  {:.1}%", labels.cpu, info.cpu_usage));
     let _ = items
-        .download
-        .set_text(format!("下载  {:.2} MB/s", info.network_download));
+        .memory
+        .set_text(format!("{}  {:.1}%", labels.memory, info.memory_usage));
+    let _ = items
+        .disk
+        .set_text(format!("{}  {:.1}%", labels.disk, info.disk_usage));
+    let _ = items.upload.set_text(format!(
+        "{}  {:.2} MB/s",
+        labels.upload, info.network_upload
+    ));
+    let _ = items.download.set_text(format!(
+        "{}  {:.2} MB/s",
+        labels.download, info.network_download
+    ));
 }
 
 /// 处理托盘点击与菜单点击。
@@ -3881,22 +4494,32 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
-}
+}```
+
+> **实际落地**：Task 15 评审后新增 `update_locale`（换语言时同步托盘菜单文案），`TrayItems` 增加 `title`/`open`/`quit` 三个菜单项与 `Mutex<TrayLabels>`。
+> 上文是当前文件的**完整内容**。
+
+`src-tauri/src/system/mod.rs` 追加模块声明：
+
+```rust
+pub mod tray;
 ```
 
+> 同理：不写这一行，`tray.rs` 不会被编译，`crate::system::tray::...` 会报 E0433。
 - [ ] **Step 2: 接入 Builder 与采样循环**
 
-`src-tauri/src/lib.rs` 的 setup 追加：
+`src-tauri/src/lib.rs` 的 setup 追加（`locale` 变量是 Task 11 引入的）：
 
 ```rust
-            crate::system::tray::build(&handle)?;
+            crate::system::tray::build(&handle, locale)?;
 ```
 
-Builder 追加：
+Builder 追加（`Builder::on_tray_icon_event` 的第一个参数是 `&AppHandle<R>`，
+不是 `&TrayIcon`；`tray.app_handle()` 只是把它再取一遍）：
 
 ```rust
-        .on_tray_icon_event(|tray, event| {
-            crate::system::tray::on_tray_event(tray.app_handle(), &event);
+        .on_tray_icon_event(|app, event| {
+            crate::system::tray::on_tray_event(app, &event);
         })
 ```
 
@@ -3906,20 +4529,31 @@ Builder 追加：
             crate::system::tray::update_metrics(&app, &info);
 ```
 
+> **实测约束（控制器补）**：① `core::monitor::SystemInfo` 派生了 `Copy`，
+> 所以 `update_metrics(&app, &info)` 在 `push_sample` 之后再借用 `info` 是合法的；
+> ② 托盘菜单里数值的刷新周期是设置项 `auto_refresh_interval`，**默认 5.0 秒**
+> —— 真机复核「数值会不会刷新」时观测窗口必须 **> 5 秒**，否则会误判成「不刷新」。
+
 - [ ] **Step 3: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7
-npm run tauri dev
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7
+# 1420 端口被另一个项目的孤儿 vite dev server 占用，运行验收走 release 构建直跑：
+# default = ["custom-protocol"] 让 release 二进制直接内嵌 frontend/dist，不依赖 dev server。
+# 注意：这是 cargo **工作区**，产物在仓库根的 target/ 下，不在 src-tauri/target/。
+source ~/.nvm/nvm.sh && nvm use
+npm run build
+cargo build --release -p chuaker7
+./target/release/chuaker7
 ```
 
-Expected：菜单栏右侧出现小鸟图标；左键点击弹出菜单，显示 CPU / 内存 / 磁盘 / 上传 / 下载 五行数值（随采样刷新）；点「打开 killer7」窗口置前。
+Expected：菜单栏右侧出现小鸟图标；左键点击弹出菜单，显示 CPU / 内存 / 磁盘 / 上传 / 下载 五行数值（随采样刷新）；点「打开 chuaker7」窗口置前。
 
 - [ ] **Step 4: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git add -A
 git commit -m "feat: 托盘图标与原生托盘菜单
 
@@ -3933,7 +4567,7 @@ AI-Tool: TophantAI"
 
 ---
 
-### Task 14: 全局快捷键与激活策略
+### Task 13: 全局快捷键与激活策略
 
 **Files:**
 - Create: `src-tauri/src/system/shortcut.rs`
@@ -3950,40 +4584,63 @@ AI-Tool: TophantAI"
 ```rust
 //! 全局快捷键 ⌘+L。
 //!
-//! macOS 上 `GlobalHotKeyManager` 必须在主线程创建，否则注册会失败，
-//! 因此注册放在 Tauri 的 `setup()` 里（setup 运行在主线程）。
+//! 注册放在 Tauri 的 `setup()` 里（主线程），以确保 Carbon 事件能被应用事件循环派发 ——
+//! `GlobalHotKeyManager::new()` 本身并不检查线程，真正的约束是事件循环必须在主线程。
 
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
-/// 热键管理器（全局唯一）。
-static MANAGER: Mutex<Option<GlobalHotKeyManager>> = Mutex::new(None);
-/// 已注册的热键。
-static HOTKEY: Mutex<Option<HotKey>> = Mutex::new(None);
+/// 热键管理器与已注册热键（全局唯一）。
+///
+/// 两者放同一个槽里，check-then-act 一次加锁完成，避免出现
+/// 「管理器已写入、热键还没写入」的中间态。
+static SLOT: Mutex<(Option<GlobalHotKeyManager>, Option<HotKey>)> = Mutex::new((None, None));
+/// 监听线程的启动闸门（全局只允许拉起一次）。
+static LISTENER: Once = Once::new();
 
 /// 注册 ⌘+L 并启动监听线程。
+///
+/// 幂等：已经注册过就直接返回成功。macOS 的 `RegisterEventHotKey` 对重复注册返回
+/// `eventHotKeyExistsErr`（`global_hotkey::Error::AlreadyRegistered`），不挡住的话，
+/// 每次「启用」都会再建一个管理器、并多拉起一个监听线程。
+///
+/// 注意：macOS 用 `kEventHotKeyExclusive` 注册，**Ki6 运行期间会独占 ⌘L**，
+/// 其他应用（浏览器聚焦地址栏、Finder 前往文件夹…）收不到这个键。
+/// 这是全局热键注册方式本身的语义，不是实现缺陷。
 pub fn register<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let manager = GlobalHotKeyManager::new().map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!(e)))?;
+    {
+        let slot = SLOT.lock().expect("快捷键锁中毒");
+        if slot.1.is_some() {
+            return Ok(());
+        }
+    }
+
+    let manager =
+        GlobalHotKeyManager::new().map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!(e)))?;
     let hotkey = HotKey::new(Some(Modifiers::META), Code::KeyL);
     let id = hotkey.id();
     manager
         .register(hotkey)
         .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!(e)))?;
 
-    *MANAGER.lock().expect("快捷键锁中毒") = Some(manager);
-    *HOTKEY.lock().expect("快捷键锁中毒") = Some(hotkey);
+    {
+        let mut slot = SLOT.lock().expect("快捷键锁中毒");
+        *slot = (Some(manager), Some(hotkey));
+    }
 
-    let handle = app.clone();
-    std::thread::spawn(move || {
-        let receiver = GlobalHotKeyEvent::receiver();
-        while let Ok(event) = receiver.recv() {
-            if event.id == id && event.state == global_hotkey::HotKeyState::Pressed {
-                crate::system::tray::show_main_window(&handle);
+    LISTENER.call_once(|| {
+        let handle = app.clone();
+        std::thread::spawn(move || {
+            let receiver = GlobalHotKeyEvent::receiver();
+            while let Ok(event) = receiver.recv() {
+                if event.id == id && event.state == global_hotkey::HotKeyState::Pressed {
+                    crate::system::tray::show_main_window(&handle);
+                }
             }
-        }
+        });
     });
 
     Ok(())
@@ -3992,16 +4649,23 @@ pub fn register<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 /// 启用或停用快捷键。
 pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) {
     if enabled {
-        let _ = register(app);
-    } else {
-        let hotkey = HOTKEY.lock().expect("快捷键锁中毒").take();
-        if let (Some(hotkey), Some(manager)) = (
-            hotkey,
-            MANAGER.lock().expect("快捷键锁中毒").as_ref(),
-        ) {
-            let _ = manager.unregister(hotkey);
+        // 注册失败必须留下痕迹：否则「设置里显示已开启、但 ⌘L 毫无反应」，
+        // 用户与开发者都拿不到任何线索（典型触发场景：开了第二个实例，
+        // 或别的应用已经持有 ⌘L）。
+        if let Err(err) = register(app) {
+            eprintln!("[shortcut] 注册 ⌘L 失败: {err}");
         }
-        *MANAGER.lock().expect("快捷键锁中毒") = None;
+    } else {
+        // 先把两者从静态槽里取出来，再做注销，避免持锁调用原生 API。
+        let (manager, hotkey) = {
+            let mut slot = SLOT.lock().expect("快捷键锁中毒");
+            (slot.0.take(), slot.1.take())
+        };
+        if let (Some(hotkey), Some(manager)) = (hotkey, manager)
+            && let Err(err) = manager.unregister(hotkey)
+        {
+            eprintln!("[shortcut] 注销 ⌘L 失败: {err}");
+        }
     }
 }
 ```
@@ -4012,46 +4676,77 @@ pub fn set_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) {
 //! Dock / 菜单栏模式切换。
 //!
 //! Tauri v2 没有暴露 `NSApp.activationPolicy`，这里用 `objc2-app-kit` 直调 AppKit。
-//! 必须在主线程调用；失败时降级为「仅隐藏窗口」，行为差异可接受。
+//!
+//! **必须在主线程调用**：`MainThreadMarker::new()` 在非主线程返回 `None`，此时直接跳过。
+//! 当前的调用方都是同步的 Tauri command（Tauri v2 里同步 command 跑在主线程），
+//! 但**不要**给这些 command 加 `async` 或 `#[tauri::command(async)]` ——
+//! 那会把命令体切到 async runtime 线程上，菜单栏模式会静默失效。
 
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 /// 设置激活策略：`true` 为仅菜单栏（不占 Dock），`false` 为常规（占 Dock）。
-pub fn set_accessory_mode<R: Runtime>(enabled: bool, _app: &AppHandle<R>) {
+///
+/// 切换失败时**真正执行**降级：隐藏主窗口，让应用退回「只在菜单栏可见」的效果。
+pub fn set_accessory_mode<R: Runtime>(enabled: bool, app: &AppHandle<R>) {
     let Some(mtm) = MainThreadMarker::new() else {
         eprintln!("[activation] 不在主线程，跳过激活策略切换");
         return;
     };
 
-    let app = NSApplication::sharedApplication(mtm);
+    let ns_app = NSApplication::sharedApplication(mtm);
     let policy = if enabled {
         NSApplicationActivationPolicy::Accessory
     } else {
         NSApplicationActivationPolicy::Regular
     };
 
-    if !app.setActivationPolicy(policy) {
+    if !ns_app.setActivationPolicy(policy) {
         eprintln!("[activation] 切换激活策略失败，降级为仅隐藏窗口");
+        // 降级只在「切到仅菜单栏」失败时才有意义 —— 此时至少把窗口藏起来，
+        // 不让它继续以普通窗口的方式占着 Dock 位置。
+        if enabled && let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
     }
 }
 ```
 
+`src-tauri/src/system/mod.rs` 追加模块声明：
+
+```rust
+pub mod activation;
+pub mod autolaunch;
+pub mod menu;
+pub mod shortcut;
+pub mod tasks;
+pub mod tray;
+```
+
+> `rustfmt` 的 `reorder_modules` 默认开启，`mod` 声明会按字母序重排 ——
+> 补完这两行后整个文件的**全文**就是上面这几行，不要按追加顺序写。
+
+> 同理：不写这两行，`shortcut.rs` 与 `activation.rs` 都不会被编译。
+
+> **实际落地（Task 14 之后）**：模块清单多了一行 `pub mod autolaunch;`（开机自启，Task 14 引入），
+> 顺序仍按字母序：`activation` → `autolaunch` → `menu` → `shortcut` → `tasks` → `tray`。
 - [ ] **Step 3: 接入 setup**
 
 `src-tauri/src/lib.rs` setup 内追加：
 
 ```rust
+            // 全局快捷键 ⌘L：**默认开启**（core/settings.rs 的默认值是 true），
+            // 设置项可热更新。注册失败必须留下痕迹，否则「显示已开启但毫无反应」
+            // 会变成无法排查的静默失效。
             {
-                let guard = state.lock().expect("状态锁中毒");
-                let shortcut_enabled = guard
+                let shortcut_enabled = state
                     .settings
                     .lock()
                     .expect("设置锁中毒")
                     .global_shortcut_enabled;
-                if shortcut_enabled {
-                    let _ = crate::system::shortcut::register(&handle);
+                if shortcut_enabled && let Err(err) = crate::system::shortcut::register(&handle) {
+                    eprintln!("[shortcut] 注册 ⌘L 失败: {err}");
                 }
             }
 ```
@@ -4059,20 +4754,27 @@ pub fn set_accessory_mode<R: Runtime>(enabled: bool, _app: &AppHandle<R>) {
 - [ ] **Step 4: 编译并人工验收**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
-npm run tauri dev
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
+# 1420 端口被另一个项目的孤儿 vite dev server 占用，运行验收走 release 构建直跑：
+# default = ["custom-protocol"] 让 release 二进制直接内嵌 frontend/dist，不依赖 dev server。
+# 注意：这是 cargo **工作区**，产物在仓库根的 target/ 下，不在 src-tauri/target/。
+source ~/.nvm/nvm.sh && nvm use
+npm run build
+cargo build --release -p chuaker7
+./target/release/chuaker7
 ```
 
 Expected：
-- ⌘L 能把窗口从后台唤到前台。
-- 在设置里打开「菜单栏模式」后，Dock 图标消失，菜单栏仍有托盘图标；关掉后 Dock 图标回来。
+- ⌘L 能把窗口从后台唤到前台（这是本任务**唯一**可在本任务内验收的原生行为）。
+- 「菜单栏模式」的开关命令 `set_menu_bar_mode` 属于 **Task 15**，本任务只提供
+  `system::activation::set_accessory_mode` 能力，不在本任务内验收 Dock 图标消失。
 
 - [ ] **Step 5: 提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-git add -A
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+git add src-tauri/src/system/shortcut.rs src-tauri/src/system/activation.rs src-tauri/src/system/mod.rs src-tauri/src/lib.rs
 git commit -m "feat: 全局快捷键 ⌘L 与 Dock/菜单栏模式切换
 
 - global-hotkey 在主线程注册，⌘L 唤起主窗口
@@ -4085,7 +4787,7 @@ AI-Tool: TophantAI"
 
 ---
 
-### Task 15: 开机自启
+### Task 14: 开机自启
 
 **Files:**
 - Create: `src-tauri/src/system/autolaunch.rs`
@@ -4101,12 +4803,13 @@ AI-Tool: TophantAI"
 //! 开机自启动。
 //!
 //! Swift 版优先使用 `SMAppService`（macOS 13+），并保留 LaunchAgent 传统实现。
-//! Rust 版统一走 LaunchAgent：在 `~/Library/LaunchAgents` 写 plist 并用 `launchctl` 装载。
+//! Rust 版统一走 LaunchAgent：在 `~/Library/LaunchAgents` 写 plist，
+//! **不调用 `launchctl load`**（load 会当场把作业跑起来，等于再启一个实例）。
 
 use std::path::PathBuf;
 
 /// LaunchAgent 的 Label / plist 文件名。
-const LABEL: &str = "com.igigi.lucibox";
+const LABEL: &str = "com.igigi.chuaker7";
 
 /// plist 文件路径。
 pub fn plist_path() -> PathBuf {
@@ -4153,18 +4856,17 @@ pub fn enable() -> anyhow::Result<()> {
 
     std::fs::write(&path, plist)?;
 
-    // 重新装载，让改动立即生效；失败不影响下次登录自启。
-    let _ = std::process::Command::new("launchctl")
-        .args(["unload", "-w", &path.to_string_lossy()])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-    let _ = std::process::Command::new("launchctl")
-        .args(["load", "-w", &path.to_string_lossy()])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-
+    // **只写 plist，绝不 `launchctl load`。**
+    //
+    // `launchctl load -w` 会把作业注册进 launchd，而 `RunAtLoad=true` 的语义是
+    // 「注册即启动」—— 实测（Task 14 评审）load 完不到 2 秒 ProgramArguments
+    // 就被跑起来了。我们的 ProgramArguments 指向应用自身，于是用户在设置里
+    // 勾一下「开机自启」，眼前就会多出一个 Ki6 进程：两个托盘图标、两套菜单栏项、
+    // 两份后台采样线程，还可能并发写同一个 settings.json。
+    //
+    // 「开机自启」只需要「下次登录时 launchd 读到 ~/Library/LaunchAgents 里的
+    // plist 并拉起它」—— 登录项本来就在这个目录里，写文件就够了。
+    // 卸载交给 `disable()` 与登录时的 launchd 接管。
     Ok(())
 }
 
@@ -4172,6 +4874,8 @@ pub fn enable() -> anyhow::Result<()> {
 pub fn disable() -> anyhow::Result<()> {
     let path = plist_path();
     if path.exists() {
+        // 作业可能已被 launchd 在登录时自动装载，卸载掉；
+        // 未装载时 `unload` 本来就会失败，忽略即可（删掉 plist 就够了）。
         let _ = std::process::Command::new("launchctl")
             .args(["unload", "-w", &path.to_string_lossy()])
             .stdout(std::process::Stdio::null())
@@ -4208,14 +4912,42 @@ mod tests {
     fn plist_path_lives_in_launch_agents() {
         let path = plist_path();
         assert!(path.to_string_lossy().contains("LaunchAgents"));
-        assert!(path.to_string_lossy().ends_with("com.igigi.lucibox.plist"));
+        assert!(path.to_string_lossy().ends_with("com.igigi.chuaker7.plist"));
     }
-}
-```
+
+    /// 「开机自启」只能写 plist，**不能**把作业注册进 launchd。
+    ///
+    /// `launchctl load -w` 配上 `RunAtLoad=true` 的语义是「注册即启动」，
+    /// 用户在前端勾一下开关，眼前就会多出一个应用实例（Task 14 评审 C-1）。
+    /// 单元测试没法直接观察「没有调用 launchctl」，所以用源码级断言守住这条不变量。
+    #[test]
+    fn enable_never_loads_the_agent_into_launchd() {
+        let source = include_str!("autolaunch.rs");
+        assert!(
+            !source.contains("\"load\""),
+            "enable() 不得调用 `launchctl load`：注册即启动，会再拉起一个应用实例"
+        );
+        assert!(
+            !source.contains("\"bootstrap\""),
+            "也不得用 `launchctl bootstrap` 代替 load —— 同样是注册即启动"
+        );
+    }
+}```
+
+> **实际落地**：**Task 14 评审 C-1 修复**：`enable()` 不再调用 `launchctl load -w` —— 该命令配合 `RunAtLoad=true` 会在用户勾选开关的瞬间再拉起一个应用实例。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 注册模块并提交**
 
-`src-tauri/src/system/mod.rs` 补齐全部模块声明：
+`src-tauri/src/system/mod.rs` 追加 `pub mod autolaunch;`：
+
+```rust
+pub mod autolaunch;
+```
+
+> Task 11（菜单栏）、Task 12（托盘）、Task 13（快捷键 + 激活策略）已各自追加过
+> `menu` / `tray` / `shortcut` + `activation`，加上 Task 7 的 `tasks` 与本任务的
+> `autolaunch`，此时 `system/mod.rs` 全文应为：
 
 ```rust
 //! 原生集成：菜单栏、托盘、快捷键、自启、激活策略与后台任务。
@@ -4229,13 +4961,396 @@ pub mod tray;
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo test -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo test -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 git add -A
 git commit -m "feat: 开机自启（LaunchAgent）
 
-- 写 ~/Library/LaunchAgents/com.igigi.lucibox.plist 并用 launchctl 装载
+- 写 ~/Library/LaunchAgents/com.igigi.chuaker7.plist 并用 launchctl 装载
 - 补 XML 转义与 plist 路径单元测试
+
+AI-Coding: true
+AI-Tool: TophantAI"
+```
+
+---
+
+### Task 15: 设置、文案与系统命令
+
+**Files:**
+- Create: `src-tauri/src/commands/settings.rs`
+- Create: `src-tauri/src/commands/system.rs`
+- Modify: `src-tauri/src/commands/mod.rs`
+
+**Interfaces:**
+- Consumes: `core::settings::{Settings, SettingsPatch}`、`core::i18n::Locale`
+- Produces: command `get_settings` / `update_settings` / `get_strings` / `set_menu_bar_mode` / `set_shortcut_enabled` / `set_auto_launch` / `hide_main_window` / `show_main_window` / `popup_context_menu`（本任务注册空实现，完整菜单逻辑在 Task 25 落地）
+
+- [ ] **Step 1: 写 `src-tauri/src/commands/settings.rs`**
+
+```rust
+//! 设置与文案命令。
+
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use tauri::{AppHandle, State};
+
+use crate::core::i18n::{I18n, Locale};
+use crate::core::settings::{Settings, SettingsPatch};
+use crate::state::AppState;
+
+/// 读取当前设置。
+#[tauri::command]
+pub fn get_settings(state: State<'_, Arc<AppState>>) -> Settings {
+    let settings = state.settings.lock().expect("设置锁中毒");
+    settings.clone()
+}
+
+/// 提交设置补丁，返回合并后的完整设置。
+#[tauri::command]
+pub fn update_settings(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    patch: SettingsPatch,
+) -> Settings {
+    // 先取旧值：菜单栏模式与全局快捷键要靠「改了什么」判断是否重新作用到原生层。
+    // 若在写入之后再取旧值，拿到的就是新值，比较永远相等，热更新就成了死代码。
+    let previous = state.settings.lock().expect("设置锁中毒").clone();
+
+    let mut next = patch.apply(&previous);
+
+    // 自启开关必须落到 LaunchAgent 上，否则会出现「设置里显示已开启、实际没注册」
+    // 与「Agent 建好了、开关却显示关闭」两个互不同步的真相源（Task 15 评审 I-1）。
+    // 失败就回滚这一个字段，不让设置与现实脱节。
+    if previous.launch_at_login != next.launch_at_login {
+        let outcome = if next.launch_at_login {
+            crate::system::autolaunch::enable()
+        } else {
+            crate::system::autolaunch::disable()
+        };
+        if let Err(err) = outcome {
+            eprintln!("[autolaunch] 应用开机自启设置失败，回滚该字段: {err}");
+            next.launch_at_login = previous.launch_at_login;
+        }
+    }
+
+    // 写回全局状态：锁内只改内存。
+    {
+        let mut settings = state.settings.lock().expect("设置锁中毒");
+        *settings = next.clone();
+    }
+
+    // 落盘放在锁外：`next` 是独立副本，写盘不占设置锁。
+    next.save();
+
+    // 语言变了要换文案表。
+    if previous.locale != next.locale {
+        {
+            let mut i18n = state.i18n.lock().expect("文案锁中毒");
+            i18n.set_locale(next.locale);
+        }
+        // 原生菜单栏与托盘菜单也要跟着换文案，否则界面是英文、菜单栏还是中文 ——
+        // 这正是历史提交 f5fc259「消除半中半英」要消灭的现象（Task 15 评审 I-2）。
+        // `menu::build` 结尾是 `set_as_app_menu()`，是替换语义，可以安全重复调用。
+        if let Err(err) = crate::system::menu::build(&app, next.locale) {
+            eprintln!("[menu] 重建菜单栏失败: {err}");
+        }
+        crate::system::tray::update_locale(&app, next.locale);
+    }
+
+    // 采样间隔与网络开关热更新。
+    {
+        state.sample_interval_ms.store(
+            (next.auto_refresh_interval * 1000.0) as u64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        state.network_enabled.store(
+            next.enable_network_monitor,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
+    // 菜单栏模式与全局快捷键的变化需要立即作用到原生层。
+    if previous.show_menu_bar != next.show_menu_bar {
+        crate::system::activation::set_accessory_mode(next.show_menu_bar, &app);
+    }
+
+    if previous.global_shortcut_enabled != next.global_shortcut_enabled {
+        crate::system::shortcut::set_enabled(&app, next.global_shortcut_enabled);
+    }
+
+    next
+}
+
+/// 取指定语言的整张文案表。
+#[tauri::command]
+pub fn get_strings(locale: String) -> HashMap<String, String> {
+    // 与 `Locale::detect()` 同一口径：按前缀判定。
+    // 否则前端传 "en-US" 会回落到中文，而系统语言探测会判成英文（Task 15 评审 M-2）。
+    let parsed = if locale.trim_start().to_ascii_lowercase().starts_with("en") {
+        Locale::En
+    } else {
+        Locale::ZhHans
+    };
+    I18n::new(parsed).table()
+}```
+
+> **实际落地**：**Task 15 评审 I-1 / I-2 / M-2 修复**：自启开关落到 LaunchAgent 并回滚失败项；换语言时重建原生菜单栏与托盘菜单；`get_strings` 改用前缀匹配。
+> 上文是当前文件的**完整内容**。
+
+- [ ] **Step 2: 写 `src-tauri/src/commands/system.rs`**
+
+```rust
+//! 系统级命令：窗口显隐、菜单栏模式、快捷键、自启、原生右键菜单。
+
+use std::sync::Arc;
+
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::{AppHandle, Manager, State};
+
+use crate::commands::dto::ContextTarget;
+use crate::core::i18n::I18n;
+use crate::state::AppState;
+
+/// 隐藏主窗口。
+#[tauri::command]
+pub fn hide_main_window(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+}
+
+/// 显示主窗口并置前。
+#[tauri::command]
+pub fn show_main_window(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+/// 切换菜单栏模式（隐藏 Dock 图标）。
+#[tauri::command]
+pub fn set_menu_bar_mode(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: bool) {
+    {
+        let mut settings = state.settings.lock().expect("设置锁中毒");
+        settings.show_menu_bar = enabled;
+    }
+    // 落盘放在锁外：`mutex.lock().unwrap().save()` 这条语句里的 MutexGuard
+    // 会活到语句结束，`save()` 执行期间锁**仍然被持有**（Task 15 评审实测确认）。
+    // 要真的锁外，得先把设置克隆出来再写盘。
+    let snapshot = state.settings.lock().expect("设置锁中毒").clone();
+    snapshot.save();
+
+    crate::system::activation::set_accessory_mode(enabled, &app);
+
+    if enabled {
+        let _ = app.get_webview_window("main").map(|w| w.hide());
+    } else {
+        let _ = app.get_webview_window("main").map(|w| w.show());
+    }
+}
+
+/// 启用或停用全局快捷键。
+#[tauri::command]
+pub fn set_shortcut_enabled(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: bool) {
+    {
+        let mut settings = state.settings.lock().expect("设置锁中毒");
+        settings.global_shortcut_enabled = enabled;
+    }
+    // 落盘放在锁外，理由同 `set_menu_bar_mode`。
+    let snapshot = state.settings.lock().expect("设置锁中毒").clone();
+    snapshot.save();
+
+    crate::system::shortcut::set_enabled(&app, enabled);
+}
+
+/// 启用或停用开机自启。
+///
+/// 设置项 `launch_at_login` 与 LaunchAgent 的真实状态必须是**同一个真相源**：
+/// 只改设置项会出现「显示已开启、实际没注册」，只注册 LaunchAgent 会出现
+/// 「开关显示关闭，用户再点一次就把刚建好的 Agent 关掉」（Task 15 评审 I-1）。
+/// 所以这里在注册成功后把设置项一起对齐并落盘。
+#[tauri::command]
+pub fn set_auto_launch(state: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), String> {
+    if enabled {
+        crate::system::autolaunch::enable().map_err(|err| err.to_string())?;
+    } else {
+        crate::system::autolaunch::disable().map_err(|err| err.to_string())?;
+    }
+
+    let snapshot = {
+        let mut settings = state.settings.lock().expect("设置锁中毒");
+        settings.launch_at_login = enabled;
+        settings.clone()
+    };
+    snapshot.save();
+
+    Ok(())
+}
+
+/// 弹出原生右键菜单。
+///
+/// 菜单项点击由 `system::menu::on_context_menu_event` 统一处理，
+/// 目标对象暂存在 `AppState::pending_context`。
+#[tauri::command]
+pub fn popup_context_menu(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    kind: String,
+    payload: serde_json::Value,
+) {
+    let raw = serde_json::json!({ "kind": kind, "payload": payload });
+    let Ok(target) = serde_json::from_value::<ContextTarget>(raw) else {
+        eprintln!("[menu] 右键目标解析失败，忽略");
+        return;
+    };
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    let locale = state.i18n.lock().expect("文案锁中毒").locale();
+    let i18n = I18n::new(locale);
+
+    let menu = match build_context_menu(&app, &target, &i18n) {
+        Ok(menu) => menu,
+        Err(err) => {
+            eprintln!("[menu] 构建右键菜单失败: {err}");
+            return;
+        }
+    };
+
+    {
+        *state.pending_context.lock().expect("右键目标锁中毒") = Some(target);
+    }
+
+    let _ = window.popup_menu(&menu);
+}
+
+/// 构建与目标匹配的原生菜单。
+///
+/// `Menu::with_items` 要求 `&[&dyn IsMenuItem<R>]` 切片，同类型项才能放进同一个数组；
+/// 这里改用 `Menu::new` + `append`，可以混合 `MenuItem` 与 `PredefinedMenuItem`。
+///
+/// 菜单文案全部走 `core::i18n` —— muda 0.20 在 `text=None` 时会用它写死的英文表，
+/// 而 macOS 后端用 `initWithTitle:` 显式设标题，**预定义项永远不会跟随系统语言**。
+fn build_context_menu(
+    app: &AppHandle,
+    target: &ContextTarget,
+    i18n: &I18n,
+) -> tauri::Result<Menu<tauri::Wry>> {
+    let menu = Menu::new(app)?;
+
+    match target {
+        ContextTarget::Process {
+            pid, display_name, ..
+        } => {
+            let pid_text = pid.to_string();
+            let kill_label = i18n.tf("process.context.kill", &[display_name, &pid_text]);
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.process.copyPath",
+                i18n.t("process.context.copyPath"),
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&PredefinedMenuItem::separator(app)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.process.kill",
+                kill_label,
+                true,
+                None::<&str>,
+            )?)?;
+        }
+        ContextTarget::File { .. } => {
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.file.reveal",
+                i18n.t("file.reveal"),
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.file.copyPath",
+                i18n.t("file.copyPath"),
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&PredefinedMenuItem::separator(app)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.file.rename",
+                i18n.t("file.rename"),
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.file.delete",
+                i18n.t("file.delete"),
+                true,
+                None::<&str>,
+            )?)?;
+        }
+        ContextTarget::Clipboard { .. } => {
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.clipboard.copy",
+                i18n.t("clipboard.copy"),
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&PredefinedMenuItem::separator(app)?)?;
+            menu.append(&MenuItem::with_id(
+                app,
+                "ctx.clipboard.delete",
+                i18n.t("clipboard.delete"),
+                true,
+                None::<&str>,
+            )?)?;
+        }
+    }
+
+    Ok(menu)
+}```
+
+> **实际落地**：**Task 15 评审 I-1 / I-3 修复**：`set_auto_launch` 同步设置项真相源；`set_menu_bar_mode` / `set_shortcut_enabled` 改为克隆快照后锁外落盘。
+> 上文是当前文件的**完整内容**。
+
+> **实际落地（Task 25 之后）**：本文件在 Task 25 被追加了 `popup_context_menu` 与
+> `build_context_menu`（原生右键菜单），上文是当前文件的**完整内容**。
+> Task 15 落地时 `popup_context_menu` 只是空实现。
+
+- [ ] **Step 3: 挂到 invoke_handler 并提交**
+
+`commands/mod.rs` 追加 `pub mod settings;` / `pub mod system;` 与 handler 列表：
+
+```rust
+        settings::get_settings,
+        settings::update_settings,
+        settings::get_strings,
+        system::hide_main_window,
+        system::show_main_window,
+        system::set_menu_bar_mode,
+        system::set_shortcut_enabled,
+        system::set_auto_launch,
+        system::popup_context_menu,
+```
+
+```bash
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
+git add -A
+git commit -m "feat: 设置、文案与系统命令
+
+- get_settings / update_settings 采用补丁合并语义，语言变更同步换文案表
+- 采样间隔与网络开关热更新到原子变量，无需重启线程
+- 窗口显隐、菜单栏模式、快捷键、自启命令接入原生层
 
 AI-Coding: true
 AI-Tool: TophantAI"
@@ -4258,7 +5373,7 @@ AI-Tool: TophantAI"
 - Create: `frontend/src/lib/i18n.test.ts`
 
 **Interfaces:**
-- Consumes: Task 6 的 DTO 契约、Task 11 的 command 清单
+- Consumes: Task 6 的 DTO 契约、Task 15 的 command 清单
 - Produces:
   - `types.ts`：`ProcessRow` / `PortRow` / `FileRow` / `HistoryRow` / `SystemInfoDto` / `PluginRow` / `Settings` / `SettingsPatch` / `Notice` / `TabId`
   - `bridge.ts`：`api`（全部 command 的薄封装）、`onEvent(name, handler)`、`EVENT` 常量表
@@ -4308,6 +5423,8 @@ export interface SystemInfoDto {
   networkDownload: number;
   cpuHistory: number[];
   memoryHistory: number[];
+  /** 当前进程总数（取自进程缓存）。 */
+  processCount: number;
 }
 
 export interface PluginRow {
@@ -4345,8 +5462,7 @@ export interface Notice {
   message: string;
 }
 
-export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor' | 'plugins' | 'settings';
-```
+export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor' | 'plugins' | 'settings';```
 
 - [ ] **Step 2: 写 `frontend/src/lib/bridge.ts`**
 
@@ -4453,6 +5569,8 @@ export interface AppState {
   toast: (Notice & { id: number }) | null;
   /** 界面语言。 */
   locale: 'zh-Hans' | 'en';
+  /** 工具栏搜索词。搜索框在工具栏上（与活动监视器一致），因此提到外壳级共享。 */
+  search: string;
 }
 
 const initialState: AppState = {
@@ -4461,6 +5579,7 @@ const initialState: AppState = {
   activeTab: 'processes',
   toast: null,
   locale: 'zh-Hans',
+  search: '',
 };
 
 let state: AppState = initialState;
@@ -4497,12 +5616,11 @@ export function useAppStore(): [AppState, typeof setState] {
 /** 弹出顶部提示；3 秒后自动消失。 */
 export function pushToast(kind: Notice['kind'], message: string): void {
   const id = Date.now();
-  setState((prev) => ({ toast: { kind, message, id } }));
+  setState(() => ({ toast: { kind, message, id } }));
   window.setTimeout(() => {
     setState((prev) => (prev.toast?.id === id ? { toast: null } : {}));
   }, 3000);
-}
-```
+}```
 
 - [ ] **Step 4: 写 `frontend/src/lib/theme.ts`**
 
@@ -4572,6 +5690,8 @@ export function formatRate(value: number): string {
 ```typescript
 // 前端插值：与 Rust 侧 format_placeholders 口径一致，按顺序替换 %@。
 
+import { useCallback } from 'react';
+
 import { useAppState } from './store';
 
 /** 把模板中的 `%@` 按出现顺序替换为给定参数。 */
@@ -4610,12 +5730,17 @@ export function useI18n(): {
   strings: Record<string, string>;
 } {
   const { strings } = useAppState();
-  return {
-    strings,
-    t: (key: string, args: string[] = []) => translate(strings, key, args),
-  };
-}
-```
+  // t 的身份必须稳定：页面里的 useCallback / useMemo 多以它为依赖，
+  // 每次渲染都换身份会让这些缓存全部失效、监听反复重订阅。
+  const t = useCallback(
+    (key: string, args: string[] = []) => translate(strings, key, args),
+    [strings],
+  );
+  return { strings, t };
+}```
+
+> **实际落地**：`t` 改为 `useCallback` 依赖 `strings`，保证引用稳定（否则各页 `useCallback` / `useMemo` 每次渲染失效、监听反复重订阅）。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 7: 写测试**
 
@@ -4695,7 +5820,7 @@ describe('translate', () => {
 - [ ] **Step 8: 跑测试并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -4757,6 +5882,12 @@ export interface VirtualListProps<T> {
  *
  * 500 行只渲染约 30 个 DOM 节点（26px 行高 + overscan 8），
  * 保证滚动不掉帧。
+ *
+ * **容器高度由 CSS 决定**（`.scrollable { height: 100% }`），`height` prop
+ * 只用来算「要渲染多少行」。反过来做（把测得的高度写成容器内联高度）会出问题：
+ * 窗口尺寸变化后测量值要等 React 重新提交才生效，这中间容器高度是旧值 ——
+ * 列表会突然短一截，底部留出空白。容器交给 CSS、测量值只管行数，就没这个窗口期：
+ * 就算测量值落后，overscan 多渲染的行数也足以把视口填满。
  */
 export function VirtualList<T>({
   items,
@@ -4803,7 +5934,7 @@ export function VirtualList<T>({
 
   if (items.length === 0) {
     return (
-      <div className="scrollable" style={{ height, overflowY: 'auto' }}>
+      <div className="scrollable" style={{ overflowY: 'auto' }}>
         <div className="empty-state">{empty ?? '暂无数据'}</div>
       </div>
     );
@@ -4812,7 +5943,7 @@ export function VirtualList<T>({
   const slice = items.slice(start, end);
 
   return (
-    <div className="scrollable" style={{ height, overflowY: 'auto' }} onScroll={onScroll}>
+    <div className="scrollable" style={{ overflowY: 'auto' }} onScroll={onScroll}>
       <div style={{ height: totalHeight, position: 'relative' }}>
         <div style={{ position: 'absolute', top: offsetY, left: 0, right: 0 }}>
           {slice.map((item, index) => {
@@ -4827,13 +5958,12 @@ export function VirtualList<T>({
       </div>
     </div>
   );
-}
-```
+}```
 
 - [ ] **Step 2: 写 `DataTable.tsx`**
 
 ```tsx
-import type { ReactNode } from 'react';
+import { memo, type ReactElement, type ReactNode } from 'react';
 
 export interface Column<T> {
   /** 列 key。 */
@@ -4864,6 +5994,58 @@ export interface DataTableProps<T> {
   /** 空态内容。 */
   empty?: ReactNode;
 }
+
+/** 表格行的 props。 */
+interface TableRowProps<T> {
+  columns: Column<T>[];
+  item: T;
+  index: number;
+  selected: boolean;
+  onRowClick?: (item: T, index: number) => void;
+  onRowContextMenu?: (item: T, index: number, event: React.MouseEvent) => void;
+}
+
+/**
+ * 表格行。
+ *
+ * 单独抽出来并 memo 化：数据源刷新时（例如后台每轮推送进程列表），
+ * 只有内容真的变了的那几行需要重绘，其余行直接复用上次的 DOM。
+ *
+ * memo 生效的前提是 props 稳定 —— `columns` 与两个回调都得是稳定引用，
+ * 页面侧要用 `useCallback` / `useMemo` 保证这一点。
+ *
+ * `memo` 会把泛型擦成 `unknown`，所以这里显式断言回泛型函数类型，
+ * 否则 `Column<T>[]` 赋不上 `Column<unknown>[]`。
+ */
+const TableRow = memo(function TableRowInner<T>({
+  columns,
+  item,
+  index,
+  selected,
+  onRowClick,
+  onRowContextMenu,
+}: TableRowProps<T>) {
+  return (
+    <tr
+      data-selected={selected ? 'true' : undefined}
+      onClick={onRowClick ? () => onRowClick(item, index) : undefined}
+      onContextMenu={
+        onRowContextMenu
+          ? (event) => {
+              event.preventDefault();
+              onRowContextMenu(item, index, event);
+            }
+          : undefined
+      }
+    >
+      {columns.map((column) => (
+        <td key={column.key} style={{ textAlign: column.align ?? 'left' }}>
+          {column.render(item, index)}
+        </td>
+      ))}
+    </tr>
+  );
+}) as unknown as <T>(props: TableRowProps<T>) => ReactElement;
 
 /** 发丝描边的数据表格。 */
 export function DataTable<T>({
@@ -4909,33 +6091,25 @@ export function DataTable<T>({
           items.map((item, index) => {
             const key = getKey(item, index);
             return (
-              <tr
+              <TableRow
                 key={key}
-                data-selected={selectedKey === key ? 'true' : undefined}
-                onClick={onRowClick ? () => onRowClick(item, index) : undefined}
-                onContextMenu={
-                  onRowContextMenu
-                    ? (event) => {
-                        event.preventDefault();
-                        onRowContextMenu(item, index, event);
-                      }
-                    : undefined
-                }
-              >
-                {columns.map((column) => (
-                  <td key={column.key} style={{ textAlign: column.align ?? 'left' }}>
-                    {column.render(item, index)}
-                  </td>
-                ))}
-              </tr>
+                columns={columns}
+                item={item}
+                index={index}
+                selected={selectedKey === key}
+                onRowClick={onRowClick}
+                onRowContextMenu={onRowContextMenu}
+              />
             );
           })
         )}
       </tbody>
     </table>
   );
-}
-```
+}```
+
+> **实际落地**：Task 26 新增 `TableRow` memo 组件，文件顶部的 import 随之改变。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 3: 写 `SearchField.tsx`**
 
@@ -5130,28 +6304,84 @@ export function Modal({ open, title, children, footer, onClose }: ModalProps) {
 - [ ] **Step 6: 写 `Sparkline.tsx`（Canvas 手绘曲线）**
 
 ```tsx
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface SparklineProps {
   /** 采样序列。 */
   values: number[];
-  /** 画布宽（CSS px）。 */
+  /** 画布宽（CSS px）；缺省时自动跟随容器宽度。 */
   width?: number;
-  /** 画布高（CSS px）。 */
+  /** 画布高（CSS px）；缺省时自动跟随容器高度。 */
   height?: number;
   /** 线条颜色，缺省取当前强调色。 */
   color?: string;
-  /** 上限。 */
+  /** 量程上限；缺省时按序列峰值自适应。 */
   max?: number;
 }
 
-/** Canvas 手绘曲线，避免 SVG 逐点重排。 */
-export function Sparkline({ values, width = 240, height = 48, color, max = 100 }: SparklineProps) {
+/**
+ * Canvas 手绘曲线，避免 SVG 逐点重排。
+ *
+ * **尺寸跟随容器**：卡片有内边距，写死像素尺寸会让画布溢出卡片边界
+ * （内边距被吃掉之后还会压到描边上）。用 ResizeObserver 量容器内容宽高，
+ * 容器变化时自动重绘。
+ *
+ * **量程自适应**：缺省按序列峰值缩放。固定 100% 量程的话，日常 10% 上下的
+ * CPU 负载会被压成贴着底边的一条直线，看不出起伏 —— 这也是 macOS
+ * 「活动监视器」CPU 负载图的画法。
+ */
+export function Sparkline({ values, width, height, color, max }: SparklineProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [measured, setMeasured] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) {
+    const parent = canvas?.parentElement;
+    if (!parent) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      const nextWidth = width === undefined ? Math.floor(entry.contentRect.width) : 0;
+      const nextHeight = height === undefined ? Math.floor(entry.contentRect.height) : 0;
+      setMeasured((prev) =>
+        prev.width === nextWidth && prev.height === nextHeight
+          ? prev
+          : { width: nextWidth, height: nextHeight },
+      );
+    });
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, [width, height]);
+
+  const drawWidth = width ?? measured.width;
+  const drawHeight = height ?? (measured.height > 0 ? measured.height : 48);
+
+  // 量程窗口：
+  // - 显式传入 max 时用 [0, max]（百分比类指标）；
+  // - 否则按序列自身的峰值自适应：以均值为中心，取一个不小于序列跨度的窗口，
+  //   两端各留出半个跨度的呼吸空间。这样日常 10% 上下的 CPU 负载也能看出起伏，
+  //   而恒定序列会是一条居中的水平线，而不是贴边的一块色块。
+  const ceiling = max ?? 100;
+  const floor = max ?? 0;
+  let windowLow = floor;
+  let windowHigh = ceiling;
+  if (max === undefined && values.length > 0) {
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
+    const center = (lo + hi) / 2;
+    const half = Math.max(hi - lo, 1, Math.abs(center) * 0.02);
+    windowLow = center - half;
+    windowHigh = center + half;
+  }
+  const span = Math.max(windowHigh - windowLow, 0.0001);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || drawWidth <= 0 || drawHeight <= 0) {
       return;
     }
     const ctx = canvas.getContext('2d');
@@ -5160,18 +6390,19 @@ export function Sparkline({ values, width = 240, height = 48, color, max = 100 }
     }
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
+    canvas.width = Math.round(drawWidth * dpr);
+    canvas.height = Math.round(drawHeight * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, drawWidth, drawHeight);
 
     if (values.length < 2) {
       return;
     }
 
     const stroke = color ?? getComputedStyle(canvas).getPropertyValue('--accent').trim() ?? '#F43D3F';
-    const step = width / (values.length - 1);
-    const y = (value: number) => height - (Math.min(value, max) / max) * height;
+    const step = drawWidth / (values.length - 1);
+    const y = (value: number) =>
+      drawHeight - ((Math.min(Math.max(value, windowLow), windowHigh) - windowLow) / span) * drawHeight;
 
     ctx.beginPath();
     ctx.moveTo(0, y(values[0]));
@@ -5182,16 +6413,24 @@ export function Sparkline({ values, width = 240, height = 48, color, max = 100 }
     ctx.lineWidth = 1.25;
     ctx.stroke();
 
-    ctx.lineTo(width, height);
-    ctx.lineTo(0, height);
+    ctx.lineTo(drawWidth, drawHeight);
+    ctx.lineTo(0, drawHeight);
     ctx.closePath();
     ctx.fillStyle = `${stroke}1f`;
     ctx.fill();
-  }, [values, width, height, color, max]);
+  }, [values, drawWidth, drawHeight, color, windowLow, windowHigh, span]);
 
-  return <canvas ref={canvasRef} className="sparkline" style={{ width, height }} />;
-}
-```
+  return (
+    <canvas
+      ref={canvasRef}
+      className="sparkline"
+      style={{
+        width: width === undefined ? '100%' : width,
+        height: height === undefined ? '100%' : height,
+      }}
+    />
+  );
+}```
 
 - [ ] **Step 7: 写组件测试**
 
@@ -5429,7 +6668,7 @@ describe('Modal', () => {
 ```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -5446,20 +6685,21 @@ AI-Tool: TophantAI"
 
 ---
 
-### Task 18: 应用外壳（侧栏 / 顶栏 / 提示 / 导航）
+### Task 18: 应用外壳（工具栏 / 底部汇总栏 / 提示 / 导航）
 
 **Files:**
 - Create: `frontend/src/app/navigation.ts`
-- Create: `frontend/src/app/Sidebar.tsx`
-- Create: `frontend/src/app/TopBar.tsx`
+- Create: `frontend/src/app/Toolbar.tsx`
+- Create: `frontend/src/app/BottomBar.tsx`
 - Create: `frontend/src/app/Toast.tsx`
 - Create: `frontend/src/app/AppShell.tsx`
 - Modify: `frontend/src/App.tsx`
+- Modify: `frontend/index.html`
 - Create: `frontend/src/app/AppShell.test.tsx`
 
 **Interfaces:**
 - Consumes: Task 16 的 `store` / `i18n` / `theme`，Task 17 的组件
-- Produces: `navigation.ts` 的 `TABS` 列表与 `TAB_IDS`；`AppShell` 组件；`App.tsx` 挂载 `AppShell`
+- Produces: `navigation.ts` 的 `TABS` 列表与 `TAB_IDS`；`Toolbar` / `BottomBar` 组件；`AppShell` 组件；`App.tsx` 挂载 `AppShell`
 
 - [ ] **Step 1: 写 `navigation.ts`**
 
@@ -5468,100 +6708,188 @@ import type { TabId } from '../lib/types';
 
 export interface TabDef {
   id: TabId;
-  /** 侧栏文案 key。 */
+  /** 标签文案 key。 */
   labelKey: string;
-  /** 侧栏图标（几何符号，呼应设计语言的 ◆）。 */
-  glyph: string;
-  /** 分组：工具 / 系统。 */
+  /** 分组：工具 / 系统。工具组与系统组之间在标签条上有一道细分隔。 */
   group: 'tools' | 'system';
 }
 
-/** 六个标签页的定义，顺序即侧栏顺序。 */
+/** 六个标签页的定义，顺序即标签条顺序。 */
 export const TABS: TabDef[] = [
-  { id: 'processes', labelKey: 'nav.process', glyph: '◆', group: 'tools' },
-  { id: 'files', labelKey: 'nav.file', glyph: '◆', group: 'tools' },
-  { id: 'clipboard', labelKey: 'nav.clipboard', glyph: '◆', group: 'tools' },
-  { id: 'monitor', labelKey: 'nav.monitor', glyph: '◆', group: 'tools' },
-  { id: 'plugins', labelKey: 'nav.plugins', glyph: '◆', group: 'system' },
-  { id: 'settings', labelKey: 'nav.settings', glyph: '◆', group: 'system' },
+  { id: 'processes', labelKey: 'nav.process', group: 'tools' },
+  { id: 'files', labelKey: 'nav.file', group: 'tools' },
+  { id: 'clipboard', labelKey: 'nav.clipboard', group: 'tools' },
+  { id: 'monitor', labelKey: 'nav.monitor', group: 'tools' },
+  { id: 'plugins', labelKey: 'nav.plugins', group: 'system' },
+  { id: 'settings', labelKey: 'nav.settings', group: 'system' },
 ];
 
 /** 标签页 id 列表。 */
-export const TAB_IDS: TabId[] = TABS.map((tab) => tab.id);
-```
+export const TAB_IDS: TabId[] = TABS.map((tab) => tab.id);```
 
-- [ ] **Step 2: 写 `Sidebar.tsx`**
+- [ ] **Step 2: 写 `Toolbar.tsx`（工具栏：品牌块 + 横向标签条 + 搜索框）**
 
 ```tsx
+import { SearchField } from '../components';
 import { useI18n } from '../lib/i18n';
 import { useAppStore } from '../lib/store';
+import type { TabId } from '../lib/types';
 import { TABS } from './navigation';
 
-export function Sidebar() {
+/**
+ * 工具栏：左侧品牌与当前页，中间横向标签条，右侧搜索框。
+ *
+ * 结构参考 macOS「活动监视器」——它没有左侧栏，用工具栏里的分段标签切换视图，
+ * 搜索框也放在工具栏右侧。搜索词因此是外壳级共享状态（见 `store.ts` 的 `search`）。
+ */
+export function Toolbar() {
   const { t } = useI18n();
   const [state, setState] = useAppStore();
-
-  const tools = TABS.filter((tab) => tab.group === 'tools');
-  const system = TABS.filter((tab) => tab.group === 'system');
-
-  const renderGroup = (labelKey: string, items: typeof TABS) => (
-    <div className="sidebar__group">
-      <div className="sidebar__group-label">{t(labelKey)}</div>
-      {items.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          className="sidebar__item"
-          data-active={state.activeTab === tab.id ? 'true' : undefined}
-          onClick={() => setState({ activeTab: tab.id })}
-        >
-          <span className="sidebar__glyph" aria-hidden="true">
-            {tab.glyph}
-          </span>
-          <span>{t(tab.labelKey)}</span>
-        </button>
-      ))}
-    </div>
-  );
-
-  return (
-    <nav className="sidebar">
-      <div className="sidebar__brand">
-        <div className="sidebar__brand-name">{t('app.brand')}</div>
-        <div className="sidebar__brand-tag">{t('app.tagline')}</div>
-      </div>
-      {renderGroup('nav.section.tools', tools)}
-      {renderGroup('nav.section.system', system)}
-    </nav>
-  );
-}
-```
-
-- [ ] **Step 3: 写 `TopBar.tsx`**
-
-```tsx
-import { useI18n } from '../lib/i18n';
-import { useAppStore } from '../lib/store';
-import { TABS } from './navigation';
-
-export function TopBar() {
-  const { t } = useI18n();
-  const [state] = useAppStore();
   const current = TABS.find((tab) => tab.id === state.activeTab);
 
+  // 标签条：工具组与系统组之间有一道细分隔，保留原来的信息分组。
+  let previousGroup: string | null = null;
+
   return (
-    <header className="topbar" data-tauri-drag-region>
-      <div className="topbar__spacer" data-tauri-drag-region />
-      <div className="topbar__title">
-        <span className="kicker">{current ? t(current.labelKey) : ''}</span>
+    <header className="toolbar">
+      <div className="toolbar__brand" data-tauri-drag-region>
+        <span className="toolbar__brand-name">{t('app.brand')}</span>
+        <span className="toolbar__brand-tag">{current ? t(current.labelKey) : ''}</span>
       </div>
-      <div className="topbar__right" data-tauri-drag-region />
+
+      <nav className="tabstrip" role="tablist" aria-label={t('app.brand')}>
+        {TABS.map((tab) => {
+          const needsDivider = previousGroup !== null && previousGroup !== tab.group;
+          previousGroup = tab.group;
+          return (
+            <span key={tab.id} className="tabstrip__slot">
+              {needsDivider ? <span className="tabstrip__divider" aria-hidden="true" /> : null}
+              <button
+                type="button"
+                role="tab"
+                className="tabstrip__item"
+                aria-selected={state.activeTab === tab.id}
+                onClick={() => setState({ activeTab: tab.id as TabId })}
+              >
+                {t(tab.labelKey)}
+              </button>
+            </span>
+          );
+        })}
+      </nav>
+
+      <div className="toolbar__spacer" data-tauri-drag-region />
+
+      <div className="toolbar__search">
+        <SearchField
+          value={state.search}
+          onChange={(value) => setState({ search: value })}
+          placeholder={t('common.search')}
+        />
+      </div>
     </header>
   );
-}
-```
+}```
 
-> `data-tauri-drag-region` 让顶栏可拖动窗口（需要在 `tauri.conf.json` 的 capabilities 里保留 `core:window:allow-start-dragging`）。
+- [ ] **Step 3: 写 `BottomBar.tsx`（底部汇总栏：CPU/内存/磁盘 + CPU 负载曲线 + 进程数/网络）**
+
+```tsx
+import { useEffect, useState } from 'react';
+
+import { Sparkline } from '../components';
+import { EVENT, api, onEvent } from '../lib/bridge';
+import { useI18n } from '../lib/i18n';
+import type { SystemInfoDto } from '../lib/types';
+
+const EMPTY: SystemInfoDto = {
+  cpuUsage: 0,
+  memoryUsage: 0,
+  diskUsage: 0,
+  networkUpload: 0,
+  networkDownload: 0,
+  cpuHistory: [],
+  memoryHistory: [],
+  processCount: 0,
+};
+
+/**
+ * 底部汇总栏：参考 macOS「活动监视器」窗口底部的三栏面板。
+ *
+ * 左栏是系统级百分比，中栏是 CPU 负载曲线，右栏是计数与网络速率。
+ * 数据全部来自后端已经在推的 `system-info` 事件 —— 底栏自己订阅一份，
+ * 不用让页面把自己的状态往外传。
+ */
+export function BottomBar() {
+  const { t } = useI18n();
+  const [info, setInfo] = useState<SystemInfoDto>(EMPTY);
+
+  useEffect(() => {
+    let disposed = false;
+
+    void api.systemSnapshot().then((snapshot) => {
+      if (!disposed) {
+        setInfo(snapshot);
+      }
+    });
+
+    void onEvent<SystemInfoDto>(EVENT.systemInfo, (next) => {
+      if (!disposed) {
+        setInfo(next);
+      }
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  return (
+    <div className="bottombar">
+      <div className="bottombar__panel">
+        <div className="bottombar__zone">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.cpu')}</span>
+            <span className="bottombar__value bottombar__value--accent">
+              {info.cpuUsage.toFixed(1)}%
+            </span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.memory')}</span>
+            <span className="bottombar__value">{info.memoryUsage.toFixed(1)}%</span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.disk')}</span>
+            <span className="bottombar__value">{info.diskUsage.toFixed(1)}%</span>
+          </div>
+        </div>
+
+        <div className="bottombar__zone bottombar__zone--chart">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.cpuLoad')}</span>
+          </div>
+          <div className="bottombar__chart">
+            <Sparkline values={info.cpuHistory} height={28} />
+          </div>
+        </div>
+
+        <div className="bottombar__zone">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.processes')}</span>
+            <span className="bottombar__value">{info.processCount}</span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.network')}</span>
+            <span className="bottombar__value">
+              ↑ {info.networkUpload.toFixed(1)} · ↓ {info.networkDownload.toFixed(1)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}```
+
+> `data-tauri-drag-region` 让工具栏可拖动窗口（需要在 `tauri.conf.json` 的 capabilities 里保留 `core:window:allow-start-dragging`）。
 
 - [ ] **Step 4: 写 `Toast.tsx`**
 
@@ -5589,9 +6917,10 @@ import { useEffect } from 'react';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { applyTheme } from '../lib/theme';
 import { pushToast, setState, useAppStore } from '../lib/store';
-import { Sidebar } from './Sidebar';
+import type { TabId } from '../lib/types';
+import { BottomBar } from './BottomBar';
 import { Toast } from './Toast';
-import { TopBar } from './TopBar';
+import { Toolbar } from './Toolbar';
 import { Clipboard } from '../pages/Clipboard';
 import { Files } from '../pages/Files';
 import { Monitor } from '../pages/Monitor';
@@ -5623,12 +6952,25 @@ export function AppShell() {
       }
       applyTheme(settings.themeMode, settings.accent);
       setState({ settings, strings, locale: settings.locale });
+
+      // 支持用 `?page=processes` 直接定位标签页：截图与自动化脚本需要能直达某一页，
+      // 而不必先点标签条。参数非法时忽略，留在默认页。
+      const requested = new URLSearchParams(window.location.search).get('page');
+      if (requested && requested in PAGES) {
+        setState({ activeTab: requested as TabId });
+      }
     })();
 
     return () => {
       disposed = true;
     };
   }, []);
+
+  // 切页时清空搜索词：搜索框是外壳级的共享状态，跨页沿用会让上一个页面的
+  // 过滤条件莫名其妙地作用到下一个页面（活动监视器切标签也是清空的）。
+  useEffect(() => {
+    setState({ search: '' });
+  }, [state.activeTab]);
 
   // 订阅后端事件。onEvent 返回 Promise<UnlistenFn>，把取消函数收集起来在卸载时统一调用。
   useEffect(() => {
@@ -5640,7 +6982,10 @@ export function AppShell() {
     track(
       onEvent<string>(EVENT.menuAction, (action) => {
         if (action.startsWith('nav:')) {
-          setState({ activeTab: action.slice(4) as never });
+          setState({ activeTab: action.slice(4) as TabId });
+        } else if (action === 'app:settings') {
+          // 应用菜单里的「设置…」发的是 app:settings，不是 nav: 前缀。
+          setState({ activeTab: 'settings' });
         }
       }),
     );
@@ -5662,18 +7007,15 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
-      <Sidebar />
-      <div className="app-shell__main">
-        <TopBar />
-        <main className="app-shell__content">
-          <Page />
-        </main>
-      </div>
+      <Toolbar />
+      <main className="app-shell__content">
+        <Page />
+      </main>
+      <BottomBar />
       <Toast />
     </div>
   );
-}
-```
+}```
 
 - [ ] **Step 6: 挂载 `App.tsx`**
 
@@ -5682,156 +7024,208 @@ import { AppShell } from './app/AppShell';
 
 export function App() {
   return <AppShell />;
-}
+}```
+
+> **实际落地**：落地时整体重写为最终版：外壳、路由与各页挂载都收在这里。
+> 上文是当前文件的**完整内容**。
+
+同时给 `frontend/index.html` 的 `<html>` 补上默认主题属性：
+
+```html
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ki6</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
 ```
+
+> `tokens.css` 里 `--accent` 只在 `[data-accent='signal|haze|moss|amber']` 下定义，`:root` **没有兜底值**。
+> 若首帧不带 `data-accent`，`var(--accent)` 未定义，焦点环、选区、输入框聚焦、复选框选中与强调色按钮这 9 处消费点会同时失效。
+> 这里把默认值直接写进 HTML，保证**首帧就有正确配色**；Step 5 的启动引导随后用设置里的实际值覆盖这两个属性。
 
 - [ ] **Step 7: 补外壳样式**
 
 在 `frontend/src/styles/base.css` 末尾追加：
 
 ```css
-/* 应用外壳 */
+/* 应用外壳：工具栏 / 内容 / 底部汇总栏 三段式（参考 macOS 活动监视器） */
 .app-shell {
   display: flex;
-  height: 100%;
-}
-
-.app-shell__main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
   flex-direction: column;
+  height: 100%;
 }
 
 .app-shell__content {
   flex: 1;
   min-height: 0;
-  padding: 14px 18px 18px;
+  padding: 14px 18px 10px;
   overflow: hidden;
 }
 
-/* 侧栏 */
-.sidebar {
-  width: var(--sidebar-width);
-  flex: 0 0 var(--sidebar-width);
-  border-right: 1px solid var(--border);
-  padding: 14px 10px;
+/* 工具栏 */
+.toolbar {
+  height: var(--toolbar-height);
+  flex: 0 0 var(--toolbar-height);
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px 0 78px; /* 给红绿灯留位 */
   background: var(--surface);
 }
 
-.sidebar__brand-name {
+.toolbar__brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.15;
+  user-select: none;
+}
+
+.toolbar__brand-name {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 14px;
   letter-spacing: 0.08em;
   color: var(--text);
 }
 
-.sidebar__brand-tag {
+.toolbar__brand-tag {
   font-family: var(--font-mono);
   font-size: 9px;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-top: 2px;
 }
 
-.sidebar__group {
+.toolbar__spacer {
+  flex: 1;
+  height: 100%;
+}
+
+.toolbar__search {
+  width: 220px;
+  flex: 0 0 220px;
+}
+
+/* 标签条：工具组与系统组之间有一道细分隔 */
+.tabstrip {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.tabstrip__slot {
+  display: inline-flex;
+  align-items: center;
   gap: 2px;
 }
 
-.sidebar__group-label {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  padding: 4px 8px;
+.tabstrip__divider {
+  width: 1px;
+  height: 14px;
+  margin: 0 6px;
+  background: var(--border);
 }
 
-.sidebar__item {
+.tabstrip__item {
   appearance: none;
   border: 0;
   background: transparent;
   color: var(--text-muted);
   font-family: var(--font-body);
   font-size: 12px;
-  text-align: left;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
   cursor: default;
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  white-space: nowrap;
 }
 
-.sidebar__item:hover {
-  background: var(--surface-alt);
+.tabstrip__item:hover {
   color: var(--text);
 }
 
-.sidebar__item[data-active='true'] {
+.tabstrip__item[aria-selected='true'] {
   background: var(--control);
   color: var(--text);
 }
 
-.sidebar__glyph {
-  color: var(--accent);
-  font-size: 8px;
-}
-
-/* 顶栏 */
-.topbar {
-  height: var(--topbar-height);
-  flex: 0 0 var(--topbar-height);
+/* 底部汇总栏：参考活动监视器窗口底部的三栏内嵌面板 */
+.bottombar {
+  flex: 0 0 auto;
   display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  padding: 0 12px 0 78px; /* 给红绿灯留位 */
+  justify-content: center;
+  padding: 0 18px 10px;
 }
 
-.topbar__spacer {
-  flex: 1;
-  height: 100%;
-}
-
-.topbar__title {
+.bottombar__panel {
   display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* 顶部提示 */
-.toast {
-  position: fixed;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 6px 14px;
-  border-radius: var(--radius-md);
-  background: var(--surface-alt);
+  align-items: stretch;
   border: 1px solid var(--border);
-  font-size: 12px;
-  z-index: 60;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow: hidden;
 }
 
-.toast--error {
-  border-color: var(--danger);
-  color: var(--danger);
+.bottombar__zone {
+  padding: 7px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
 }
-```
+
+.bottombar__zone + .bottombar__zone {
+  border-left: 1px solid var(--border);
+}
+
+.bottombar__zone--chart {
+  width: 260px;
+}
+
+.bottombar__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 22px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.bottombar__label {
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.bottombar__value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bottombar__value--accent {
+  color: var(--accent);
+}
+
+.bottombar__chart {
+  height: 28px;
+  margin-top: 2px;
+}```
 
 - [ ] **Step 8: 写测试并提交**
 
 `frontend/src/app/AppShell.test.tsx`：
 
 ```tsx
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/bridge', () => ({
@@ -5866,9 +7260,33 @@ vi.mock('../lib/bridge', () => ({
       'nav.settings': '设置',
       'nav.section.tools': '工具',
       'nav.section.system': '系统',
-      'app.brand': 'KILLER7',
+      'app.brand': 'KI6',
       'app.tagline': 'MACOS 系统工具箱',
     }),
+    // 默认激活的是进程页，AppShell 会把它挂载起来，
+    // 页面在 useEffect 里调用的每个 api 方法都必须有桩，否则测试会抛
+    // "api.xxx is not a function"。
+    listProcesses: vi.fn().mockResolvedValue([]),
+    refreshProcesses: vi.fn().mockResolvedValue([]),
+    killProcess: vi.fn().mockResolvedValue(true),
+    popupContextMenu: vi.fn().mockResolvedValue(undefined),
+    listDir: vi.fn().mockResolvedValue([]),
+    homeDir: vi.fn().mockResolvedValue('/tmp'),
+    watchDir: vi.fn().mockResolvedValue(undefined),
+    pickDirectory: vi.fn().mockResolvedValue(null),
+    clipboardCurrent: vi.fn().mockResolvedValue(''),
+    clipboardHistory: vi.fn().mockResolvedValue([]),
+    systemSnapshot: vi.fn().mockResolvedValue({
+      cpuUsage: 0,
+      memoryUsage: 0,
+      diskUsage: 0,
+      networkUpload: 0,
+      networkDownload: 0,
+      cpuHistory: [],
+      memoryHistory: [],
+    }),
+    listPlugins: vi.fn().mockResolvedValue([]),
+    pluginsDir: vi.fn().mockResolvedValue('/tmp/plugins'),
   },
   onEvent: vi.fn().mockResolvedValue(() => {}),
 }));
@@ -5886,12 +7304,20 @@ vi.mock('../lib/store', async () => {
       'nav.settings': '设置',
       'nav.section.tools': '工具',
       'nav.section.system': '系统',
-      'app.brand': 'KILLER7',
+      'app.brand': 'KI6',
       'app.tagline': 'MACOS 系统工具箱',
+      'common.search': '搜索',
+      'bottom.cpu': 'CPU',
+      'bottom.memory': '内存',
+      'bottom.disk': '磁盘',
+      'bottom.cpuLoad': 'CPU 负载',
+      'bottom.processes': '进程',
+      'bottom.network': '网络',
     },
     activeTab: 'processes',
     toast: null,
     locale: 'zh-Hans',
+    search: '',
   };
   return {
     ...actual,
@@ -5909,22 +7335,34 @@ describe('AppShell', () => {
 
   it('渲染品牌与六个标签页', async () => {
     render(<AppShell />);
-    expect(await screen.findByText('KILLER7')).toBeInTheDocument();
+    expect(await screen.findByText('KI6')).toBeInTheDocument();
+
+    // 六个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
+    const tabs = screen.getByRole('tablist');
     for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控', '插件', '设置']) {
-      expect(await screen.findByText(label)).toBeInTheDocument();
+      expect(await within(tabs).findByRole('tab', { name: label })).toBeInTheDocument();
     }
   });
-});
-```
+
+  it('工具栏上有搜索框，底部有汇总栏', async () => {
+    render(<AppShell />);
+    expect(await screen.findByPlaceholderText('搜索')).toBeInTheDocument();
+
+    // 底部汇总栏的三栏：CPU / 内存 / 磁盘 + CPU 负载 + 进程数 + 网络。
+    expect(await screen.findByText('CPU 负载')).toBeInTheDocument();
+    expect(await screen.findByText('内存')).toBeInTheDocument();
+    expect(await screen.findByText('磁盘')).toBeInTheDocument();
+  });
+});```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
 git commit -m "feat: 应用外壳 —— 侧栏 / 顶栏 / 提示与启动引导
 
-- 侧栏按工具 / 系统两段呈现六个标签页
+- 工具栏标签条按工具 / 系统两段呈现六个标签页
 - 启动时拉取设置与文案并写入 data-theme / data-accent
 - 订阅 menu-action 与 notice 事件，接管原生菜单与提示
 
@@ -5948,22 +7386,75 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 写 `frontend/src/pages/Processes.tsx`**
 
 ```tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
-import { Card, DataTable, Kicker, Modal, SearchField, type Column } from '../components';
+import { Card, Kicker, Modal, Segmented, VirtualList } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
-import { pushToast } from '../lib/store';
+import { pushToast, useAppStore } from '../lib/store';
 import type { ProcessRow } from '../lib/types';
 
 type SortKey = 'pid' | 'name' | 'port';
 
+/**
+ * 进程列表的一行。
+ *
+ * 单独抽出来并 memo 化：后台每轮推送进程列表时，只有内容真的变了的行
+ * 需要重绘。`row` 是数据引用 —— `rows` 数组不变时行引用稳定，memo 才生效。
+ */
+const ProcessRowView = memo(function ProcessRowView({
+  row,
+  onSelect,
+}: {
+  row: ProcessRow;
+  onSelect: (row: ProcessRow) => void;
+}) {
+  return (
+    <div
+      className="vrow"
+      onClick={() => onSelect(row)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        void api.popupContextMenu('process', {
+          pid: row.pid,
+          displayName: row.displayName,
+          fullPath: row.fullPath,
+        });
+      }}
+    >
+      <span className="mono vrow__pid">{row.pid}</span>
+      <span className="vrow__name" title={row.fullPath}>
+        {row.displayName}
+      </span>
+      <span className="mono vrow__port">
+        {row.ports.length === 0
+          ? '—'
+          : row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
+      </span>
+    </div>
+  );
+});
+
 export function Processes() {
   const { t } = useI18n();
+  const [state] = useAppStore();
   const [rows, setRows] = useState<ProcessRow[]>([]);
-  const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('pid');
   const [pendingKill, setPendingKill] = useState<ProcessRow | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(420);
+
+  // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
+  const search = state.search;
 
   // 首次拉取 + 订阅后端推送。
   useEffect(() => {
@@ -5979,8 +7470,44 @@ export function Processes() {
     };
   }, []);
 
+  // 列表视口高度随窗口变化，虚拟列表按实际高度计算可见行数。
+  //
+  // 测量要可靠，不能只靠 ResizeObserver：它的首次回调可能早于外层布局定稿，
+  // 拿到的是中间态高度；而列表自身的内联高度又不影响 `.vtable__body` 的尺寸，
+  // 于是「尺寸不再变化 → 观察器不再回调 → 高度永远停在中间值」。
+  // 所以用 useLayoutEffect 在每次布局提交后同步量一次（getBoundingClientRect
+  // 会强制刷新布局，读到的是定稿值），再用 ResizeObserver 兜住后续的窗口变化。
+  const measure = useCallback(() => {
+    const element = listRef.current;
+    if (!element) {
+      return;
+    }
+    const next = Math.floor(element.getBoundingClientRect().height);
+    if (next > 0) {
+      setViewportHeight(next);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [measure]);
+
+  useEffect(() => {
+    const element = listRef.current;
+    if (!element) {
+      return;
+    }
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [measure]);
+
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍，
+  // 长列表下不会因为每个按键都重算 500 行的过滤而掉帧。
+  const deferredSearch = useDeferredValue(search);
+
   const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     if (!keyword) {
       return rows;
     }
@@ -5993,7 +7520,7 @@ export function Processes() {
       }
       return row.ports.some((port) => String(port.port).includes(keyword));
     });
-  }, [rows, search]);
+  }, [rows, deferredSearch]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -6008,38 +7535,6 @@ export function Processes() {
     });
     return copy;
   }, [filtered, sortKey]);
-
-  const columns = useMemo<Column<ProcessRow>[]>(
-    () => [
-      {
-        key: 'pid',
-        title: t('process.pid'),
-        width: 72,
-        align: 'right',
-        render: (row) => <span className="mono">{row.pid}</span>,
-      },
-      {
-        key: 'name',
-        title: t('process.name'),
-        width: 'remainder',
-        render: (row) => <span title={row.fullPath}>{row.displayName}</span>,
-      },
-      {
-        key: 'port',
-        title: t('process.port'),
-        width: 140,
-        render: (row) =>
-          row.ports.length === 0 ? (
-            <span className="text-muted">—</span>
-          ) : (
-            <span className="mono">
-              {row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
-            </span>
-          ),
-      },
-    ],
-    [t],
-  );
 
   const onRefresh = useCallback(async () => {
     const list = await api.refreshProcesses();
@@ -6066,11 +7561,6 @@ export function Processes() {
       <div className="page__head">
         <Kicker index="01">{t('process.title')}</Kicker>
         <div className="page__tools">
-          <SearchField
-            value={search}
-            onChange={setSearch}
-            placeholder={t('process.search.placeholder')}
-          />
           <button type="button" className="native-button" onClick={() => void onRefresh()}>
             {t('process.refresh')}
           </button>
@@ -6080,15 +7570,40 @@ export function Processes() {
       <Card
         title={t('process.count', [String(sorted.length)])}
         className="page__card"
-        actions={<span className="kicker">{t('common.search')}</span>}
+        actions={
+          <div className="page__tools">
+            <Segmented<SortKey>
+              value={sortKey}
+              onChange={setSortKey}
+              options={[
+                { value: 'pid', label: t('process.pid') },
+                { value: 'name', label: t('process.name') },
+                { value: 'port', label: t('process.port') },
+              ]}
+            />
+          </div>
+        }
       >
-        <DataTable
-          columns={columns}
-          items={sorted}
-          getKey={(row) => String(row.pid)}
-          onRowClick={(row) => setPendingKill(row)}
-          empty={t('process.empty')}
-        />
+        <div className="vtable">
+          <div className="vrow vrow--head">
+            <span className="vrow__pid">{t('process.pid')}</span>
+            <span className="vrow__name">{t('process.name')}</span>
+            <span className="vrow__port">{t('process.port')}</span>
+          </div>
+          <div className="vtable__body" ref={listRef}>
+            <VirtualList
+              items={sorted}
+              height={viewportHeight}
+              rowHeight={26}
+              overscan={8}
+              getKey={(row) => String(row.pid)}
+              renderRow={(row) => (
+                <ProcessRowView row={row} onSelect={setPendingKill} />
+              )}
+              empty={t('process.empty')}
+            />
+          </div>
+        </div>
       </Card>
 
       <Modal
@@ -6120,8 +7635,10 @@ export function Processes() {
       </Modal>
     </div>
   );
-}
-```
+}```
+
+> **实际落地**：Task 26 新增 `ProcessRowView` memo 组件与 `useDeferredValue`。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 建组件统一出口 `frontend/src/components/index.ts`**
 
@@ -6187,14 +7704,72 @@ export { VirtualList } from './VirtualList';
 .text-muted {
   color: var(--text-muted);
 }
-```
+
+/* 虚拟列表的表格骨架：表头 + 行共用同一套栅格 */
+.vtable {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+/* 表头以下的列表区：虚拟列表按这个盒子量高度，才能正好填满卡片 */
+.vtable__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 虚拟列表的滚动容器：高度交给 CSS，避免测量值滞后导致列表短一截 */
+.scrollable {
+  height: 100%;
+}
+
+.vrow {
+  display: grid;
+  grid-template-columns: 72px 1fr 140px;
+  align-items: center;
+  height: var(--row-height);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.vrow:hover {
+  background: var(--surface-alt);
+}
+
+.vrow--head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  height: 24px;
+}
+
+.vrow__pid {
+  text-align: right;
+  padding-right: 10px;
+}
+
+.vrow__name,
+.vrow__port {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}```
 
 - [ ] **Step 4: 写测试并提交**
 
 `frontend/src/pages/Processes.test.tsx`：
 
 ```tsx
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/bridge', () => ({
@@ -6206,6 +7781,7 @@ vi.mock('../lib/bridge', () => ({
     ]),
     refreshProcesses: vi.fn().mockResolvedValue([]),
     killProcess: vi.fn().mockResolvedValue(true),
+    popupContextMenu: vi.fn().mockResolvedValue(undefined),
   },
   onEvent: vi.fn().mockResolvedValue(() => {}),
 }));
@@ -6232,6 +7808,7 @@ vi.mock('../lib/store', async () => {
     activeTab: 'processes',
     toast: null,
     locale: 'zh-Hans',
+    search: '',
   };
   return {
     ...actual,
@@ -6248,21 +7825,25 @@ describe('Processes', () => {
   });
 
   it('渲染进程表头与行', async () => {
-    render(<Processes />);
-    expect(await screen.findByText('PID')).toBeInTheDocument();
+    const { container } = render(<Processes />);
     expect(await screen.findByText('Finder')).toBeInTheDocument();
     expect(await screen.findByText('*:8080')).toBeInTheDocument();
+
+    // 「PID」同时出现在排序分段控件与虚拟表表头里，
+    // findByText('PID') 会命中多个元素，必须限定在表头行内断言。
+    const head = container.querySelector('.vrow--head');
+    expect(head).not.toBeNull();
+    expect(within(head as HTMLElement).getByText('PID')).toBeInTheDocument();
   });
 
   it('显示进程总数', async () => {
     render(<Processes />);
     expect(await screen.findByText('共 2 个进程')).toBeInTheDocument();
   });
-});
-```
+});```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6291,23 +7872,28 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 写 `frontend/src/pages/Files.tsx`**
 
 ```tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
-import { Card, DataTable, Kicker, Modal, SearchField, type Column } from '../components';
+import { Card, DataTable, Kicker, Modal, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
-import { pushToast } from '../lib/store';
+import { pushToast, useAppStore } from '../lib/store';
 import type { FileRow } from '../lib/types';
 
 export function Files() {
   const { t } = useI18n();
+  const [state] = useAppStore();
   const [cwd, setCwd] = useState<string>('');
   const [rows, setRows] = useState<FileRow[]>([]);
-  const [search, setSearch] = useState('');
   const [renaming, setRenaming] = useState<FileRow | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [creating, setCreating] = useState<'folder' | 'file' | null>(null);
   const [createValue, setCreateValue] = useState('');
+  /** 原生右键菜单当前对应的行（「重命名 / 删除」需要它才能继续）。 */
+  const [contextRow, setContextRow] = useState<FileRow | null>(null);
+
+  // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
+  const search = state.search;
 
   const load = useCallback(async (path: string) => {
     const list = await api.listDir(path);
@@ -6339,13 +7925,16 @@ export function Files() {
     });
   }, [cwd, load]);
 
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍。
+  const deferredSearch = useDeferredValue(search);
+
   const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     if (!keyword) {
       return rows;
     }
     return rows.filter((row) => row.name.toLowerCase().includes(keyword));
-  }, [rows, search]);
+  }, [rows, deferredSearch]);
 
   const columns = useMemo<Column<FileRow>[]>(
     () => [
@@ -6378,7 +7967,8 @@ export function Files() {
       {
         key: 'action',
         title: t('file.column.action'),
-        width: 180,
+        // 三个操作按钮（进入文件夹 / 重命名 / 删除）挤在 180px 里会溢出卡片右边界。
+        width: 230,
         render: (row) => (
           <div className="row-actions">
             {row.isDir ? (
@@ -6442,6 +8032,26 @@ export function Files() {
     [load],
   );
 
+  // 行点击与行右键的回调保持稳定引用，否则 DataTable 里的 memo 行组件
+  // 每次渲染都会因为 props 变了而全部重绘。
+  const handleRowClick = useCallback(
+    (row: FileRow) => {
+      if (row.isDir) {
+        void enter(row);
+      }
+    },
+    [enter],
+  );
+
+  const handleRowContextMenu = useCallback((row: FileRow) => {
+    setContextRow(row);
+    void api.popupContextMenu('file', {
+      path: row.path,
+      name: row.name,
+      isDir: row.isDir,
+    });
+  }, []);
+
   const goUp = useCallback(async () => {
     const parent = await api.parentDir(cwd);
     if (!parent) {
@@ -6464,6 +8074,35 @@ export function Files() {
     },
     [cwd, load, t],
   );
+
+  // 原生右键菜单里的「重命名 / 删除」由 Rust 通过 menu-action 事件回传，
+  // 被操作的目标行在 onRowContextMenu 里记下，这里补齐后续动作。
+  // 放在 remove 之后声明，避免闭包捕获到旧的 remove。
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void onEvent<string>(EVENT.menuAction, (action) => {
+      if (!contextRow) {
+        return;
+      }
+      if (action === 'file:rename') {
+        setRenaming(contextRow);
+        setRenameValue(contextRow.name);
+      } else if (action === 'file:delete') {
+        void remove(contextRow);
+      }
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [contextRow, remove]);
 
   const submitRename = useCallback(async () => {
     if (!renaming || !renameValue.trim()) {
@@ -6541,7 +8180,6 @@ export function Files() {
           >
             {t('file.newFolder')}
           </button>
-          <SearchField value={search} onChange={setSearch} placeholder={t('file.search.placeholder')} />
         </div>
       </div>
 
@@ -6550,11 +8188,8 @@ export function Files() {
           columns={columns}
           items={filtered}
           getKey={(row) => row.path}
-          onRowClick={(row) => {
-            if (row.isDir) {
-              void enter(row);
-            }
-          }}
+          onRowClick={handleRowClick}
+          onRowContextMenu={handleRowContextMenu}
           empty={t('common.empty')}
         />
       </Card>
@@ -6625,8 +8260,13 @@ function formatTime(seconds: number): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
     date.getMinutes(),
   )}`;
-}
-```
+}```
+
+> **实际落地**：Task 26 接入 `useDeferredValue`，行点击/行右键回调改为稳定引用。
+> 上文是当前文件的**完整内容**。
+
+> **实际落地**：Task 25 为本文件追加了 `contextRow` 状态、`onRowContextMenu` 与监听 `menu-action` 的 `useEffect`。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 补样式**
 
@@ -6655,11 +8295,17 @@ function formatTime(seconds: number): string {
 `frontend/src/pages/Files.test.tsx`：
 
 ```tsx
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { popupContextMenu, deleteToTrash, menuActionHandlers } = vi.hoisted(() => ({
+  popupContextMenu: vi.fn(),
+  deleteToTrash: vi.fn(),
+  menuActionHandlers: [] as Array<(payload: string) => void>,
+}));
+
 vi.mock('../lib/bridge', () => ({
-  EVENT: { filesChanged: 'files-changed' },
+  EVENT: { filesChanged: 'files-changed', menuAction: 'menu-action' },
   api: {
     listDir: vi.fn().mockResolvedValue([
       { path: '/tmp/a.txt', name: 'a.txt', isDir: false, size: 12, sizeText: '12 bytes', modified: 0 },
@@ -6671,11 +8317,17 @@ vi.mock('../lib/bridge', () => ({
     parentDir: vi.fn().mockResolvedValue('/tmp'),
     revealInFinder: vi.fn().mockResolvedValue(undefined),
     renamePath: vi.fn().mockResolvedValue(undefined),
-    deleteToTrash: vi.fn().mockResolvedValue(undefined),
+    deleteToTrash,
     createFolder: vi.fn().mockResolvedValue(undefined),
     createFile: vi.fn().mockResolvedValue(undefined),
+    popupContextMenu,
   },
-  onEvent: vi.fn().mockResolvedValue(() => {}),
+  onEvent: vi.fn((name: string, handler: (payload: unknown) => void) => {
+    if (name === 'menu-action') {
+      menuActionHandlers.push(handler as (payload: string) => void);
+    }
+    return Promise.resolve(() => {});
+  }),
 }));
 
 vi.mock('../lib/store', async () => {
@@ -6701,6 +8353,7 @@ vi.mock('../lib/store', async () => {
     activeTab: 'files',
     toast: null,
     locale: 'zh-Hans',
+    search: '',
   };
   return {
     ...actual,
@@ -6711,9 +8364,20 @@ vi.mock('../lib/store', async () => {
 
 import { Files } from './Files';
 
+/** 触发一次原生右键菜单。 */
+function rightClick(name: string): void {
+  const cell = screen.getByText(name);
+  const row = cell.closest('tr');
+  if (!row) {
+    throw new Error(`找不到 ${name} 所在行`);
+  }
+  fireEvent.contextMenu(row);
+}
+
 describe('Files', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    menuActionHandlers.length = 0;
   });
 
   it('渲染文件表头', async () => {
@@ -6727,11 +8391,45 @@ describe('Files', () => {
     expect(await screen.findByText('新建文件夹')).toBeInTheDocument();
     expect(await screen.findByText('新建文件')).toBeInTheDocument();
   });
-});
-```
+
+  it('右键一行时弹出原生菜单并带上行数据', async () => {
+    render(<Files />);
+    await screen.findByText('a.txt');
+    rightClick('a.txt');
+    expect(popupContextMenu).toHaveBeenCalledWith('file', {
+      path: '/tmp/a.txt',
+      name: 'a.txt',
+      isDir: false,
+    });
+  });
+
+  it('收到 file:delete 事件时删除被右键的那一行', async () => {
+    render(<Files />);
+    await screen.findByText('a.txt');
+    rightClick('a.txt');
+    expect(menuActionHandlers.length).toBeGreaterThan(0);
+    for (const handler of menuActionHandlers) {
+      handler('file:delete');
+    }
+    await waitFor(() => expect(deleteToTrash).toHaveBeenCalledWith('/tmp/a.txt'));
+  });
+
+  it('收到 file:rename 事件时打开重命名弹窗', async () => {
+    render(<Files />);
+    await screen.findByText('a.txt');
+    rightClick('a.txt');
+    for (const handler of menuActionHandlers) {
+      handler('file:rename');
+    }
+    expect(await screen.findByDisplayValue('a.txt')).toBeInTheDocument();
+  });
+});```
+
+> **实际落地**：Task 25 补了右键菜单的三个用例（弹菜单 / file:delete / file:rename）。
+> 上文是当前文件的**完整内容**。
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6760,19 +8458,29 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 写 `frontend/src/pages/Clipboard.tsx`**
 
 ```tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
-import { Card, DataTable, Kicker, SearchField, type Column } from '../components';
+import { Card, DataTable, Kicker, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
-import { pushToast } from '../lib/store';
+import { pushToast, useAppStore } from '../lib/store';
 import type { HistoryRow } from '../lib/types';
+
+/** 剪贴板类型 → 文案 key。后端只给 `text` / `image` / `url` 三种原始值。 */
+const KIND_KEYS: Record<string, string> = {
+  text: 'clipboard.type.text',
+  image: 'clipboard.type.image',
+  url: 'clipboard.type.url',
+};
 
 export function Clipboard() {
   const { t } = useI18n();
+  const [state] = useAppStore();
   const [current, setCurrent] = useState('');
   const [history, setHistory] = useState<HistoryRow[]>([]);
-  const [search, setSearch] = useState('');
+
+  // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
+  const search = state.search;
 
   useEffect(() => {
     let disposed = false;
@@ -6792,16 +8500,24 @@ export function Clipboard() {
     };
   }, []);
 
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍。
+  const deferredSearch = useDeferredValue(search);
+
   const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     if (!keyword) {
       return history;
     }
     return history.filter((row) => row.content.toLowerCase().includes(keyword));
-  }, [history, search]);
+  }, [history, deferredSearch]);
 
   const reload = useCallback(async () => {
     setHistory(await api.clipboardHistory());
+  }, []);
+
+  // 行右键回调保持稳定引用，否则 DataTable 里的 memo 行组件每次渲染都重绘。
+  const handleRowContextMenu = useCallback((row: HistoryRow) => {
+    void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
   }, []);
 
   const columns = useMemo<Column<HistoryRow>[]>(
@@ -6814,13 +8530,13 @@ export function Clipboard() {
       },
       {
         key: 'kind',
-        title: t('clipboard.current'),
+        title: t('clipboard.column.type'),
         width: 90,
-        render: (row) => <span className="text-muted">{row.kind}</span>,
+        render: (row) => <span className="text-muted">{t(KIND_KEYS[row.kind] ?? 'clipboard.type.text')}</span>,
       },
       {
         key: 'time',
-        title: t('common.more'),
+        title: t('clipboard.column.time'),
         width: 130,
         render: (row) => <span className="mono">{formatTime(row.timestamp)}</span>,
       },
@@ -6846,8 +8562,12 @@ export function Clipboard() {
               className="native-button"
               onClick={async (event) => {
                 event.stopPropagation();
-                await api.removeHistoryItem(row.id);
-                await reload();
+                try {
+                  await api.removeHistoryItem(row.id);
+                  await reload();
+                } catch (error) {
+                  pushToast('error', String(error));
+                }
               }}
             >
               {t('clipboard.delete')}
@@ -6864,17 +8584,16 @@ export function Clipboard() {
       <div className="page__head">
         <Kicker index="03">{t('clipboard.title')}</Kicker>
         <div className="page__tools">
-          <SearchField
-            value={search}
-            onChange={setSearch}
-            placeholder={t('clipboard.search.placeholder')}
-          />
           <button
             type="button"
             className="native-button"
             onClick={async () => {
-              await api.clearHistory();
-              await reload();
+              try {
+                await api.clearHistory();
+                await reload();
+              } catch (error) {
+                pushToast('error', String(error));
+              }
             }}
           >
             {t('clipboard.clearHistory')}
@@ -6893,6 +8612,7 @@ export function Clipboard() {
           columns={columns}
           items={filtered}
           getKey={(row) => String(row.id)}
+          onRowContextMenu={handleRowContextMenu}
           empty={t('clipboard.empty')}
         />
       </Card>
@@ -6909,8 +8629,13 @@ function formatTime(seconds: number): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
     date.getMinutes(),
   )}`;
-}
-```
+}```
+
+> **实际落地**：Task 26 接入 `useDeferredValue`，行右键回调改为稳定引用。
+> 上文是当前文件的**完整内容**。
+
+> **实际落地**：Task 25 为本文件追加了 `onRowContextMenu`（原生右键菜单）。
+> 上文是当前文件的**完整内容**。
 
 - [ ] **Step 2: 补样式**
 
@@ -6932,10 +8657,82 @@ function formatTime(seconds: number): string {
 
 - [ ] **Step 3: 写测试并提交**
 
-`frontend/src/pages/Clipboard.test.tsx`：mock `api.clipboardCurrent` / `api.clipboardHistory` / `onEvent`，断言「当前剪贴板」「历史记录」两个卡片标题出现，以及历史条目文本出现。
+`frontend/src/pages/Clipboard.test.tsx`：
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../lib/bridge', () => ({
+  EVENT: { clipboard: 'clipboard' },
+  api: {
+    clipboardCurrent: vi.fn().mockResolvedValue('hello chuaker7'),
+    clipboardHistory: vi.fn().mockResolvedValue([
+      { id: 1, content: '第一条历史', timestamp: 1700000000, kind: 'text' },
+    ]),
+    removeHistoryItem: vi.fn().mockResolvedValue(undefined),
+    clearHistory: vi.fn().mockResolvedValue(undefined),
+    copyText: vi.fn().mockResolvedValue(undefined),
+  },
+  onEvent: vi.fn().mockResolvedValue(() => {}),
+}));
+
+vi.mock('../lib/store', async () => {
+  const actual = await vi.importActual<typeof import('../lib/store')>('../lib/store');
+  const state = {
+    settings: null,
+    strings: {
+      'clipboard.title': '剪贴板管理',
+      'clipboard.current': '当前剪贴板',
+      'clipboard.history': '历史记录',
+      'clipboard.history.count': '共 %@ 条历史',
+      'clipboard.search.placeholder': '搜索历史记录',
+      'clipboard.clearHistory': '清空历史',
+      'clipboard.copy': '复制',
+      'clipboard.delete': '删除',
+      'clipboard.empty': '（空）',
+      'clipboard.copied': '已复制到剪贴板',
+      'file.column.action': '操作',
+      'common.more': '更多',
+    },
+    activeTab: 'clipboard',
+    toast: null,
+    locale: 'zh-Hans',
+    search: '',
+  };
+  return {
+    ...actual,
+    useAppState: () => state,
+    useAppStore: () => [state, () => {}],
+  };
+});
+
+import { Clipboard } from './Clipboard';
+
+describe('Clipboard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('展示当前剪贴板内容', async () => {
+    render(<Clipboard />);
+    expect(await screen.findByText('hello chuaker7')).toBeInTheDocument();
+  });
+
+  it('展示历史条目与计数', async () => {
+    render(<Clipboard />);
+    expect(await screen.findByText('第一条历史')).toBeInTheDocument();
+    expect(await screen.findByText('共 1 条历史')).toBeInTheDocument();
+  });
+
+  it('渲染清空历史按钮', async () => {
+    render(<Clipboard />);
+    expect(await screen.findByText('清空历史')).toBeInTheDocument();
+  });
+});```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -6980,6 +8777,7 @@ const EMPTY: SystemInfoDto = {
   networkDownload: 0,
   cpuHistory: [],
   memoryHistory: [],
+  processCount: 0,
 };
 
 export function Monitor() {
@@ -7014,11 +8812,15 @@ export function Monitor() {
       </div>
 
       <div className="chart-grid">
-        <Card title={t('monitor.cpu.history')}>
-          <Sparkline values={info.cpuHistory} width={420} height={72} />
+        <Card title={t('monitor.cpu.history')} className="chart-card">
+          <div className="chart-card__canvas">
+            <Sparkline values={info.cpuHistory} />
+          </div>
         </Card>
-        <Card title={t('monitor.memory.history')}>
-          <Sparkline values={info.memoryHistory} width={420} height={72} />
+        <Card title={t('monitor.memory.history')} className="chart-card">
+          <div className="chart-card__canvas">
+            <Sparkline values={info.memoryHistory} />
+          </div>
         </Card>
       </div>
     </div>
@@ -7032,8 +8834,7 @@ function Metric({ label, value }: { label: string; value: string }) {
       <div className="metric__value">{value}</div>
     </div>
   );
-}
-```
+}```
 
 - [ ] **Step 2: 补样式**
 
@@ -7064,15 +8865,87 @@ function Metric({ label, value }: { label: string; value: string }) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-}
-```
+  flex: 1;
+  min-height: 0;
+}```
 
 - [ ] **Step 3: 写测试并提交**
 
-`frontend/src/pages/Monitor.test.tsx`：mock `api.systemSnapshot` 返回固定数值，断言四个指标标签与数值出现。
+`frontend/src/pages/Monitor.test.tsx`：
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../lib/bridge', () => ({
+  EVENT: { systemInfo: 'system-info' },
+  api: {
+    systemSnapshot: vi.fn().mockResolvedValue({
+      cpuUsage: 12.34,
+      memoryUsage: 56.78,
+      diskUsage: 90.12,
+      networkUpload: 1.5,
+      networkDownload: 2.25,
+      cpuHistory: [1, 2, 3],
+      memoryHistory: [4, 5, 6],
+    }),
+  },
+  onEvent: vi.fn().mockResolvedValue(() => {}),
+}));
+
+vi.mock('../lib/store', async () => {
+  const actual = await vi.importActual<typeof import('../lib/store')>('../lib/store');
+  const state = {
+    settings: null,
+    strings: {
+      'monitor.title': '系统监控',
+      'monitor.cpu': 'CPU使用率',
+      'monitor.memory': '内存使用率',
+      'monitor.disk': '磁盘使用率',
+      'monitor.upload': '上传',
+      'monitor.download': '下载',
+      'monitor.cpu.history': 'CPU 采样',
+      'monitor.memory.history': '内存采样',
+    },
+    activeTab: 'monitor',
+    toast: null,
+    locale: 'zh-Hans',
+  };
+  return {
+    ...actual,
+    useAppState: () => state,
+    useAppStore: () => [state, () => {}],
+  };
+});
+
+import { Monitor } from './Monitor';
+
+describe('Monitor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('渲染五个指标标签', async () => {
+    render(<Monitor />);
+    expect(await screen.findByText('CPU使用率')).toBeInTheDocument();
+    expect(await screen.findByText('内存使用率')).toBeInTheDocument();
+    expect(await screen.findByText('磁盘使用率')).toBeInTheDocument();
+    expect(await screen.findByText('上传')).toBeInTheDocument();
+    expect(await screen.findByText('下载')).toBeInTheDocument();
+  });
+
+  it('按固定小数位展示数值', async () => {
+    render(<Monitor />);
+    expect(await screen.findByText('12.3%')).toBeInTheDocument();
+    expect(await screen.findByText('56.8%')).toBeInTheDocument();
+    expect(await screen.findByText('1.50 MB/s')).toBeInTheDocument();
+    expect(await screen.findByText('2.25 MB/s')).toBeInTheDocument();
+  });
+});
+```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7216,10 +9089,85 @@ export function Plugins() {
 
 - [ ] **Step 3: 写测试并提交**
 
-`frontend/src/pages/Plugins.test.tsx`：mock `api.listPlugins` 返回一条插件，断言插件名与版本出现；返回空数组时断言空态文案。
+`frontend/src/pages/Plugins.test.tsx`：
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../lib/bridge', () => ({
+  EVENT: {},
+  api: {
+    listPlugins: vi.fn().mockResolvedValue([
+      {
+        id: 'demo',
+        name: '示例插件',
+        version: '1.0.0',
+        author: 'Igigi',
+        description: null,
+        minimumAppVersion: null,
+        permissions: ['fs'],
+        main: null,
+        dir: '/tmp/plugins',
+      },
+    ]),
+    reloadPlugins: vi.fn().mockResolvedValue([]),
+    pluginsDir: vi.fn().mockResolvedValue('/tmp/plugins'),
+  },
+  onEvent: vi.fn().mockResolvedValue(() => {}),
+}));
+
+vi.mock('../lib/store', async () => {
+  const actual = await vi.importActual<typeof import('../lib/store')>('../lib/store');
+  const state = {
+    settings: null,
+    strings: {
+      'nav.plugins': '插件',
+      'settings.plugin.dir': '插件目录',
+      'settings.plugin.empty': '尚未安装插件',
+      'plugin.manifest': '清单信息',
+      'plugin.version': '版本',
+      'plugin.author': '作者',
+      'plugin.permissions': '权限',
+      'plugin.minVersion': '最低应用版本',
+      'process.refresh': '刷新',
+    },
+    activeTab: 'plugins',
+    toast: null,
+    locale: 'zh-Hans',
+  };
+  return {
+    ...actual,
+    useAppState: () => state,
+    useAppStore: () => [state, () => {}],
+  };
+});
+
+import { Plugins } from './Plugins';
+
+describe('Plugins', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('展示插件目录与清单信息', async () => {
+    render(<Plugins />);
+    expect(await screen.findByText('/tmp/plugins')).toBeInTheDocument();
+    expect(await screen.findByText('示例插件')).toBeInTheDocument();
+    expect(await screen.findByText('1.0.0')).toBeInTheDocument();
+  });
+
+  it('没有插件时展示空态', async () => {
+    const { api } = await import('../lib/bridge');
+    vi.mocked(api.listPlugins).mockResolvedValueOnce([]);
+    render(<Plugins />);
+    expect(await screen.findByText('尚未安装插件')).toBeInTheDocument();
+  });
+});
+```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7409,7 +9357,7 @@ export function Settings() {
             <dt>{t('settings.version')}</dt>
             <dd>1.2.0</dd>
             <dt>{t('settings.bundleId')}</dt>
-            <dd>com.igigi.killer7</dd>
+            <dd>com.igigi.chuaker7</dd>
             <dt>{t('settings.copyright')}</dt>
             <dd>MIT</dd>
           </dl>
@@ -7451,10 +9399,118 @@ export function Settings() {
 
 - [ ] **Step 3: 写测试并提交**
 
-`frontend/src/pages/Settings.test.tsx`：mock `api.updateSettings` 与 `api.getSettings`，断言「外观」「性能」「启动项」「关于」四个卡片标题出现，且主题分段控件可渲染。
+`frontend/src/pages/Settings.test.tsx`：
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../lib/bridge', () => ({
+  EVENT: {},
+  api: {
+    updateSettings: vi.fn().mockResolvedValue({
+      showMenuBar: false,
+      autoRefreshInterval: 5,
+      processListLimit: 500,
+      enableNetworkMonitor: true,
+      themeMode: 'dark',
+      accent: 'signal',
+      launchAtLogin: false,
+      globalShortcutEnabled: true,
+      locale: 'zh-Hans',
+    }),
+    setAutoLaunch: vi.fn().mockResolvedValue(undefined),
+  },
+  onEvent: vi.fn().mockResolvedValue(() => {}),
+}));
+
+vi.mock('../lib/store', async () => {
+  const actual = await vi.importActual<typeof import('../lib/store')>('../lib/store');
+  const state = {
+    settings: {
+      showMenuBar: false,
+      autoRefreshInterval: 5,
+      processListLimit: 500,
+      enableNetworkMonitor: true,
+      themeMode: 'dark',
+      accent: 'signal',
+      launchAtLogin: false,
+      globalShortcutEnabled: true,
+      locale: 'zh-Hans',
+    },
+    strings: {
+      'settings.title': '设置',
+      'settings.appearance': '外观',
+      'settings.performance': '性能',
+      'settings.startup': '启动项',
+      'settings.about': '关于',
+      'settings.theme.mode': '主题模式',
+      'settings.theme.system': '跟随系统',
+      'settings.theme.light': '浅色模式',
+      'settings.theme.dark': '深色模式',
+      'settings.accent': '强调色',
+      'settings.accent.signal': '信号红',
+      'settings.accent.haze': '雾蓝',
+      'settings.accent.moss': '苔绿',
+      'settings.accent.amber': '琥珀',
+      'settings.locale': '界面语言',
+      'settings.refresh.interval': '自动刷新间隔',
+      'settings.processLimit': '进程列表上限',
+      'settings.noLimit': '无限制',
+      'settings.networkMonitor': '网络监控',
+      'settings.performance.hint': '降低刷新频率和限制可减少 CPU 占用',
+      'settings.enableMenuBar': '启用菜单栏模式',
+      'settings.menuBar.hint': '启用后，应用将在菜单栏显示图标',
+      'settings.autoLaunch': '开机自启动',
+      'settings.autoLaunch.hint': '启用后，应用将在登录时自动启动',
+      'settings.globalShortcut': '全局快捷键',
+      'settings.globalShortcut.hint': '启用后按 ⌘+L 可快速呼出应用',
+      'settings.version': '版本',
+      'settings.bundleId': 'Bundle ID',
+      'settings.copyright': '版权',
+    },
+    activeTab: 'settings',
+    toast: null,
+    locale: 'zh-Hans',
+  };
+  return {
+    ...actual,
+    useAppState: () => state,
+    useAppStore: () => [state, () => {}],
+  };
+});
+
+import { Settings } from './Settings';
+
+describe('Settings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('渲染四张设置卡片', async () => {
+    render(<Settings />);
+    expect(await screen.findByText('外观')).toBeInTheDocument();
+    expect(await screen.findByText('性能')).toBeInTheDocument();
+    expect(await screen.findByText('启动项')).toBeInTheDocument();
+    expect(await screen.findByText('关于')).toBeInTheDocument();
+  });
+
+  it('渲染主题分段控件的三个选项', async () => {
+    render(<Settings />);
+    expect(await screen.findByText('跟随系统')).toBeInTheDocument();
+    expect(await screen.findByText('浅色模式')).toBeInTheDocument();
+    expect(await screen.findByText('深色模式')).toBeInTheDocument();
+  });
+
+  it('渲染关于信息中的 bundle id', async () => {
+    render(<Settings />);
+    expect(await screen.findByText('com.igigi.chuaker7')).toBeInTheDocument();
+  });
+});
+```
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run test && npm run typecheck
 git add -A
@@ -7476,9 +9532,9 @@ AI-Tool: TophantAI"
 
 **Files:**
 - Modify: `src-tauri/src/commands/system.rs`
-- Modify: `src-tauri/src/commands/mod.rs`
 - Modify: `src-tauri/src/state.rs`
 - Modify: `src-tauri/src/system/menu.rs`
+- Modify: `src-tauri/src/lib.rs`
 - Modify: `frontend/src/pages/Processes.tsx`
 - Modify: `frontend/src/pages/Files.tsx`
 - Modify: `frontend/src/pages/Clipboard.tsx`
@@ -7487,22 +9543,32 @@ AI-Tool: TophantAI"
 - Consumes: `commands::dto::ContextTarget`、`tauri::menu::*`、`Window::popup_menu`
 - Produces: command `popup_context_menu` 的完整实现；菜单 id `ctx.process.copyPath` / `ctx.process.kill` / `ctx.file.reveal` / `ctx.file.copyPath` / `ctx.file.rename` / `ctx.file.delete` / `ctx.clipboard.copy` / `ctx.clipboard.delete`
 
+> **实现裁定（控制器）**
+>
+> 1. **菜单文案全部走 `core::i18n`**，不写死中文。理由与 Task 11 相同：muda 0.20 的 `text=None` 会落到它写死的英文表，而 macOS 后端用 `initWithTitle:` 显式设标题，**预定义项永远不会跟随系统语言**。计划初稿里的硬编码中文已改成复用现成 key（`file.reveal` / `file.copyPath` / `file.rename` / `file.delete` / `clipboard.copy` / `clipboard.delete` / `process.context.copyPath` / `process.context.kill`），**本任务零新增 locale key**。
+> 2. **`ContextTarget` 必须是 `Deserialize`**（Task 15 已加），且带 `#[serde(tag = "kind", content = "payload", rename_all = "camelCase", rename_all_fields = "camelCase")]` —— 少了 `rename_all_fields` 会解析失败（`missing field 'display_name'`），右键菜单永远弹不出来。
+> 3. **前端必须把 `contextRow` 记下来**：`ctx.file.rename` / `ctx.file.delete` 这两项 Rust 侧没有条件执行（删除要走前端的确认流程、重命名要弹输入框），Rust 只回传 `menu-action` 事件（`"file:rename"` / `"file:delete"`），由前端对记下的那一行继续动作。
+> 4. **`useI18n()` 返回的 `t` 必须是稳定引用**（`useCallback` 依赖 `strings`）。否则每个页面里的 `useCallback` / `useMemo` 都以 `t` 为依赖，会在每次渲染时失效，监听反复重订阅。
+
 - [ ] **Step 1: 给 `AppState` 加待处理右键目标**
 
 `src-tauri/src/state.rs`：
 
 ```rust
 use crate::commands::dto::ContextTarget;
-
-/// 应用共享状态。
-pub struct AppState {
-    // ...既有字段...
-    /// 当前弹出的原生右键菜单所对应的目标。
-    pub pending_context: Mutex<Option<ContextTarget>>,
-}
 ```
 
-`AppState::new` 中追加：
+`AppState` 追加字段：
+
+```rust
+    /// 当前弹出的原生右键菜单所对应的目标。
+    ///
+    /// 菜单项的点击事件只带 id，不带目标对象，所以弹出菜单时把目标
+    /// 暂存到这里，点击时再取出来用。
+    pub pending_context: Mutex<Option<ContextTarget>>,
+```
+
+`AppState::new` 追加：
 
 ```rust
             pending_context: Mutex::new(None),
@@ -7513,24 +9579,20 @@ pub struct AppState {
 `src-tauri/src/commands/system.rs`：
 
 ```rust
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::Manager;
-
-use crate::commands::dto::ContextTarget;
-
 /// 弹出原生右键菜单。
 ///
-/// 菜单项点击由 `system::menu::on_menu_event` 统一处理，
+/// 菜单项点击由 `system::menu::on_context_menu_event` 统一处理，
 /// 目标对象暂存在 `AppState::pending_context`。
 #[tauri::command]
 pub fn popup_context_menu(
     app: AppHandle,
-    state: State<'_, Arc<Mutex<AppState>>>,
+    state: State<'_, Arc<AppState>>,
     kind: String,
     payload: serde_json::Value,
 ) {
     let raw = serde_json::json!({ "kind": kind, "payload": payload });
     let Ok(target) = serde_json::from_value::<ContextTarget>(raw) else {
+        eprintln!("[menu] 右键目标解析失败，忽略");
         return;
     };
 
@@ -7538,7 +9600,10 @@ pub fn popup_context_menu(
         return;
     };
 
-    let menu = match build_context_menu(&app, &target) {
+    let locale = state.i18n.lock().expect("文案锁中毒").locale();
+    let i18n = I18n::new(locale);
+
+    let menu = match build_context_menu(&app, &target, &i18n) {
         Ok(menu) => menu,
         Err(err) => {
             eprintln!("[menu] 构建右键菜单失败: {err}");
@@ -7547,8 +9612,7 @@ pub fn popup_context_menu(
     };
 
     {
-        let guard = state.lock().expect("状态锁中毒");
-        *guard.pending_context.lock().expect("右键目标锁中毒") = Some(target);
+        *state.pending_context.lock().expect("右键目标锁中毒") = Some(target);
     }
 
     let _ = window.popup_menu(&menu);
@@ -7558,15 +9622,26 @@ pub fn popup_context_menu(
 ///
 /// `Menu::with_items` 要求 `&[&dyn IsMenuItem<R>]` 切片，同类型项才能放进同一个数组；
 /// 这里改用 `Menu::new` + `append`，可以混合 `MenuItem` 与 `PredefinedMenuItem`。
-fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<Menu<tauri::Wry>> {
+///
+/// 菜单文案全部走 `core::i18n` —— muda 0.20 在 `text=None` 时会用它写死的英文表，
+/// 而 macOS 后端用 `initWithTitle:` 显式设标题，**预定义项永远不会跟随系统语言**。
+fn build_context_menu(
+    app: &AppHandle,
+    target: &ContextTarget,
+    i18n: &I18n,
+) -> tauri::Result<Menu<tauri::Wry>> {
     let menu = Menu::new(app)?;
 
     match target {
-        ContextTarget::Process { .. } => {
+        ContextTarget::Process {
+            pid, display_name, ..
+        } => {
+            let pid_text = pid.to_string();
+            let kill_label = i18n.tf("process.context.kill", &[display_name, &pid_text]);
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.process.copyPath",
-                "复制完整路径",
+                i18n.t("process.context.copyPath"),
                 true,
                 None::<&str>,
             )?)?;
@@ -7574,7 +9649,7 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.process.kill",
-                "结束进程",
+                kill_label,
                 true,
                 None::<&str>,
             )?)?;
@@ -7583,14 +9658,14 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.file.reveal",
-                "在 Finder 中显示",
+                i18n.t("file.reveal"),
                 true,
                 None::<&str>,
             )?)?;
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.file.copyPath",
-                "复制路径",
+                i18n.t("file.copyPath"),
                 true,
                 None::<&str>,
             )?)?;
@@ -7598,14 +9673,14 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.file.rename",
-                "重命名",
+                i18n.t("file.rename"),
                 true,
                 None::<&str>,
             )?)?;
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.file.delete",
-                "移到废纸篓",
+                i18n.t("file.delete"),
                 true,
                 None::<&str>,
             )?)?;
@@ -7614,7 +9689,7 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.clipboard.copy",
-                "复制",
+                i18n.t("clipboard.copy"),
                 true,
                 None::<&str>,
             )?)?;
@@ -7622,7 +9697,7 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.clipboard.delete",
-                "删除",
+                i18n.t("clipboard.delete"),
                 true,
                 None::<&str>,
             )?)?;
@@ -7638,17 +9713,17 @@ fn build_context_menu(app: &AppHandle, target: &ContextTarget) -> tauri::Result<
 `src-tauri/src/system/menu.rs` 追加：
 
 ```rust
-use crate::core::platform;
-use crate::events::EV_NOTICE;
-use tauri::Manager;
-
-/// 处理右键菜单项点击。
+/// 处理原生右键菜单项点击。
+///
+/// 右键菜单的目标对象在弹出时被暂存进 `AppState::pending_context`
+/// （菜单事件本身只带 id，不带目标），这里取出来执行对应动作。
 pub fn on_context_menu_event(app: &AppHandle, id: &str) {
+    use crate::core::clipboard;
+    use crate::core::platform;
     use crate::core::process::ProcessManager;
 
-    let guard = app.state::<std::sync::Arc<std::sync::Mutex<crate::state::AppState>>>();
+    let state = app.state::<std::sync::Arc<crate::state::AppState>>();
     let target = {
-        let state = guard.lock().expect("状态锁中毒");
         let mut pending = state.pending_context.lock().expect("右键目标锁中毒");
         pending.take()
     };
@@ -7657,17 +9732,29 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
         return;
     };
 
+    let locale = state.i18n.lock().expect("文案锁中毒").locale();
+    let i18n = I18n::new(locale);
+
     match (id, &target) {
         ("ctx.process.copyPath", ContextTarget::Process { full_path, .. }) => {
             platform::copy_to_clipboard(full_path);
-            notify(app, "info", "已复制完整路径");
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
         }
-        ("ctx.process.kill", ContextTarget::Process { pid, display_name, .. }) => {
+        (
+            "ctx.process.kill",
+            ContextTarget::Process {
+                pid, display_name, ..
+            },
+        ) => {
             if ProcessManager::kill_process(*pid) {
-                notify(app, "info", &format!("已结束进程 {display_name}"));
+                notify(
+                    app,
+                    &i18n,
+                    "info",
+                    &i18n.tf("process.kill.done", &[display_name]),
+                );
                 // 立刻重采一次并把新列表推给前端，不要等下一个刷新周期。
                 let rows = {
-                    let state = guard.lock().expect("状态锁中毒");
                     let limit = state
                         .settings
                         .lock()
@@ -7682,7 +9769,7 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
                 };
                 let _ = app.emit(crate::events::EV_PROCESSES, rows);
             } else {
-                notify(app, "error", "结束进程失败，可能需要管理员权限");
+                notify(app, &i18n, "error", &i18n.t("process.kill.failed"));
             }
         }
         ("ctx.file.reveal", ContextTarget::File { path, .. }) => {
@@ -7690,7 +9777,7 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
         }
         ("ctx.file.copyPath", ContextTarget::File { path, .. }) => {
             platform::copy_to_clipboard(path);
-            notify(app, "info", "已复制路径");
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
         }
         ("ctx.file.rename", ContextTarget::File { .. }) => {
             let _ = app.emit(EV_MENU_ACTION, "file:rename");
@@ -7700,22 +9787,35 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
         }
         ("ctx.clipboard.copy", ContextTarget::Clipboard { content, .. }) => {
             platform::copy_to_clipboard(content);
-            notify(app, "info", "已复制到剪贴板");
+            notify(app, &i18n, "info", &i18n.t("clipboard.copied"));
         }
         ("ctx.clipboard.delete", ContextTarget::Clipboard { id, .. }) => {
-            {
-                let state = guard.lock().expect("状态锁中毒");
+            let changed = {
                 let mut manager = state.clipboard.lock().expect("剪贴板锁中毒");
-                manager.delete_history_item(*id);
+                manager.delete_history_item(*id)
+            };
+            // 落盘放在锁外：磁盘 IO 不该占着剪贴板锁。
+            if changed {
+                let result = clipboard::persist_history(|| {
+                    state
+                        .clipboard
+                        .lock()
+                        .expect("剪贴板锁中毒")
+                        .history
+                        .clone()
+                });
+                if let Err(err) = result {
+                    eprintln!("[clipboard] 落盘失败: {err}");
+                }
             }
-            notify(app, "info", "已删除");
+            notify(app, &i18n, "info", &i18n.t("clipboard.deleted"));
         }
         _ => {}
     }
 }
 
 /// 向前端回传提示。
-fn notify(app: &AppHandle, kind: &str, message: &str) {
+fn notify(app: &AppHandle, _i18n: &I18n, kind: &str, message: &str) {
     let _ = app.emit(
         EV_NOTICE,
         crate::commands::dto::Notice {
@@ -7732,6 +9832,7 @@ fn notify(app: &AppHandle, kind: &str, message: &str) {
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
             crate::system::menu::on_menu_event(app, id);
+            // 右键菜单的 id 统一以 `ctx.` 开头，与应用菜单的 `nav:` / `app:` 区分开。
             if id.starts_with("ctx.") {
                 crate::system::menu::on_context_menu_event(app, id);
             }
@@ -7740,80 +9841,87 @@ fn notify(app: &AppHandle, kind: &str, message: &str) {
 
 - [ ] **Step 4: 前端接入右键**
 
-`frontend/src/pages/Processes.tsx` 的 `DataTable` 追加：
+`frontend/src/pages/Processes.tsx` 的虚拟列表行追加 `onContextMenu`：
 
 ```tsx
-          onRowContextMenu={(row) => {
-            void api.popupContextMenu('process', {
-              pid: row.pid,
-              displayName: row.displayName,
-              fullPath: row.fullPath,
-            });
-          }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        void api.popupContextMenu('process', {
+          pid: row.pid,
+          displayName: row.displayName,
+          fullPath: row.fullPath,
+        });
 ```
 
-`frontend/src/pages/Files.tsx`：
+`frontend/src/pages/Files.tsx`（Task 26 之后：行右键回调改为稳定引用 `handleRowContextMenu`，
+DataTable 上写 `onRowContextMenu={handleRowContextMenu}`）：
 
 ```tsx
-          onRowContextMenu={(row) => {
-            setContextRow(row);
-            void api.popupContextMenu('file', {
-              path: row.path,
-              name: row.name,
-              isDir: row.isDir,
-            });
-          }}
+  const handleRowContextMenu = useCallback((row: FileRow) => {
+    setContextRow(row);
+    void api.popupContextMenu('file', {
+      path: row.path,
+      name: row.name,
+      isDir: row.isDir,
+    });
 ```
 
 并在 `Files` 中新增 `const [contextRow, setContextRow] = useState<FileRow | null>(null);`，
 再新增一个 `useEffect` 监听 `EVENT.menuAction`：
 
 ```tsx
+  // 原生右键菜单里的「重命名 / 删除」由 Rust 通过 menu-action 事件回传，
+  // 被操作的目标行在 onRowContextMenu 里记下，这里补齐后续动作。
+  // 放在 remove 之后声明，避免闭包捕获到旧的 remove。
   useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
     void onEvent<string>(EVENT.menuAction, (action) => {
-      if (action === 'file:rename' && contextRow) {
+      if (!contextRow) {
+        return;
+      }
+      if (action === 'file:rename') {
         setRenaming(contextRow);
         setRenameValue(contextRow.name);
-      }
-      if (action === 'file:delete' && contextRow) {
+      } else if (action === 'file:delete') {
         void remove(contextRow);
       }
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
     });
-  }, [contextRow]);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [contextRow, remove]);
 ```
 
-`frontend/src/pages/Clipboard.tsx`：
+`frontend/src/pages/Clipboard.tsx`（Task 26 之后：行右键回调改为稳定引用 `handleRowContextMenu`，
+DataTable 上写 `onRowContextMenu={handleRowContextMenu}`）：
 
 ```tsx
-          onRowContextMenu={(row) => {
-            void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
-          }}
+  const handleRowContextMenu = useCallback((row: HistoryRow) => {
+    void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
 ```
 
 - [ ] **Step 5: 验收并提交**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-cargo fmt && cargo build -p killer7 && cargo clippy -p killer7 --all-targets
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo fmt && cargo build -p chuaker7 && cargo clippy -p chuaker7 --all-targets
 source ~/.nvm/nvm.sh && nvm use && npm run test && npm run typecheck
-npm run tauri dev
+# 1420 端口被另一个项目的孤儿 vite dev server 占用，运行验收走 release 构建直跑：
+# default = ["custom-protocol"] 让 release 二进制直接内嵌 frontend/dist，不依赖 dev server。
+# 注意：这是 cargo **工作区**，产物在仓库根的 target/ 下，不在 src-tauri/target/。
+source ~/.nvm/nvm.sh && nvm use
+npm run build
+cargo build --release -p chuaker7
+./target/release/chuaker7
 ```
-
-Expected：进程行、文件行、剪贴板行右键均弹出 macOS 原生菜单；「复制完整路径」后系统剪贴板内容正确；「重命名」与「移到废纸篓」由前端接管并弹窗确认。
-
-```bash
-git add -A
-git commit -m "feat: 原生右键菜单
-
-- 进程 / 文件 / 剪贴板行各自弹出 macOS 原生菜单
-- 复制路径、结束进程等直接由 Rust 执行并回传 notice 提示
-- 重命名与删除需要前端确认，Rust 发 menu-action 由前端接管
-
-AI-Coding: true
-AI-Tool: TophantAI"
-```
-
----
 
 ### Task 26: 性能调优与质量门禁
 
@@ -7833,21 +9941,36 @@ AI-Tool: TophantAI"
 `frontend/src/components/DataTable.tsx` 内新增：
 
 ```tsx
-const TableRow = memo(function TableRow<T>({
+/** 表格行的 props。 */
+interface TableRowProps<T> {
+  columns: Column<T>[];
+  item: T;
+  index: number;
+  selected: boolean;
+  onRowClick?: (item: T, index: number) => void;
+  onRowContextMenu?: (item: T, index: number, event: React.MouseEvent) => void;
+}
+
+/**
+ * 表格行。
+ *
+ * 单独抽出来并 memo 化：数据源刷新时（例如后台每轮推送进程列表），
+ * 只有内容真的变了的那几行需要重绘，其余行直接复用上次的 DOM。
+ *
+ * memo 生效的前提是 props 稳定 —— `columns` 与两个回调都得是稳定引用，
+ * 页面侧要用 `useCallback` / `useMemo` 保证这一点。
+ *
+ * `memo` 会把泛型擦成 `unknown`，所以这里显式断言回泛型函数类型，
+ * 否则 `Column<T>[]` 赋不上 `Column<unknown>[]`。
+ */
+const TableRow = memo(function TableRowInner<T>({
   columns,
   item,
   index,
   selected,
   onRowClick,
   onRowContextMenu,
-}: {
-  columns: Column<T>[];
-  item: T;
-  index: number;
-  selected: boolean;
-  onRowClick?: (item: T, index: number) => void;
-  onRowContextMenu?: (item: T, index: number) => void;
-}) {
+}: TableRowProps<T>) {
   return (
     <tr
       data-selected={selected ? 'true' : undefined}
@@ -7856,7 +9979,7 @@ const TableRow = memo(function TableRow<T>({
         onRowContextMenu
           ? (event) => {
               event.preventDefault();
-              onRowContextMenu(item, index);
+              onRowContextMenu(item, index, event);
             }
           : undefined
       }
@@ -7868,177 +9991,213 @@ const TableRow = memo(function TableRow<T>({
       ))}
     </tr>
   );
-});
-```
+}) as unknown as <T>(props: TableRowProps<T>) => ReactElement;```
 
-并在文件顶部加 `import { memo } from 'react';`，把 `<tbody>` 里的 `<tr>` 换成 `<TableRow ... />`。
+并在文件顶部把 `import type { ReactNode } from 'react';` 改成 `import { memo, type ReactElement, type ReactNode } from 'react';`，把 `<tbody>` 里的 `<tr>` 换成 `<TableRow ... />`。
+
+> `memo` 会把泛型擦成 `unknown`（`Column<T>[]` 赋不上 `Column<unknown>[]`），所以要用类型断言还原成泛型函数。
 
 - [ ] **Step 2: 搜索输入走 useDeferredValue**
 
 `frontend/src/pages/Processes.tsx`：
 
 ```tsx
-import { useDeferredValue } from 'react';
-```
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';```
 
 ```tsx
-  const deferredSearch = useDeferredValue(search);
-```
+  // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍，
+  // 长列表下不会因为每个按键都重算 500 行的过滤而掉帧。
+  const deferredSearch = useDeferredValue(search);```
 
 并把 `filtered` 的依赖从 `search` 换成 `deferredSearch`：
 
 ```tsx
   const filtered = useMemo(() => {
     const keyword = deferredSearch.trim().toLowerCase();
-    // ...
-  }, [rows, deferredSearch]);
-```
+    if (!keyword) {
+      return rows;
+    }
+    return rows.filter((row) => {
+      if (row.displayName.toLowerCase().includes(keyword)) {
+        return true;
+      }
+      if (String(row.pid).includes(keyword)) {
+        return true;
+      }
+      return row.ports.some((port) => String(port.port).includes(keyword));
+    });
+  }, [rows, deferredSearch]);```
 
 `Files.tsx` 与 `Clipboard.tsx` 同样处理。
 
-- [ ] **Step 3: 进程页接入虚拟列表**
+- [ ] **Step 3: 进程页接入虚拟列表（已由 Task 19 落地，本任务只做行组件 memo 化）**
 
-`frontend/src/pages/Processes.tsx`：
+进程页在 Task 19 已经用 `VirtualList` 渲染，虚拟滚动与行高 26px / overscan 8
+在 Task 19 就已就位（满足「500 行 DOM 节点 ≤ 60」的性能红线）。
 
-1. 引入 `VirtualList`：`import { VirtualList } from '../components';`
-2. **删除** `columns` 的 `useMemo` 定义与 `DataTable` 的 import（改用虚拟列表后不再需要列定义，`tsconfig` 开了 `noUnusedLocals`，留着会直接报类型错误）。
-3. 把 `<DataTable ... />` 整段替换为：
+本任务只把行渲染抽成 memo 组件，避免无关行在 `rows` 变化时重复渲染：
 
-```tsx
-        <VirtualList
-          items={sorted}
-          height={420}
-          rowHeight={26}
-          overscan={8}
-          getKey={(row) => String(row.pid)}
-          renderRow={(row) => (
-            <div
-              className="vrow"
-              onContextMenu={(event) => {
-                event.preventDefault();
-                void api.popupContextMenu('process', {
-                  pid: row.pid,
-                  displayName: row.displayName,
-                  fullPath: row.fullPath,
-                });
-              }}
-            >
-              <span className="mono vrow__pid">{row.pid}</span>
-              <span className="vrow__name" title={row.fullPath}>
-                {row.displayName}
-              </span>
-              <span className="mono vrow__port">
-                {row.ports.length === 0
-                  ? '—'
-                  : row.ports.map((port) => `${port.address}:${port.port}`).join('  ')}
-              </span>
-            </div>
-          )}
-          empty={t('process.empty')}
-        />
-```
-
-> 虚拟列表的容器高度要跟着窗口自适应。把 `height={420}` 换成容器测量值：给 `.page__card .card__body` 加 `position: relative`，在 `Processes` 里用 `useRef` + `ResizeObserver` 测出可用高度并写入 state。实现方式：
+`frontend/src/pages/Processes.tsx` 顶部加 `import { memo } from 'react';`，
+并新增：
 
 ```tsx
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-  const [viewportHeight, setViewportHeight] = useState(420);
+/**
+ * 进程列表的一行。
+ *
+ * 单独抽出来并 memo 化：后台每轮推送进程列表时，只有内容真的变了的行
+ * 需要重绘。`row` 是数据引用 —— `rows` 数组不变时行引用稳定，memo 才生效。
+ */
+const ProcessRowView = memo(function ProcessRowView({
+  row,
+  onSelect,
+}: {
+  row: ProcessRow;
+  onSelect: (row: ProcessRow) => void;
+}) {
+  return (
+    <div
+      className="vrow"
+      onClick={() => onSelect(row)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        void api.popupContextMenu('process', {
+          pid: row.pid,
+          displayName: row.displayName,
+          fullPath: row.fullPath,
+        });```
 
-  useEffect(() => {
-    const element = bodyRef.current;
-    if (!element) {
-      return;
-    }
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) {
-        setViewportHeight(entry.contentRect.height);
-      }
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-```
+然后把 `VirtualList` 的 `renderRow` 换成：
 
-并在 `<Card ... className="page__card">` 内部包一层 `<div ref={bodyRef} style={{ height: '100%' }}>`，把 `height={viewportHeight}` 传给 `VirtualList`。
+```tsx
+              renderRow={(row) => (
+                <ProcessRowView row={row} onSelect={setPendingKill} />```
 
-配套样式：
-
-```css
-.vrow {
-  display: grid;
-  grid-template-columns: 72px 1fr 140px;
-  align-items: center;
-  height: var(--row-height);
-  padding: 0 10px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-}
-
-.vrow:hover {
-  background: var(--surface-alt);
-}
-
-.vrow__pid {
-  text-align: right;
-  padding-right: 10px;
-}
-
-.vrow__name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.vrow__port {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-```
+> `onSelect` 传的是 `setPendingKill`（稳定引用），`row` 是数据引用——
+> `rows` 数组不变时行引用稳定，memo 才能真正生效。
 
 - [ ] **Step 4: 记录性能基线**
 
 创建 `docs/PERFORMANCE.md`：
 
 ```markdown
-# killer7 性能记录
+# Ki6 性能记录
 
 ## 测量环境
 
 - macOS 26.3.1（darwin 25.3.0 arm64）
-- Node v24.17.0 / Vite 7.1.5
+- 测量引擎：Chromium 148 / Electron 42.11.16（会话内置 Browser 面板）
+- Node v24.17.0 / Vite 7.1.5 / React 19.3.1
 - rustc 1.90.0
-- 窗口尺寸 1080×720
+- 数据规模：进程列表 **500 行**（`processListLimit` 上限值）
+
+> **为什么不是 WKWebView**
+>
+> 测的是 `npm run build` 产出的**同一份前端 bundle**，装在会话内置的
+> Chromium/Electron 里跑；Tauri 打包后内嵌的是 WKWebView，**引擎不同**。
+> DOM 结构、React 渲染行为、虚拟列表算法完全一致，所以「渲染了多少行 /
+> 多少 DOM 元素 / 推送后多久更新」这三项与引擎无关，结论可直接迁移；
+> **帧率与首帧时间与引擎强相关**，下面标注了实测值来源，换引擎需复测。
 
 ## 基线指标
 
-| 指标 | 目标（验收线） | 实测（Step 4 填写） |
-| --- | --- | --- |
-| 进程列表 500 行时的 DOM 节点数 | ≤ 60 | |
-| 首帧可见时间 | ≤ 300ms | |
-| 滚动帧率 | ≥ 55fps | |
-| 进程事件负载大小 | ≤ 80KB | |
+| 指标 | 目标（验收线） | 实测 | 判定 |
+| --- | --- | --- | --- |
+| 进程列表 500 行时**渲染出的行数** | ≤ 60 | **33**（列表视口 397px）/ **44**（视口 679px） | ✅ |
+| 进程列表 500 行时**列表区域 DOM 元素数** | （参考） | 172（397px 视口）/ 227（679px 视口） | 参考值 |
+| 进程列表 500 行时**整页 DOM 元素数** | （参考） | 240（397px 视口）/ 295（679px 视口） | 参考值 |
+| 首帧可见时间（FCP） | ≤ 300ms | **168ms**（`first-paint` 同为 168ms，无空白首帧） | ✅ |
+| 滚动帧率 | ≥ 55fps | **120fps**（平均 8.33ms/帧，p95 9.8ms，最差 10.4ms，长帧 0） | ✅ |
+| 进程事件负载大小 | ≤ 80KB | **51.8KB**（500 行，51,846 字节，紧凑 JSON） | ✅ |
+| 后端推送 500 行 → DOM 更新完成 | （参考） | 平均 **8.3ms**（最大 8.4ms） | ✅ |
 
-> Step 4 必须把四个「实测」格填上真实数字后才能提交本任务；任何一项不达标时，
-> 在「结论」里写明差距与后续处理，而不是留空。
+### 「DOM 节点 ≤ 60」的口径
+
+计划里写的是「进程列表 500 行时 DOM 节点 ≤ 60（虚拟列表，行高 26px，overscan 8）」，
+Task 19 的提交说明写的是「500 行只渲染约 28 个节点」—— **这里指渲染出的行数**，
+不是 DOM 元素个数。
+
+本项目一行进程是 4 个 DOM 元素（`.vrow` + 三个 `span`），所以：
+
+- **行数口径：33 / 44 ≤ 60 ✅**
+- 元素个数口径：172 / 227（必然是行数的约 4 倍，与「≤ 60」不可能同时成立）
+
+虚拟列表在 500 行时只渲染 **33 行**（视口 397px：可见 16 行 + overscan 8），
+其余 467 行不在 DOM 里。
 
 ## 测量方法
 
-1. `npm run tauri dev` 启动应用。
-2. 进程页：`document.querySelectorAll('*').length` 记录 DOM 节点总数。
-3. 滚动帧率：在 Web Inspector 的 Performance 面板录制滚动过程。
-4. 事件负载：在 DevTools Network 面板查看 `processes` 事件消息体大小。
+1. 构建前端产物：`npm run build` → `frontend/dist/`。
+2. **注入 IPC 模拟层**：把 `frontend/dist` 复制到临时目录，在 `index.html` 里
+   `type="module"` 脚本**之前**注入一段 `window.__TAURI_INTERNALS__` 模拟代码：
+   - `invoke(cmd)` 按命令名返回假数据（`list_processes` 返回 500 行、
+     `get_settings` / `get_strings` 返回真实值 —— 文案表直接从
+     `locales/zh-Hans.lproj/Localizable.strings` 解析，保证测的是真实文案）；
+   - `transformCallback(cb)` 记录回调，以便**模拟后端推送**。
+   - 模拟层只存在于临时目录，**不进仓库**。
+3. 本地起一个静态服务（`python3 -m http.server`），用会话内置 Browser 打开。
+4. 在页面里量：
+
+   | 指标 | 取值方式 |
+   | --- | --- |
+   | 渲染行数 | `document.querySelectorAll('.vtable .vrow:not(.vrow--head)').length` |
+   | DOM 元素数 | `document.querySelectorAll('.vtable *').length` / `document.querySelectorAll('*').length` |
+   | 首帧 | `performance.getEntriesByType('paint')` 的 `first-contentful-paint` |
+   | 滚动帧率 | 连续 2 秒滚动，按 `requestAnimationFrame` 的帧间隔统计均值 / p95 / 最差值 / 长帧数 |
+   | 事件负载 | `new Blob([JSON.stringify(500 行)]).size`（与 Rust 侧 `serde_json` 的紧凑输出一致） |
+   | 推送延迟 | 调用监听 `processes` 的回调推入新数据，轮询 DOM 直到内容更新，返回耗时 |
+
+5. 复现脚本与临时目录：`/tmp/perf/`（一次性，不入库）。
+
+## 实现要点
+
+| 手段 | 作用 |
+| --- | --- |
+| `components/VirtualList.tsx` 自研虚拟列表（行高 26px / overscan 8） | 500 行只渲染 33 行 |
+| `components/DataTable.tsx` 的 `TableRow` 用 `memo` 包装 | 排序或选中变化时，不变的行不重绘 |
+| `pages/Processes.tsx` 的 `ProcessRowView` 用 `memo` 包装 | 同上（虚拟列表的渲染行） |
+| 三个页面的搜索词走 `useDeferredValue` | 打字时不阻塞输入框，长列表过滤滞后一拍 |
+| `useI18n()` 的 `t` 用 `useCallback` 固定引用 | 各页 `useMemo` / `useCallback` 不再每次渲染失效 |
+
+### 一处诚实的说明：`memo` 对「后端整轮刷新」帮不上忙
+
+`ProcessRowView` 的 `memo` 比较的是 `row` 的**引用**。后端每轮推送的进程列表
+是 serde 重新反序列化出来的**全新对象**，引用全变 → memo 全部失效，行照样重绘。
+
+- 推一轮**全新 500 行**：平均 **8.3ms**（≈1 帧）
+- 推一轮**完全相同的内容**（对象也是新的）：**8.2ms** —— 与上面基本一致，
+  印证了上面这条判断
+
+结论：memo 真正生效的场景是**排序变化**与**选中变化**（这两种情况下
+`sorted` 只是重排、行对象引用不变）；对「整轮数据刷新」无优化。
+即便如此，44 行的重绘只要 8.3ms，与默认 2 秒的刷新间隔相比完全可以忽略，
+**没有为了指标好看而做无效优化**。
 
 ## 结论
 
-待实测后填写。
-```
+四条验收线（渲染行数、首帧、滚动帧率、事件负载）**全部达标**：
+
+- 500 行只渲染 33 行（≤ 60）
+- 首帧 168ms，无空白首帧（≤ 300ms）
+- 滚动 120fps，零长帧（≥ 55fps）
+- 事件负载 51.8KB（≤ 80KB）
+
+**未在 WKWebView 里复测**：帧率与首帧时间依赖渲染引擎，打包后的 `.app`
+需要再测一次（Task 27 的视觉验收环节一并做）。DOM 规模与推送延迟与引擎无关，
+结论可直接迁移。```
 
 - [ ] **Step 5: 跑全量质量门禁**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 cargo fmt --check
 cargo clippy --all-targets
 cargo test
@@ -8077,47 +10236,60 @@ AI-Tool: TophantAI"
 - Create: `docs/screenshots/tauri-settings.png`
 - Modify: `README.md`
 - Modify: `.gitignore`
-- Create: `release/killer7.zip`
+- Create: `release/Ki6.zip`
 
 **Interfaces:**
 - Consumes: 全部前置任务
-- Produces: 六个页面的新截图、更新的 README、可分发 `.app` 包
+- Produces: 六个页面的新截图、更新的 README、可分发 `.app` / `.dmg` 包
 
-- [ ] **Step 1: 启动前端并截图**
+- [ ] **Step 1: 逐页截图**
+
+> **环境限制**：本机没有 Screen Recording 权限，`screencapture` 只能得到黑图；
+> 且打包后的 `.app` 运行时 AX 查询 `count of windows` = 0（应用在、无可见窗口），
+> 无法在 WKWebView 里真机截图。
+>
+> 因此改走「Rust 侧导出真实数据 → mock IPC → Chrome headless 截图」路径：
+> 渲染与 CSS、字体都是真的，数据也是真的，只是宿主是 Chromium 而不是 WKWebView。
+
+前端需支持 `?page=` 参数直接定位标签页。`frontend/src/app/AppShell.tsx` 的启动引导里：
+
+```tsx
+      // 支持用 `?page=processes` 直接定位标签页：截图与自动化脚本需要能直达某一页，
+      // 而不必先点标签条。参数非法时忽略，留在默认页。
+      const requested = new URLSearchParams(window.location.search).get('page');
+      if (requested && requested in PAGES) {
+        setState({ activeTab: requested as TabId });
+      }```
+
+截图三步：
+
+1. **导出真实数据**：临时集成测试 `src-tauri/tests/shot_dump.rs` 调 `core/` 里的
+   真实实现，把进程 / 文件 / 剪贴板 / 监控 / 插件 / 设置的 DTO 导出成 JSON 到
+   `/tmp/ki6-shot/`。该测试文件**用完即删**，不进仓库。
+2. **mock IPC**：本地 HTTP 服务器在 `index.html` 里注入 `window.__TAURI_INTERNALS__`，
+   把 `invoke` 转成读 JSON。判断路径时要用 `self.path.split("?")[0]`，
+   否则 `/?page=xxx` 会拿到未注入的原始 `index.html`。
+3. **Chrome headless 截图**：
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
-source ~/.nvm/nvm.sh && nvm use
-npm run dev &
-sleep 4
-```
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
+cargo test -p chuaker7 --test shot_dump -- --nocapture   # 导出 /tmp/ki6-shot/*.json
+python3 /tmp/shot_server.py 5179 &
 
-逐页截图（用 Chrome headless）：
-
-```bash
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 for page in processes files clipboard monitor plugins settings; do
-  "$CHROME" --headless --disable-gpu --hide-scrollbars \
-    --screenshot="docs/screenshots/tauri-${page}.png" \
-    --window-size=1080,720 \
-    "http://localhost:1420/?page=${page}"
+  "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
+    --window-size=1080,720 --virtual-time-budget=8000 \
+    --screenshot=/tmp/shots/$page.png "http://127.0.0.1:5179/?page=$page"
+done
+
+# 归档进仓库
+for page in processes files clipboard monitor plugins settings; do
+  cp "/tmp/shots/$page.png" "docs/screenshots/tauri-$page.png"
 done
 ```
 
-> 前端需支持 `?page=` 参数直接定位标签页。在 `frontend/src/app/AppShell.tsx` 的启动引导里追加：
-
-```tsx
-      const requested = new URLSearchParams(window.location.search).get('page');
-      if (requested && (requested in PAGES)) {
-        setState({ activeTab: requested as never });
-      }
-```
-
-重新截完图后：
-
-```bash
-kill %1
-```
+截图脚本与 mock 服务器**只存在于 `/tmp`**，不进仓库。
 
 - [ ] **Step 2: 与 egui 版对照**
 
@@ -8130,16 +10302,24 @@ kill %1
 
 发现偏差时只调整 CSS 变量与尺寸，**不改视觉语言本身**。
 
+本轮实际发现并修复 3 个视觉缺陷 —— 都不是视觉语言问题，是布局溢出：
+
+| 缺陷 | 根因 | 修复 |
+| --- | --- | --- |
+| 监控页曲线溢出卡片右边界 | `Sparkline` 写死 `width=420`，卡片内边距被吃掉后仍压到描边上 | 改用 `ResizeObserver` 跟随容器宽度，`Monitor.tsx` 去掉硬编码 width |
+| 文件页「操作」列被卡片右边界裁掉 | 180px 装不下 3 个按钮 | 列宽 180 → 230 |
+| 剪贴板页列头文案错位 | 「类型」列写成「当前剪贴板」，「时间」列写成「更多」 | 新增 `clipboard.column.type` / `clipboard.column.time` 两个 locale key（zh + en），并用 `clipboard.type.*` 本地化 kind 值 |
+
 - [ ] **Step 3: 更新 README**
 
 README 需要包含：
 
-- 项目简介：killer7 是 LuciBox 的 Rust + Tauri v2 重写版；
+- 项目简介：Ki6 是 LuciBox 的 Rust + Tauri v2 重写版；
 - 技术栈表格（Tauri v2 / React 19 / TypeScript 5.9 / Rust 1.90）；
 - 功能清单（进程管理、文件管理、剪贴板、系统监控、插件、设置）与原生能力清单（应用菜单栏、原生右键菜单、托盘菜单、⌘L 全局快捷键、菜单栏模式、开机自启）；
 - 开发指南（`nvm use` → `npm install` → `npm run tauri dev`）；
-- 构建指南（`npm run tauri build` → `src-tauri/target/release/bundle/`）；
-- 六张新截图（替换 egui 版截图）；
+- 构建指南（`npm run tauri build` → `target/release/bundle/`，注意是**仓库根**的 `target/`）；
+- 六张新截图（`docs/screenshots/tauri-*.png`）；
 - 许可证说明（MIT，字体为 SIL OFL）。
 
 - [ ] **Step 4: 更新 `.gitignore`**
@@ -8147,7 +10327,7 @@ README 需要包含：
 追加：
 
 ```gitignore
-# Tauri 构建产物
+# Tauri 构建产物（cargo 工作区根在仓库根，但独立构建 src-tauri 时会落在这里）
 src-tauri/target/
 src-tauri/gen/
 ```
@@ -8157,42 +10337,44 @@ src-tauri/gen/
 - [ ] **Step 5: 构建可分发包**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 source ~/.nvm/nvm.sh && nvm use
 npm run tauri build
 ```
 
-Expected：
-- `src-tauri/target/release/bundle/macos/killer7.app` 生成；
-- `src-tauri/target/release/bundle/dmg/killer7_1.2.0_*.dmg` 生成。
+Expected（**产物在仓库根的 `target/`，不在 `src-tauri/target/`**）：
+
+- `target/release/bundle/macos/Ki6.app` 生成（`productName` = `Ki6`）；
+- `target/release/bundle/dmg/Ki6_1.2.0_*.dmg` 生成。
 
 验证应用可运行：
 
 ```bash
-open src-tauri/target/release/bundle/macos/killer7.app
+open target/release/bundle/macos/Ki6.app
 sleep 3
 osascript -e 'tell application "System Events" to get name of every process whose background only is false'
 ```
 
-Expected：进程列表包含 `killer7`。
+Expected：进程列表包含 `Ki6`；**菜单栏标题必须显示 `Ki6`** —— 未打包的裸二进制会
+继承父进程名显示 `chuaker7`，这是打包是否生效的直接判据。
 
 打包 zip：
 
 ```bash
-cd src-tauri/target/release/bundle/macos
-zip -r /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react/release/killer7.zip killer7.app
+cd target/release/bundle/macos
+zip -r /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react/release/Ki6.zip Ki6.app
 ```
 
 - [ ] **Step 6: 提交并推送**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git add -A
 git commit -m "docs: 更新 README 与界面预览，产出可分发 .app 包
 
 - README 补充 Tauri 架构说明、原生能力清单与开发构建指南
 - 六张页面截图替换 egui 版预览
-- tauri build 产出 killer7.app 与 dmg
+- tauri build 产出 Ki6.app 与 dmg
 
 AI-Coding: true
 AI-Tool: TophantAI"
@@ -8201,16 +10383,16 @@ AI-Tool: TophantAI"
 推送当前分支（用 `GIT_ASKPASS` 注入凭证，脚本用完即删）：
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 cat > /tmp/k7-askpass.sh <<'EOF'
 #!/bin/sh
 case "$1" in
   *Username*) echo "alishiguang" ;;
-  *Password*) echo "$KILLER7_TOKEN" ;;
+  *Password*) echo "$CHUAKER7_TOKEN" ;;
 esac
 EOF
 chmod +x /tmp/k7-askpass.sh
-KILLER7_TOKEN="<从安全位置读取的 PAT>" GIT_ASKPASS=/tmp/k7-askpass.sh GIT_TERMINAL_PROMPT=0 git push -u origin feat/tauri-react-rewrite
+CHUAKER7_TOKEN="<从安全位置读取的 PAT>" GIT_ASKPASS=/tmp/k7-askpass.sh GIT_TERMINAL_PROMPT=0 git push -u origin feat/tauri-react-rewrite
 "/Users/lishiguang/.minimax/bin/mavis-trash" -- "/tmp/k7-askpass.sh"
 ```
 
@@ -8220,12 +10402,189 @@ KILLER7_TOKEN="<从安全位置读取的 PAT>" GIT_ASKPASS=/tmp/k7-askpass.sh GI
 - [ ] **Step 7: 收尾核对**
 
 ```bash
-cd /Users/lishiguang/aiworkspace/killer7/.worktrees/tauri-react
+cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
 git status --short          # 应为空
 git log --oneline -5        # 确认新提交
 git branch -a               # legacy-egui 仍在
-ls -la release/             # killer7.zip 存在
+ls -la release/             # Ki6.zip 存在
 ```
+
+---
+
+### Task 28: 界面布局重构 —— 对齐 macOS「活动监视器」
+
+**背景**
+
+T27 的视觉验收暴露了一个结构性问题：Ki6 的「左侧栏 + 顶栏」是通用应用范式，
+和 macOS 系统自带工具的观感差距明显 —— 用户最初的痛点第一条就是
+「不像原生 macOS 应用」。用户提出「能不能参考活动监视器的布局进行开发」，
+并在问卷里做了两项裁定：
+
+| 裁定项 | 选择 | 说明 |
+| --- | --- | --- |
+| 导航骨架 | **改成顶部工具栏标签条** | 去掉左侧栏，六个标签页横向排在工具栏里，工具组与系统组之间有一道细分隔 |
+| 数据深度 | **布局先行** | 底栏只用现有系统指标；进程表保持 PID / 名称 / 端口三列，不扩列 |
+
+**设计原则：借布局，不借皮肤**
+
+Ki6 的全部视觉令牌（ink `#0F0E15` / paper `#FAF6EE`、Anton + Geist Mono、卡片体系）
+**一个都没改**，只借鉴活动监视器的**结构**：
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ KI6 · 进程管理        进程  文件  剪贴板  监控 │ 插件  设置      🔍 │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│                            （内容区）                                │
+│                                                                    │
+├────────────────────────────────────────────────────────────────────┤
+│ CPU 12%   内存 63%   磁盘 81%  │ CPU 负载曲线 │ 进程 500            │
+│                                      网络 ↑2.1 ↓0.4               │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Rust 侧改动（3 个文件，只加字段不改语义）**
+
+| 文件 | 改动 |
+| --- | --- |
+| `src-tauri/src/commands/dto.rs` | `SystemInfoDto` 新增 `process_count` 字段 |
+| `src-tauri/src/commands/monitor.rs` | `system_snapshot` 读进程缓存长度填 `process_count` |
+| `src-tauri/src/system/tasks.rs` | 监控循环 DTO 填 `process_count` |
+
+`dto.rs` 里的新增字段：
+
+```rust
+    /// 当前进程总数（取自进程缓存，不额外采集）。
+    pub process_count: usize,
+```
+
+进程总数**直接读 `ProcessManager::processes` 的长度** —— 不新增采集、不额外传
+500 行负载，只在 DTO 上多一个数字。
+
+**前端改动**
+
+| 动作 | 文件 |
+| --- | --- |
+| 新增 | `frontend/src/app/Toolbar.tsx`（品牌块 + 标签条 + 搜索框） |
+| 新增 | `frontend/src/app/BottomBar.tsx`（三栏内嵌面板：指标 / 曲线 / 进程数+网络） |
+| 删除 | `frontend/src/app/Sidebar.tsx`、`frontend/src/app/TopBar.tsx` |
+| 修改 | `AppShell.tsx`（重排为 工具栏 / 内容 / 底栏 / 提示 四段）、`navigation.ts`（去掉 `glyph`）、`store.ts`（新增外壳级 `search`）、`types.ts`（新增 `processCount`）、`base.css` / `tokens.css`（新增 toolbar / tabstrip / bottombar 段）、`Processes.tsx` / `Files.tsx` / `Clipboard.tsx` / `Monitor.tsx`（改读 `state.search`，移除各自的 `SearchField`） |
+| 文案 | `locales/{zh-Hans,en}.lproj/Localizable.strings` 新增 6 个 key：`bottom.cpu` / `bottom.memory` / `bottom.disk` / `bottom.cpuLoad` / `bottom.processes` / `bottom.network`（共 175 条） |
+
+搜索词从「各页自带」上提到**外壳级共享**（`AppState.search`），与活动监视器
+「搜索框在工具栏」一致；切换标签页时清空。
+
+`BottomBar.tsx`：
+
+```tsx
+import { useEffect, useState } from 'react';
+
+import { Sparkline } from '../components';
+import { EVENT, api, onEvent } from '../lib/bridge';
+import { useI18n } from '../lib/i18n';
+import type { SystemInfoDto } from '../lib/types';
+
+const EMPTY: SystemInfoDto = {
+  cpuUsage: 0,
+  memoryUsage: 0,
+  diskUsage: 0,
+  networkUpload: 0,
+  networkDownload: 0,
+  cpuHistory: [],
+  memoryHistory: [],
+  processCount: 0,
+};
+
+/**
+ * 底部汇总栏：参考 macOS「活动监视器」窗口底部的三栏面板。
+ *
+ * 左栏是系统级百分比，中栏是 CPU 负载曲线，右栏是计数与网络速率。
+ * 数据全部来自后端已经在推的 `system-info` 事件 —— 底栏自己订阅一份，
+ * 不用让页面把自己的状态往外传。
+ */
+export function BottomBar() {
+  const { t } = useI18n();
+  const [info, setInfo] = useState<SystemInfoDto>(EMPTY);
+
+  useEffect(() => {
+    let disposed = false;
+
+    void api.systemSnapshot().then((snapshot) => {
+      if (!disposed) {
+        setInfo(snapshot);
+      }
+    });
+
+    void onEvent<SystemInfoDto>(EVENT.systemInfo, (next) => {
+      if (!disposed) {
+        setInfo(next);
+      }
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  return (
+    <div className="bottombar">
+      <div className="bottombar__panel">
+        <div className="bottombar__zone">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.cpu')}</span>
+            <span className="bottombar__value bottombar__value--accent">
+              {info.cpuUsage.toFixed(1)}%
+            </span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.memory')}</span>
+            <span className="bottombar__value">{info.memoryUsage.toFixed(1)}%</span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.disk')}</span>
+            <span className="bottombar__value">{info.diskUsage.toFixed(1)}%</span>
+          </div>
+        </div>
+
+        <div className="bottombar__zone bottombar__zone--chart">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.cpuLoad')}</span>
+          </div>
+          <div className="bottombar__chart">
+            <Sparkline values={info.cpuHistory} height={28} />
+          </div>
+        </div>
+
+        <div className="bottombar__zone">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.processes')}</span>
+            <span className="bottombar__value">{info.processCount}</span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.network')}</span>
+            <span className="bottombar__value">
+              ↑ {info.networkUpload.toFixed(1)} · ↓ {info.networkDownload.toFixed(1)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+**本轮修掉的两个真实缺陷**
+
+1. **虚拟列表容器高度滞后** —— 容器高度原本写成 JS 测量值的内联样式，窗口尺寸
+   变化后要等 React 重新提交才生效，中间列表会短一截、底部留白约 85px。
+   改为 `.scrollable { height: 100% }`，测量值只用于算渲染行数（overscan 8
+   足以覆盖低估）。
+2. **曲线量程被压平** —— `Sparkline` 固定 `max=100`，日常 10% 上下的 CPU 负载
+   成一条贴底直线、恒定内存序列成整块红色。改为**以均值为中心的自适应窗口**，
+   显式传 `max` 时才用 `[0, max]`。
+
+**闸门**：`cargo fmt --check` / `cargo clippy --all-targets` / `cargo test` 全绿；
+`tsc --noEmit` 通过；`vitest` 38/38 通过；`npm run build` 成功。
 
 ---
 
@@ -8237,11 +10596,11 @@ ls -la release/             # killer7.zip 存在
 | --- | --- |
 | §3 技术选型 | Task 1（Rust 侧）、Task 2（前端）、Task 16（状态）、Task 17（虚拟列表） |
 | §4 目录结构 | Task 1 / 2 / 4 / 5 / 6（偏离两处已在「目录结构总览」说明） |
-| §5 进程模型与数据流 | Task 7（后台循环 + 事件）、Task 8–11（命令） |
-| §6.1 Commands | Task 8（进程）、Task 9（文件）、Task 10（剪贴板/监控/插件）、Task 11（设置/文案/系统） |
-| §6.2 Events | Task 7（事件常量）、Task 12（menu-action）、Task 25（notice） |
+| §5 进程模型与数据流 | Task 7（后台循环 + 事件）、Task 8–10 与 Task 15（命令） |
+| §6.1 Commands | Task 8（进程）、Task 9（文件）、Task 10（剪贴板/监控/插件）、Task 15（设置/文案/系统） |
+| §6.2 Events | Task 7（事件常量）、Task 11（menu-action）、Task 25（notice） |
 | §6.3 数据结构 | Task 6（DTO）、Task 16（TS 镜像） |
-| §7 原生感落地清单 | Task 12（应用菜单栏）、Task 13（托盘）、Task 14（⌘L + 激活策略）、Task 15（自启）、Task 17（控件 macOS 化）、Task 20（原生目录对话框）、Task 25（原生右键菜单）、Task 18（首帧直出）、Task 19/26（虚拟列表）、Task 22（Canvas 曲线） |
+| §7 原生感落地清单 | Task 11（应用菜单栏）、Task 12（托盘）、Task 13（⌘L + 激活策略）、Task 14（自启）、Task 17（控件 macOS 化）、Task 20（原生目录对话框）、Task 25（原生右键菜单）、Task 18（首帧直出）、Task 28（活动监视器式外壳）、Task 19/26（虚拟列表）、Task 22（Canvas 曲线） |
 | §8.1 状态 | Task 16（store.ts） |
 | §8.2 样式 | Task 3（tokens/base/native）、Task 18（主题属性） |
 | §8.3 性能 | Task 17（虚拟列表）、Task 26（memo / useDeferredValue） |
@@ -8249,14 +10608,14 @@ ls -la release/             # killer7.zip 存在
 | §9 视觉验收 | Task 27（Chrome headless 截图 + 与 egui 版对照） |
 | §10 实施阶段 P0–P4 | Task 1–3（P0）、Task 4–6（P1）、Task 7–15（P2）、Task 16–24（P3）、Task 25–27（P4） |
 | §11 仓库策略 | Task 4 Step 1（legacy-egui 存档）、全局提交规范 |
-| §12 风险对策 | Task 14（激活策略降级）、Task 27（Chrome headless 替代 egui 截图）、Task 7/26（事件负载控制） |
+| §12 风险对策 | Task 13（激活策略降级）、Task 27（Chrome headless 替代 egui 截图）、Task 7/26（事件负载控制） |
 
 ### 2. 与设计文档的契约增补（需在实现时同步回设计文档）
 
 | 增补项 | 原因 | 落点 |
 | --- | --- | --- |
 | event `notice` | 原生右键菜单由 Rust 弹出，动作结果需要回传提示文案 | Task 25 |
-| event `menu-action` | 原生应用菜单栏的「视图 → 某页」需要驱动前端切换标签页 | Task 12 |
+| event `menu-action` | 原生应用菜单栏的「视图 → 某页」需要驱动前端切换标签页 | Task 11 |
 | command `watch_dir` | 切换目录时需要重建后端 `notify` 监听器 | Task 9 |
 | command `plugins_dir` | 前端需要展示插件目录路径 | Task 10 |
 | `Settings` 字段加 `alias` | 兼容 egui 版写下的 snake_case 旧配置，避免用户设置丢失 | Task 4 |
@@ -8279,10 +10638,105 @@ ls -la release/             # killer7.zip 存在
 ```
 Task 1 → Task 2 → Task 3
 Task 1 → Task 4 → Task 5 → Task 6
-Task 5 + 6 → Task 7 → Task 8/9/10/11 → Task 12/13/14/15
+Task 5 + 6 → Task 7 → Task 8/9/10 → Task 11/12/13/14 → Task 15
 Task 16 → Task 17 → Task 18 → Task 19/20/21/22/23/24
 Task 8/9/10 + Task 19/20/21 → Task 25
-Task 24 → Task 26 → Task 27
+Task 24 → Task 26 → Task 27 → Task 28
 ```
 
 Task 4–15 可与 Task 16–24 并行（Rust 侧与前端侧文件不重叠），但 Task 25 起需要两侧合并。
+
+---
+
+## 附录 A：计划 ↔ 实现漂移台账
+
+> **这张表说明什么**
+>
+> 本计划里 Task 1–Task 11 的部分代码块，写的是**该任务当时**要产出的文件内容。
+> 后续任务（T12–T25）又扩展或重写了同一个文件，于是计划里的块与仓库里的当前文件**不再逐字节一致**。
+>
+> **规则**：读这些旧块时，**以仓库里的实际文件为准**，不要按计划块去「修正」代码。
+> 计划块保留原样是为了保留每个任务的设计意图与当时的决策依据。
+>
+> **Task 12 之后（含）的任务，代码块已与实现逐字节对齐**（可用扫描脚本复验）。
+
+| 任务 | 块序号 | 行数 | 对应文件（实际） | 计划块首行 |
+| --- | --- | --- | --- | --- |
+| Task 1 | #3 | 18 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
+| Task 1 | #5 | 7 | `src-tauri/src/lib.rs` | `pub fn run() {` |
+| Task 4 | #7 | 13 | `src-tauri/src/lib.rs` | `//! Ki6 —— macOS 系统工具箱（Tauri v2 + React 重写版）。` |
+| Task 11 | #2 | 17 | `（片段，无单一对应文件）` | `> "menubar.edit"      = "编辑"        / "Edit"` |
+
+### 本轮同步记录（Task 27 执行期间）
+
+T27 为了做视觉验收与打包，动了 6 个前端文件，产生的漂移已**全部回写为实际文件**，
+不再需要「以实际文件为准」的例外：
+
+| 任务 | 块序号 | 回写来源 | 变更原因 |
+| --- | --- | --- | --- |
+| Task 17 | #8 | `frontend/src/components/Sparkline.tsx` | `Sparkline` 改为 `ResizeObserver` 跟随容器宽度（原来写死 420px 会溢出卡片右边界） |
+| Task 18 | #4 | `frontend/src/app/AppShell.tsx` | 新增 `?page=` 参数直达标签页（截图 / 自动化脚本需要） |
+| Task 20 | #0 | `frontend/src/pages/Files.tsx` | 「操作」列宽 180 → 230（3 个按钮原来会被卡片右边界裁掉） |
+| Task 21 | #0 | `frontend/src/pages/Clipboard.tsx` | 列头改用 `clipboard.column.type` / `clipboard.column.time`，kind 值走 `clipboard.type.*` 本地化 |
+| Task 22 | #0 | `frontend/src/pages/Monitor.tsx` | 去掉硬编码的 `width={420}`，改由 `Sparkline` 自适应 |
+| Task 27 | #0 / #1 | `frontend/src/app/AppShell.tsx` / `.gitignore` | 截图步骤改为「真实数据 + mock IPC + Chrome headless」；`.gitignore` 追加 `src-tauri/target/` 与 `src-tauri/gen/` |
+| Task 7 | #4 | `src-tauri/src/lib.rs` | 打包验证时发现 `show_menu_bar` 设置在启动时没被应用（只在设置变更时调 `set_accessory_mode`）→ `setup()` 里按已保存设置复现一次 |
+
+> `clipboard.column.type` / `clipboard.column.time` 是本轮新增的两个 locale key，
+> zh-Hans 与 en 两份 `Localizable.strings` 已同步。
+>
+> **打包验证时发现并修掉的真实缺陷**：`show_menu_bar`（菜单栏模式）只在设置**变更**时
+> 应用到激活策略，启动时没有复现 —— 用户开启菜单栏模式后重启应用，会重新变回常规
+> Dock 模式，设置项形同虚设。已在 `lib.rs` 的 `setup()` 里按已保存设置复现一次，
+> 顺序与 `commands::system::set_menu_bar_mode` 保持一致。
+
+> **单独说明**
+>
+> 表里剩下的都是**片段**（不是整文件），漂移原因是同文件的其他部分被后续任务扩展 ——
+> 例如 `src-tauri/src/lib.rs` 在 Task 1 时只有 18 行，之后被 Task 7（state/tasks）、
+> Task 11（菜单栏）、Task 12（托盘）、Task 13（快捷键）、Task 25（右键菜单）逐次扩展。
+> **以仓库里的实际文件为准**，不要按计划块去「修正」代码。
+
+### 本轮同步记录（Task 28 执行期间）
+
+Task 28 把外壳改成活动监视器式三段布局，顺带改了 8 个前端文件 + 3 个 Rust 文件。
+所有受影响的计划块**已按实际文件逐字节回写**，扫描后只剩 Task 1 / Task 4 三个
+历史例外片段（见上表）：
+
+| 任务 | 块序号 | 回写来源 | 变更原因 |
+| --- | --- | --- | --- |
+| Task 6 | #0 | `src-tauri/src/commands/dto.rs` | `SystemInfoDto` 新增 `process_count` |
+| Task 7 | #1 | `src-tauri/src/system/tasks.rs` | 监控循环 DTO 填 `process_count` |
+| Task 16 | #0 | `frontend/src/lib/types.ts` | `SystemInfoDto` 新增 `processCount` |
+| Task 16 | #2 | `frontend/src/lib/store.ts` | `AppState` 新增外壳级 `search` |
+| Task 17 | #0 | `frontend/src/components/VirtualList.tsx` | 容器高度改由 CSS 决定（修「测量滞后导致列表短一截」） |
+| Task 17 | #8 | `frontend/src/components/Sparkline.tsx` | 量程改为以均值为中心的自适应窗口（修「曲线被压平」） |
+| Task 18 | #0 | `frontend/src/app/navigation.ts` | 删除 `glyph` 字段，保留 `group` 供标签条分隔 |
+| Task 18 | #1 | `frontend/src/app/Toolbar.tsx` | **原 `Sidebar.tsx` 块 → 工具栏**（品牌块 + 标签条 + 搜索框） |
+| Task 18 | #2 | `frontend/src/app/BottomBar.tsx` | **原 `TopBar.tsx` 块 → 底部汇总栏**（指标 / CPU 负载曲线 / 进程数+网络） |
+| Task 18 | #4 | `frontend/src/app/AppShell.tsx` | 重排为 工具栏 / 内容 / 底栏 / 提示 四段；切页清空 `search` |
+| Task 18 | #7 | `frontend/src/styles/base.css` | 新增 `.toolbar` / `.tabstrip` / `.bottombar` 段，删除 `.sidebar*` / `.topbar*` 段 |
+| Task 18 | #8 | `frontend/src/app/AppShell.test.tsx` | 断言改为 `role="tablist"` / `role="tab"`；新增工具栏搜索框与底栏用例 |
+| Task 19 | #0 | `frontend/src/pages/Processes.tsx` | 搜索改读 `state.search`，移除页内 `SearchField`；新增 `useLayoutEffect` + RO 双重测量 |
+| Task 19 | #2 | `frontend/src/styles/base.css` | 新增 `.vtable__body` / `.scrollable` 段（容器高度交给 CSS） |
+| Task 19 | #3 | `frontend/src/pages/Processes.test.tsx` | store mock 补 `search` |
+| Task 20 | #0 | `frontend/src/pages/Files.tsx` | 搜索改读 `state.search`，移除页内 `SearchField` |
+| Task 20 | #2 | `frontend/src/pages/Files.test.tsx` | store mock 补 `search` |
+| Task 21 | #0 | `frontend/src/pages/Clipboard.tsx` | 搜索改读 `state.search`，移除页内 `SearchField` |
+| Task 21 | #2 | `frontend/src/pages/Clipboard.test.tsx` | store mock 补 `search` |
+| Task 22 | #0 | `frontend/src/pages/Monitor.tsx` | `EMPTY` 补 `processCount`；图表改用 `.chart-card__canvas` + `<Sparkline>` |
+| Task 22 | #1 | `frontend/src/styles/base.css` | 新增 `.chart-card` / `.chart-grid` 段 |
+| Task 26 | #1 | `frontend/src/pages/Processes.tsx` | import 片段同步新增 `useLayoutEffect` |
+| Task 26 | #5 | `frontend/src/pages/Processes.tsx` | `renderRow` 片段缩进同步 |
+| Task 27 | #0 | `frontend/src/app/AppShell.tsx` | 注释措辞：侧栏 → 标签条 |
+
+> Task 18 的**正文**（标题、Files 列表、Step 2 / Step 3 标题、drag-region 说明）
+> 也一并改成工具栏 / 底部汇总栏的表述；`Sidebar.tsx` 与 `TopBar.tsx` 已删除，
+> 计划里不再出现这两个文件。
+
+> **`locales` 新增 6 个 key**：`bottom.cpu` / `bottom.memory` / `bottom.disk` /
+> `bottom.cpuLoad` / `bottom.processes` / `bottom.network`，zh-Hans 与 en 两份
+> `Localizable.strings` 已同步（各 175 条）。
+
+> **Task 28 自身新增两块**：`BottomBar.tsx` 全文与 `dto.rs` 的 `process_count`
+> 字段片段，均与仓库实际文件逐字节一致。

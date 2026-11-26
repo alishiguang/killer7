@@ -1,0 +1,148 @@
+/* macOS 化控件：细滚动条、原生输入框观感、复选框、分段控件。 */
+
+/* 细滚动条，滚动时才显形（macOS overlay 行为） */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*:hover::-webkit-scrollbar-thumb,
+.scrollable:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--text-muted);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 文本输入：保留系统字体 / IME / 拼写检查 / 选区 / 光标，只去边框 */
+.native-input {
+  appearance: none;
+  background: var(--control);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.4;
+  width: 100%;
+}
+
+.native-input::placeholder {
+  color: var(--text-muted);
+}
+
+.native-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* 复选框：自绘 macOS 方块 */
+.native-checkbox {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 1px solid var(--text-muted);
+  border-radius: 3px;
+  background: transparent;
+  cursor: default;
+  position: relative;
+}
+
+.native-checkbox:hover {
+  background: var(--surface-alt);
+}
+
+.native-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.native-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--on-accent);
+  border-width: 0 1.8px 1.8px 0;
+  transform: rotate(43deg);
+}
+
+/* 原生按钮：macOS 推入式观感 */
+.native-button {
+  appearance: none;
+  background: var(--control);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  cursor: default;
+}
+
+.native-button:hover:not(:disabled) {
+  background: var(--surface-alt);
+}
+
+.native-button:active:not(:disabled) {
+  background: var(--surface);
+}
+
+.native-button:disabled {
+  opacity: 0.4;
+}
+
+.native-button--accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.native-button--accent:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 86%, var(--bg));
+}
+
+/* 分段控件 */
+.segmented {
+  display: inline-flex;
+  padding: 1px;
+  gap: 1px;
+  background: var(--control);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.segmented__item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 2px;
+  cursor: default;
+}
+
+.segmented__item[aria-pressed='true'] {
+  background: var(--surface-alt);
+  color: var(--text);
+}

@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 killer7 contributors
+Copyright (c) 2026 chuaker7 contributors
 Copyright (c) 2026 Igigi (original LuciBox implementation)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,5 +23,6 @@ SOFTWARE.
 
 ---
 
-This project is a Rust rewrite of LuciBox (https://github.com/hagenmagpie/LuciBox),
+This project is a Rust + Tauri v2 + React rewrite of Ki6's predecessor,
+the SwiftUI application LuciBox (https://github.com/hagenmagpie/LuciBox),
 which is also distributed under the MIT License.
