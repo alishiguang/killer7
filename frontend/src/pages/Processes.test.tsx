@@ -37,6 +37,7 @@ vi.mock('../lib/store', async () => {
     activeTab: 'processes',
     toast: null,
     locale: 'zh-Hans',
+    search: '',
   };
   return {
     ...actual,

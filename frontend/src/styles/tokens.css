@@ -40,8 +40,7 @@
   --row-height: 26px;
   --radius-sm: 3px;
   --radius-md: 5px;
-  --sidebar-width: 196px;
-  --topbar-height: 38px;
+  --toolbar-height: 46px;
 }
 
 /* 深色（ink）为默认，浅色（paper）按需覆盖 */

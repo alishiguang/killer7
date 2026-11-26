@@ -36,6 +36,8 @@ export interface SystemInfoDto {
   networkDownload: number;
   cpuHistory: number[];
   memoryHistory: number[];
+  /** 当前进程总数（取自进程缓存）。 */
+  processCount: number;
 }
 
 export interface PluginRow {

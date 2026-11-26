@@ -95,7 +95,7 @@ Ki6/
 │       ├── main.tsx
 │       ├── App.tsx
 │       ├── test/setup.ts
-│       ├── app/                    # Sidebar / TopBar / Toast / navigation
+│       ├── app/                    # Toolbar / BottomBar / Toast / navigation
 │       ├── components/             # VirtualList / DataTable / SearchField / ...
 │       ├── pages/                  # Processes / Files / Clipboard / Monitor / Plugins / Settings
 │       ├── lib/                    # bridge / store / types / format / i18n / native
@@ -2584,6 +2584,8 @@ pub struct SystemInfoDto {
     pub cpu_history: Vec<f64>,
     /// 内存采样历史。
     pub memory_history: Vec<f64>,
+    /// 当前进程总数（取自进程缓存，不额外采集）。
+    pub process_count: usize,
 }
 
 /// 插件列表的一行。
@@ -2721,6 +2723,7 @@ impl From<&SystemInfo> for SystemInfoDto {
             network_download: value.network_download,
             cpu_history: Vec::new(),
             memory_history: Vec::new(),
+            process_count: 0,
         }
     }
 }
@@ -2788,8 +2791,7 @@ mod tests {
             _ => panic!("应解析为进程目标"),
         }
     }
-}
-```
+}```
 
 - [ ] **Step 2: 写 `src-tauri/src/commands/mod.rs`**
 
@@ -3089,6 +3091,8 @@ pub fn spawn_monitor_loop(
                     network_download: mon.system_info.network_download,
                     cpu_history: mon.cpu_history.clone(),
                     memory_history: mon.memory_history.clone(),
+                    // 进程总数直接读进程缓存的长度，不额外采集。
+                    process_count: state.processes.lock().expect("进程锁中毒").processes.len(),
                 }
             };
 
@@ -5419,6 +5423,8 @@ export interface SystemInfoDto {
   networkDownload: number;
   cpuHistory: number[];
   memoryHistory: number[];
+  /** 当前进程总数（取自进程缓存）。 */
+  processCount: number;
 }
 
 export interface PluginRow {
@@ -5456,8 +5462,7 @@ export interface Notice {
   message: string;
 }
 
-export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor' | 'plugins' | 'settings';
-```
+export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor' | 'plugins' | 'settings';```
 
 - [ ] **Step 2: 写 `frontend/src/lib/bridge.ts`**
 
@@ -5564,6 +5569,8 @@ export interface AppState {
   toast: (Notice & { id: number }) | null;
   /** 界面语言。 */
   locale: 'zh-Hans' | 'en';
+  /** 工具栏搜索词。搜索框在工具栏上（与活动监视器一致），因此提到外壳级共享。 */
+  search: string;
 }
 
 const initialState: AppState = {
@@ -5572,6 +5579,7 @@ const initialState: AppState = {
   activeTab: 'processes',
   toast: null,
   locale: 'zh-Hans',
+  search: '',
 };
 
 let state: AppState = initialState;
@@ -5612,8 +5620,7 @@ export function pushToast(kind: Notice['kind'], message: string): void {
   window.setTimeout(() => {
     setState((prev) => (prev.toast?.id === id ? { toast: null } : {}));
   }, 3000);
-}
-```
+}```
 
 - [ ] **Step 4: 写 `frontend/src/lib/theme.ts`**
 
@@ -5875,6 +5882,12 @@ export interface VirtualListProps<T> {
  *
  * 500 行只渲染约 30 个 DOM 节点（26px 行高 + overscan 8），
  * 保证滚动不掉帧。
+ *
+ * **容器高度由 CSS 决定**（`.scrollable { height: 100% }`），`height` prop
+ * 只用来算「要渲染多少行」。反过来做（把测得的高度写成容器内联高度）会出问题：
+ * 窗口尺寸变化后测量值要等 React 重新提交才生效，这中间容器高度是旧值 ——
+ * 列表会突然短一截，底部留出空白。容器交给 CSS、测量值只管行数，就没这个窗口期：
+ * 就算测量值落后，overscan 多渲染的行数也足以把视口填满。
  */
 export function VirtualList<T>({
   items,
@@ -5921,7 +5934,7 @@ export function VirtualList<T>({
 
   if (items.length === 0) {
     return (
-      <div className="scrollable" style={{ height, overflowY: 'auto' }}>
+      <div className="scrollable" style={{ overflowY: 'auto' }}>
         <div className="empty-state">{empty ?? '暂无数据'}</div>
       </div>
     );
@@ -5930,7 +5943,7 @@ export function VirtualList<T>({
   const slice = items.slice(start, end);
 
   return (
-    <div className="scrollable" style={{ height, overflowY: 'auto' }} onScroll={onScroll}>
+    <div className="scrollable" style={{ overflowY: 'auto' }} onScroll={onScroll}>
       <div style={{ height: totalHeight, position: 'relative' }}>
         <div style={{ position: 'absolute', top: offsetY, left: 0, right: 0 }}>
           {slice.map((item, index) => {
@@ -5945,8 +5958,7 @@ export function VirtualList<T>({
       </div>
     </div>
   );
-}
-```
+}```
 
 - [ ] **Step 2: 写 `DataTable.tsx`**
 
@@ -6299,29 +6311,30 @@ export interface SparklineProps {
   values: number[];
   /** 画布宽（CSS px）；缺省时自动跟随容器宽度。 */
   width?: number;
-  /** 画布高（CSS px）。 */
+  /** 画布高（CSS px）；缺省时自动跟随容器高度。 */
   height?: number;
   /** 线条颜色，缺省取当前强调色。 */
   color?: string;
-  /** 上限。 */
+  /** 量程上限；缺省时按序列峰值自适应。 */
   max?: number;
 }
 
 /**
  * Canvas 手绘曲线，避免 SVG 逐点重排。
  *
- * 宽度默认**跟随容器**：卡片有内边距，写死像素宽度会让画布溢出卡片右边界
- * （内边距被吃掉之后还会压到描边上）。用 ResizeObserver 量容器内容宽度，
+ * **尺寸跟随容器**：卡片有内边距，写死像素尺寸会让画布溢出卡片边界
+ * （内边距被吃掉之后还会压到描边上）。用 ResizeObserver 量容器内容宽高，
  * 容器变化时自动重绘。
+ *
+ * **量程自适应**：缺省按序列峰值缩放。固定 100% 量程的话，日常 10% 上下的
+ * CPU 负载会被压成贴着底边的一条直线，看不出起伏 —— 这也是 macOS
+ * 「活动监视器」CPU 负载图的画法。
  */
-export function Sparkline({ values, width, height = 48, color, max = 100 }: SparklineProps) {
+export function Sparkline({ values, width, height, color, max }: SparklineProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [measured, setMeasured] = useState(0);
+  const [measured, setMeasured] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
-    if (width !== undefined) {
-      return;
-    }
     const canvas = canvasRef.current;
     const parent = canvas?.parentElement;
     if (!parent) {
@@ -6332,20 +6345,43 @@ export function Sparkline({ values, width, height = 48, color, max = 100 }: Spar
       if (!entry) {
         return;
       }
-      const next = Math.floor(entry.contentRect.width);
-      if (next > 0) {
-        setMeasured(next);
-      }
+      const nextWidth = width === undefined ? Math.floor(entry.contentRect.width) : 0;
+      const nextHeight = height === undefined ? Math.floor(entry.contentRect.height) : 0;
+      setMeasured((prev) =>
+        prev.width === nextWidth && prev.height === nextHeight
+          ? prev
+          : { width: nextWidth, height: nextHeight },
+      );
     });
     observer.observe(parent);
     return () => observer.disconnect();
-  }, [width]);
+  }, [width, height]);
 
-  const drawWidth = width ?? measured;
+  const drawWidth = width ?? measured.width;
+  const drawHeight = height ?? (measured.height > 0 ? measured.height : 48);
+
+  // 量程窗口：
+  // - 显式传入 max 时用 [0, max]（百分比类指标）；
+  // - 否则按序列自身的峰值自适应：以均值为中心，取一个不小于序列跨度的窗口，
+  //   两端各留出半个跨度的呼吸空间。这样日常 10% 上下的 CPU 负载也能看出起伏，
+  //   而恒定序列会是一条居中的水平线，而不是贴边的一块色块。
+  const ceiling = max ?? 100;
+  const floor = max ?? 0;
+  let windowLow = floor;
+  let windowHigh = ceiling;
+  if (max === undefined && values.length > 0) {
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
+    const center = (lo + hi) / 2;
+    const half = Math.max(hi - lo, 1, Math.abs(center) * 0.02);
+    windowLow = center - half;
+    windowHigh = center + half;
+  }
+  const span = Math.max(windowHigh - windowLow, 0.0001);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || drawWidth <= 0) {
+    if (!canvas || drawWidth <= 0 || drawHeight <= 0) {
       return;
     }
     const ctx = canvas.getContext('2d');
@@ -6355,9 +6391,9 @@ export function Sparkline({ values, width, height = 48, color, max = 100 }: Spar
 
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(drawWidth * dpr);
-    canvas.height = Math.round(height * dpr);
+    canvas.height = Math.round(drawHeight * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, drawWidth, height);
+    ctx.clearRect(0, 0, drawWidth, drawHeight);
 
     if (values.length < 2) {
       return;
@@ -6365,7 +6401,8 @@ export function Sparkline({ values, width, height = 48, color, max = 100 }: Spar
 
     const stroke = color ?? getComputedStyle(canvas).getPropertyValue('--accent').trim() ?? '#F43D3F';
     const step = drawWidth / (values.length - 1);
-    const y = (value: number) => height - (Math.min(value, max) / max) * height;
+    const y = (value: number) =>
+      drawHeight - ((Math.min(Math.max(value, windowLow), windowHigh) - windowLow) / span) * drawHeight;
 
     ctx.beginPath();
     ctx.moveTo(0, y(values[0]));
@@ -6376,22 +6413,24 @@ export function Sparkline({ values, width, height = 48, color, max = 100 }: Spar
     ctx.lineWidth = 1.25;
     ctx.stroke();
 
-    ctx.lineTo(drawWidth, height);
-    ctx.lineTo(0, height);
+    ctx.lineTo(drawWidth, drawHeight);
+    ctx.lineTo(0, drawHeight);
     ctx.closePath();
     ctx.fillStyle = `${stroke}1f`;
     ctx.fill();
-  }, [values, drawWidth, height, color, max]);
+  }, [values, drawWidth, drawHeight, color, windowLow, windowHigh, span]);
 
   return (
     <canvas
       ref={canvasRef}
       className="sparkline"
-      style={{ width: width === undefined ? '100%' : width, height }}
+      style={{
+        width: width === undefined ? '100%' : width,
+        height: height === undefined ? '100%' : height,
+      }}
     />
   );
-}
-```
+}```
 
 - [ ] **Step 7: 写组件测试**
 
@@ -6646,12 +6685,12 @@ AI-Tool: TophantAI"
 
 ---
 
-### Task 18: 应用外壳（侧栏 / 顶栏 / 提示 / 导航）
+### Task 18: 应用外壳（工具栏 / 底部汇总栏 / 提示 / 导航）
 
 **Files:**
 - Create: `frontend/src/app/navigation.ts`
-- Create: `frontend/src/app/Sidebar.tsx`
-- Create: `frontend/src/app/TopBar.tsx`
+- Create: `frontend/src/app/Toolbar.tsx`
+- Create: `frontend/src/app/BottomBar.tsx`
 - Create: `frontend/src/app/Toast.tsx`
 - Create: `frontend/src/app/AppShell.tsx`
 - Modify: `frontend/src/App.tsx`
@@ -6660,7 +6699,7 @@ AI-Tool: TophantAI"
 
 **Interfaces:**
 - Consumes: Task 16 的 `store` / `i18n` / `theme`，Task 17 的组件
-- Produces: `navigation.ts` 的 `TABS` 列表与 `TAB_IDS`；`AppShell` 组件；`App.tsx` 挂载 `AppShell`
+- Produces: `navigation.ts` 的 `TABS` 列表与 `TAB_IDS`；`Toolbar` / `BottomBar` 组件；`AppShell` 组件；`App.tsx` 挂载 `AppShell`
 
 - [ ] **Step 1: 写 `navigation.ts`**
 
@@ -6669,100 +6708,188 @@ import type { TabId } from '../lib/types';
 
 export interface TabDef {
   id: TabId;
-  /** 侧栏文案 key。 */
+  /** 标签文案 key。 */
   labelKey: string;
-  /** 侧栏图标（几何符号，呼应设计语言的 ◆）。 */
-  glyph: string;
-  /** 分组：工具 / 系统。 */
+  /** 分组：工具 / 系统。工具组与系统组之间在标签条上有一道细分隔。 */
   group: 'tools' | 'system';
 }
 
-/** 六个标签页的定义，顺序即侧栏顺序。 */
+/** 六个标签页的定义，顺序即标签条顺序。 */
 export const TABS: TabDef[] = [
-  { id: 'processes', labelKey: 'nav.process', glyph: '◆', group: 'tools' },
-  { id: 'files', labelKey: 'nav.file', glyph: '◆', group: 'tools' },
-  { id: 'clipboard', labelKey: 'nav.clipboard', glyph: '◆', group: 'tools' },
-  { id: 'monitor', labelKey: 'nav.monitor', glyph: '◆', group: 'tools' },
-  { id: 'plugins', labelKey: 'nav.plugins', glyph: '◆', group: 'system' },
-  { id: 'settings', labelKey: 'nav.settings', glyph: '◆', group: 'system' },
+  { id: 'processes', labelKey: 'nav.process', group: 'tools' },
+  { id: 'files', labelKey: 'nav.file', group: 'tools' },
+  { id: 'clipboard', labelKey: 'nav.clipboard', group: 'tools' },
+  { id: 'monitor', labelKey: 'nav.monitor', group: 'tools' },
+  { id: 'plugins', labelKey: 'nav.plugins', group: 'system' },
+  { id: 'settings', labelKey: 'nav.settings', group: 'system' },
 ];
 
 /** 标签页 id 列表。 */
-export const TAB_IDS: TabId[] = TABS.map((tab) => tab.id);
-```
+export const TAB_IDS: TabId[] = TABS.map((tab) => tab.id);```
 
-- [ ] **Step 2: 写 `Sidebar.tsx`**
+- [ ] **Step 2: 写 `Toolbar.tsx`（工具栏：品牌块 + 横向标签条 + 搜索框）**
 
 ```tsx
+import { SearchField } from '../components';
 import { useI18n } from '../lib/i18n';
 import { useAppStore } from '../lib/store';
+import type { TabId } from '../lib/types';
 import { TABS } from './navigation';
 
-export function Sidebar() {
+/**
+ * 工具栏：左侧品牌与当前页，中间横向标签条，右侧搜索框。
+ *
+ * 结构参考 macOS「活动监视器」——它没有左侧栏，用工具栏里的分段标签切换视图，
+ * 搜索框也放在工具栏右侧。搜索词因此是外壳级共享状态（见 `store.ts` 的 `search`）。
+ */
+export function Toolbar() {
   const { t } = useI18n();
   const [state, setState] = useAppStore();
-
-  const tools = TABS.filter((tab) => tab.group === 'tools');
-  const system = TABS.filter((tab) => tab.group === 'system');
-
-  const renderGroup = (labelKey: string, items: typeof TABS) => (
-    <div className="sidebar__group">
-      <div className="sidebar__group-label">{t(labelKey)}</div>
-      {items.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          className="sidebar__item"
-          data-active={state.activeTab === tab.id ? 'true' : undefined}
-          onClick={() => setState({ activeTab: tab.id })}
-        >
-          <span className="sidebar__glyph" aria-hidden="true">
-            {tab.glyph}
-          </span>
-          <span>{t(tab.labelKey)}</span>
-        </button>
-      ))}
-    </div>
-  );
-
-  return (
-    <nav className="sidebar">
-      <div className="sidebar__brand">
-        <div className="sidebar__brand-name">{t('app.brand')}</div>
-        <div className="sidebar__brand-tag">{t('app.tagline')}</div>
-      </div>
-      {renderGroup('nav.section.tools', tools)}
-      {renderGroup('nav.section.system', system)}
-    </nav>
-  );
-}
-```
-
-- [ ] **Step 3: 写 `TopBar.tsx`**
-
-```tsx
-import { useI18n } from '../lib/i18n';
-import { useAppStore } from '../lib/store';
-import { TABS } from './navigation';
-
-export function TopBar() {
-  const { t } = useI18n();
-  const [state] = useAppStore();
   const current = TABS.find((tab) => tab.id === state.activeTab);
 
+  // 标签条：工具组与系统组之间有一道细分隔，保留原来的信息分组。
+  let previousGroup: string | null = null;
+
   return (
-    <header className="topbar" data-tauri-drag-region>
-      <div className="topbar__spacer" data-tauri-drag-region />
-      <div className="topbar__title">
-        <span className="kicker">{current ? t(current.labelKey) : ''}</span>
+    <header className="toolbar">
+      <div className="toolbar__brand" data-tauri-drag-region>
+        <span className="toolbar__brand-name">{t('app.brand')}</span>
+        <span className="toolbar__brand-tag">{current ? t(current.labelKey) : ''}</span>
       </div>
-      <div className="topbar__right" data-tauri-drag-region />
+
+      <nav className="tabstrip" role="tablist" aria-label={t('app.brand')}>
+        {TABS.map((tab) => {
+          const needsDivider = previousGroup !== null && previousGroup !== tab.group;
+          previousGroup = tab.group;
+          return (
+            <span key={tab.id} className="tabstrip__slot">
+              {needsDivider ? <span className="tabstrip__divider" aria-hidden="true" /> : null}
+              <button
+                type="button"
+                role="tab"
+                className="tabstrip__item"
+                aria-selected={state.activeTab === tab.id}
+                onClick={() => setState({ activeTab: tab.id as TabId })}
+              >
+                {t(tab.labelKey)}
+              </button>
+            </span>
+          );
+        })}
+      </nav>
+
+      <div className="toolbar__spacer" data-tauri-drag-region />
+
+      <div className="toolbar__search">
+        <SearchField
+          value={state.search}
+          onChange={(value) => setState({ search: value })}
+          placeholder={t('common.search')}
+        />
+      </div>
     </header>
   );
-}
-```
+}```
 
-> `data-tauri-drag-region` 让顶栏可拖动窗口（需要在 `tauri.conf.json` 的 capabilities 里保留 `core:window:allow-start-dragging`）。
+- [ ] **Step 3: 写 `BottomBar.tsx`（底部汇总栏：CPU/内存/磁盘 + CPU 负载曲线 + 进程数/网络）**
+
+```tsx
+import { useEffect, useState } from 'react';
+
+import { Sparkline } from '../components';
+import { EVENT, api, onEvent } from '../lib/bridge';
+import { useI18n } from '../lib/i18n';
+import type { SystemInfoDto } from '../lib/types';
+
+const EMPTY: SystemInfoDto = {
+  cpuUsage: 0,
+  memoryUsage: 0,
+  diskUsage: 0,
+  networkUpload: 0,
+  networkDownload: 0,
+  cpuHistory: [],
+  memoryHistory: [],
+  processCount: 0,
+};
+
+/**
+ * 底部汇总栏：参考 macOS「活动监视器」窗口底部的三栏面板。
+ *
+ * 左栏是系统级百分比，中栏是 CPU 负载曲线，右栏是计数与网络速率。
+ * 数据全部来自后端已经在推的 `system-info` 事件 —— 底栏自己订阅一份，
+ * 不用让页面把自己的状态往外传。
+ */
+export function BottomBar() {
+  const { t } = useI18n();
+  const [info, setInfo] = useState<SystemInfoDto>(EMPTY);
+
+  useEffect(() => {
+    let disposed = false;
+
+    void api.systemSnapshot().then((snapshot) => {
+      if (!disposed) {
+        setInfo(snapshot);
+      }
+    });
+
+    void onEvent<SystemInfoDto>(EVENT.systemInfo, (next) => {
+      if (!disposed) {
+        setInfo(next);
+      }
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  return (
+    <div className="bottombar">
+      <div className="bottombar__panel">
+        <div className="bottombar__zone">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.cpu')}</span>
+            <span className="bottombar__value bottombar__value--accent">
+              {info.cpuUsage.toFixed(1)}%
+            </span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.memory')}</span>
+            <span className="bottombar__value">{info.memoryUsage.toFixed(1)}%</span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.disk')}</span>
+            <span className="bottombar__value">{info.diskUsage.toFixed(1)}%</span>
+          </div>
+        </div>
+
+        <div className="bottombar__zone bottombar__zone--chart">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.cpuLoad')}</span>
+          </div>
+          <div className="bottombar__chart">
+            <Sparkline values={info.cpuHistory} height={28} />
+          </div>
+        </div>
+
+        <div className="bottombar__zone">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.processes')}</span>
+            <span className="bottombar__value">{info.processCount}</span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.network')}</span>
+            <span className="bottombar__value">
+              ↑ {info.networkUpload.toFixed(1)} · ↓ {info.networkDownload.toFixed(1)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}```
+
+> `data-tauri-drag-region` 让工具栏可拖动窗口（需要在 `tauri.conf.json` 的 capabilities 里保留 `core:window:allow-start-dragging`）。
 
 - [ ] **Step 4: 写 `Toast.tsx`**
 
@@ -6791,9 +6918,9 @@ import { EVENT, api, onEvent } from '../lib/bridge';
 import { applyTheme } from '../lib/theme';
 import { pushToast, setState, useAppStore } from '../lib/store';
 import type { TabId } from '../lib/types';
-import { Sidebar } from './Sidebar';
+import { BottomBar } from './BottomBar';
 import { Toast } from './Toast';
-import { TopBar } from './TopBar';
+import { Toolbar } from './Toolbar';
 import { Clipboard } from '../pages/Clipboard';
 import { Files } from '../pages/Files';
 import { Monitor } from '../pages/Monitor';
@@ -6827,7 +6954,7 @@ export function AppShell() {
       setState({ settings, strings, locale: settings.locale });
 
       // 支持用 `?page=processes` 直接定位标签页：截图与自动化脚本需要能直达某一页，
-      // 而不必先点侧栏。参数非法时忽略，留在默认页。
+      // 而不必先点标签条。参数非法时忽略，留在默认页。
       const requested = new URLSearchParams(window.location.search).get('page');
       if (requested && requested in PAGES) {
         setState({ activeTab: requested as TabId });
@@ -6838,6 +6965,12 @@ export function AppShell() {
       disposed = true;
     };
   }, []);
+
+  // 切页时清空搜索词：搜索框是外壳级的共享状态，跨页沿用会让上一个页面的
+  // 过滤条件莫名其妙地作用到下一个页面（活动监视器切标签也是清空的）。
+  useEffect(() => {
+    setState({ search: '' });
+  }, [state.activeTab]);
 
   // 订阅后端事件。onEvent 返回 Promise<UnlistenFn>，把取消函数收集起来在卸载时统一调用。
   useEffect(() => {
@@ -6874,18 +7007,15 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
-      <Sidebar />
-      <div className="app-shell__main">
-        <TopBar />
-        <main className="app-shell__content">
-          <Page />
-        </main>
-      </div>
+      <Toolbar />
+      <main className="app-shell__content">
+        <Page />
+      </main>
+      <BottomBar />
       <Toast />
     </div>
   );
-}
-```
+}```
 
 - [ ] **Step 6: 挂载 `App.tsx`**
 
@@ -6925,141 +7055,170 @@ export function App() {
 在 `frontend/src/styles/base.css` 末尾追加：
 
 ```css
-/* 应用外壳 */
+/* 应用外壳：工具栏 / 内容 / 底部汇总栏 三段式（参考 macOS 活动监视器） */
 .app-shell {
   display: flex;
-  height: 100%;
-}
-
-.app-shell__main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
   flex-direction: column;
+  height: 100%;
 }
 
 .app-shell__content {
   flex: 1;
   min-height: 0;
-  padding: 14px 18px 18px;
+  padding: 14px 18px 10px;
   overflow: hidden;
 }
 
-/* 侧栏 */
-.sidebar {
-  width: var(--sidebar-width);
-  flex: 0 0 var(--sidebar-width);
-  border-right: 1px solid var(--border);
-  padding: 14px 10px;
+/* 工具栏 */
+.toolbar {
+  height: var(--toolbar-height);
+  flex: 0 0 var(--toolbar-height);
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px 0 78px; /* 给红绿灯留位 */
   background: var(--surface);
 }
 
-.sidebar__brand-name {
+.toolbar__brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.15;
+  user-select: none;
+}
+
+.toolbar__brand-name {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 14px;
   letter-spacing: 0.08em;
   color: var(--text);
 }
 
-.sidebar__brand-tag {
+.toolbar__brand-tag {
   font-family: var(--font-mono);
   font-size: 9px;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-top: 2px;
 }
 
-.sidebar__group {
+.toolbar__spacer {
+  flex: 1;
+  height: 100%;
+}
+
+.toolbar__search {
+  width: 220px;
+  flex: 0 0 220px;
+}
+
+/* 标签条：工具组与系统组之间有一道细分隔 */
+.tabstrip {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.tabstrip__slot {
+  display: inline-flex;
+  align-items: center;
   gap: 2px;
 }
 
-.sidebar__group-label {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  padding: 4px 8px;
+.tabstrip__divider {
+  width: 1px;
+  height: 14px;
+  margin: 0 6px;
+  background: var(--border);
 }
 
-.sidebar__item {
+.tabstrip__item {
   appearance: none;
   border: 0;
   background: transparent;
   color: var(--text-muted);
   font-family: var(--font-body);
   font-size: 12px;
-  text-align: left;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
   cursor: default;
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  white-space: nowrap;
 }
 
-.sidebar__item:hover {
-  background: var(--surface-alt);
+.tabstrip__item:hover {
   color: var(--text);
 }
 
-.sidebar__item[data-active='true'] {
+.tabstrip__item[aria-selected='true'] {
   background: var(--control);
   color: var(--text);
 }
 
-.sidebar__glyph {
-  color: var(--accent);
-  font-size: 8px;
-}
-
-/* 顶栏 */
-.topbar {
-  height: var(--topbar-height);
-  flex: 0 0 var(--topbar-height);
+/* 底部汇总栏：参考活动监视器窗口底部的三栏内嵌面板 */
+.bottombar {
+  flex: 0 0 auto;
   display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  padding: 0 12px 0 78px; /* 给红绿灯留位 */
+  justify-content: center;
+  padding: 0 18px 10px;
 }
 
-.topbar__spacer {
-  flex: 1;
-  height: 100%;
-}
-
-.topbar__title {
+.bottombar__panel {
   display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* 顶部提示 */
-.toast {
-  position: fixed;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 6px 14px;
-  border-radius: var(--radius-md);
-  background: var(--surface-alt);
+  align-items: stretch;
   border: 1px solid var(--border);
-  font-size: 12px;
-  z-index: 60;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow: hidden;
 }
 
-.toast--error {
-  border-color: var(--danger);
-  color: var(--danger);
+.bottombar__zone {
+  padding: 7px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
 }
-```
+
+.bottombar__zone + .bottombar__zone {
+  border-left: 1px solid var(--border);
+}
+
+.bottombar__zone--chart {
+  width: 260px;
+}
+
+.bottombar__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 22px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.bottombar__label {
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.bottombar__value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bottombar__value--accent {
+  color: var(--accent);
+}
+
+.bottombar__chart {
+  height: 28px;
+  margin-top: 2px;
+}```
 
 - [ ] **Step 8: 写测试并提交**
 
@@ -7147,10 +7306,18 @@ vi.mock('../lib/store', async () => {
       'nav.section.system': '系统',
       'app.brand': 'KI6',
       'app.tagline': 'MACOS 系统工具箱',
+      'common.search': '搜索',
+      'bottom.cpu': 'CPU',
+      'bottom.memory': '内存',
+      'bottom.disk': '磁盘',
+      'bottom.cpuLoad': 'CPU 负载',
+      'bottom.processes': '进程',
+      'bottom.network': '网络',
     },
     activeTab: 'processes',
     toast: null,
     locale: 'zh-Hans',
+    search: '',
   };
   return {
     ...actual,
@@ -7170,15 +7337,23 @@ describe('AppShell', () => {
     render(<AppShell />);
     expect(await screen.findByText('KI6')).toBeInTheDocument();
 
-    // 当前激活页的标题（Kicker）与侧栏导航项同名，
-    // findByText 会命中多个元素，必须限定在侧栏导航区内断言。
-    const nav = screen.getByRole('navigation');
+    // 六个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
+    const tabs = screen.getByRole('tablist');
     for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控', '插件', '设置']) {
-      expect(await within(nav).findByText(label)).toBeInTheDocument();
+      expect(await within(tabs).findByRole('tab', { name: label })).toBeInTheDocument();
     }
   });
-});
-```
+
+  it('工具栏上有搜索框，底部有汇总栏', async () => {
+    render(<AppShell />);
+    expect(await screen.findByPlaceholderText('搜索')).toBeInTheDocument();
+
+    // 底部汇总栏的三栏：CPU / 内存 / 磁盘 + CPU 负载 + 进程数 + 网络。
+    expect(await screen.findByText('CPU 负载')).toBeInTheDocument();
+    expect(await screen.findByText('内存')).toBeInTheDocument();
+    expect(await screen.findByText('磁盘')).toBeInTheDocument();
+  });
+});```
 
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
@@ -7187,7 +7362,7 @@ npm run test && npm run typecheck
 git add -A
 git commit -m "feat: 应用外壳 —— 侧栏 / 顶栏 / 提示与启动引导
 
-- 侧栏按工具 / 系统两段呈现六个标签页
+- 工具栏标签条按工具 / 系统两段呈现六个标签页
 - 启动时拉取设置与文案并写入 data-theme / data-accent
 - 订阅 menu-action 与 notice 事件，接管原生菜单与提示
 
@@ -7211,12 +7386,21 @@ AI-Tool: TophantAI"
 - [ ] **Step 1: 写 `frontend/src/pages/Processes.tsx`**
 
 ```tsx
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
-import { Card, Kicker, Modal, SearchField, Segmented, VirtualList } from '../components';
+import { Card, Kicker, Modal, Segmented, VirtualList } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
-import { pushToast } from '../lib/store';
+import { pushToast, useAppStore } from '../lib/store';
 import type { ProcessRow } from '../lib/types';
 
 type SortKey = 'pid' | 'name' | 'port';
@@ -7262,12 +7446,15 @@ const ProcessRowView = memo(function ProcessRowView({
 
 export function Processes() {
   const { t } = useI18n();
+  const [state] = useAppStore();
   const [rows, setRows] = useState<ProcessRow[]>([]);
-  const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('pid');
   const [pendingKill, setPendingKill] = useState<ProcessRow | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [viewportHeight, setViewportHeight] = useState(420);
+
+  // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
+  const search = state.search;
 
   // 首次拉取 + 订阅后端推送。
   useEffect(() => {
@@ -7284,20 +7471,36 @@ export function Processes() {
   }, []);
 
   // 列表视口高度随窗口变化，虚拟列表按实际高度计算可见行数。
+  //
+  // 测量要可靠，不能只靠 ResizeObserver：它的首次回调可能早于外层布局定稿，
+  // 拿到的是中间态高度；而列表自身的内联高度又不影响 `.vtable__body` 的尺寸，
+  // 于是「尺寸不再变化 → 观察器不再回调 → 高度永远停在中间值」。
+  // 所以用 useLayoutEffect 在每次布局提交后同步量一次（getBoundingClientRect
+  // 会强制刷新布局，读到的是定稿值），再用 ResizeObserver 兜住后续的窗口变化。
+  const measure = useCallback(() => {
+    const element = listRef.current;
+    if (!element) {
+      return;
+    }
+    const next = Math.floor(element.getBoundingClientRect().height);
+    if (next > 0) {
+      setViewportHeight(next);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [measure]);
+
   useEffect(() => {
     const element = listRef.current;
     if (!element) {
       return;
     }
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry && entry.contentRect.height > 0) {
-        setViewportHeight(entry.contentRect.height);
-      }
-    });
+    const observer = new ResizeObserver(() => measure());
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [measure]);
 
   // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍，
   // 长列表下不会因为每个按键都重算 500 行的过滤而掉帧。
@@ -7358,11 +7561,6 @@ export function Processes() {
       <div className="page__head">
         <Kicker index="01">{t('process.title')}</Kicker>
         <div className="page__tools">
-          <SearchField
-            value={search}
-            onChange={setSearch}
-            placeholder={t('process.search.placeholder')}
-          />
           <button type="button" className="native-button" onClick={() => void onRefresh()}>
             {t('process.refresh')}
           </button>
@@ -7386,23 +7584,25 @@ export function Processes() {
           </div>
         }
       >
-        <div className="vtable" ref={listRef}>
+        <div className="vtable">
           <div className="vrow vrow--head">
             <span className="vrow__pid">{t('process.pid')}</span>
             <span className="vrow__name">{t('process.name')}</span>
             <span className="vrow__port">{t('process.port')}</span>
           </div>
-          <VirtualList
-            items={sorted}
-            height={viewportHeight}
-            rowHeight={26}
-            overscan={8}
-            getKey={(row) => String(row.pid)}
-            renderRow={(row) => (
-              <ProcessRowView row={row} onSelect={setPendingKill} />
-            )}
-            empty={t('process.empty')}
-          />
+          <div className="vtable__body" ref={listRef}>
+            <VirtualList
+              items={sorted}
+              height={viewportHeight}
+              rowHeight={26}
+              overscan={8}
+              getKey={(row) => String(row.pid)}
+              renderRow={(row) => (
+                <ProcessRowView row={row} onSelect={setPendingKill} />
+              )}
+              empty={t('process.empty')}
+            />
+          </div>
         </div>
       </Card>
 
@@ -7513,6 +7713,18 @@ export { VirtualList } from './VirtualList';
   height: 100%;
 }
 
+/* 表头以下的列表区：虚拟列表按这个盒子量高度，才能正好填满卡片 */
+.vtable__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 虚拟列表的滚动容器：高度交给 CSS，避免测量值滞后导致列表短一截 */
+.scrollable {
+  height: 100%;
+}
+
 .vrow {
   display: grid;
   grid-template-columns: 72px 1fr 140px;
@@ -7550,8 +7762,7 @@ export { VirtualList } from './VirtualList';
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-```
+}```
 
 - [ ] **Step 4: 写测试并提交**
 
@@ -7597,6 +7808,7 @@ vi.mock('../lib/store', async () => {
     activeTab: 'processes',
     toast: null,
     locale: 'zh-Hans',
+    search: '',
   };
   return {
     ...actual,
@@ -7628,8 +7840,7 @@ describe('Processes', () => {
     render(<Processes />);
     expect(await screen.findByText('共 2 个进程')).toBeInTheDocument();
   });
-});
-```
+});```
 
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
@@ -7663,23 +7874,26 @@ AI-Tool: TophantAI"
 ```tsx
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
-import { Card, DataTable, Kicker, Modal, SearchField, type Column } from '../components';
+import { Card, DataTable, Kicker, Modal, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
-import { pushToast } from '../lib/store';
+import { pushToast, useAppStore } from '../lib/store';
 import type { FileRow } from '../lib/types';
 
 export function Files() {
   const { t } = useI18n();
+  const [state] = useAppStore();
   const [cwd, setCwd] = useState<string>('');
   const [rows, setRows] = useState<FileRow[]>([]);
-  const [search, setSearch] = useState('');
   const [renaming, setRenaming] = useState<FileRow | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [creating, setCreating] = useState<'folder' | 'file' | null>(null);
   const [createValue, setCreateValue] = useState('');
   /** 原生右键菜单当前对应的行（「重命名 / 删除」需要它才能继续）。 */
   const [contextRow, setContextRow] = useState<FileRow | null>(null);
+
+  // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
+  const search = state.search;
 
   const load = useCallback(async (path: string) => {
     const list = await api.listDir(path);
@@ -7966,7 +8180,6 @@ export function Files() {
           >
             {t('file.newFolder')}
           </button>
-          <SearchField value={search} onChange={setSearch} placeholder={t('file.search.placeholder')} />
         </div>
       </div>
 
@@ -8047,8 +8260,7 @@ function formatTime(seconds: number): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
     date.getMinutes(),
   )}`;
-}
-```
+}```
 
 > **实际落地**：Task 26 接入 `useDeferredValue`，行点击/行右键回调改为稳定引用。
 > 上文是当前文件的**完整内容**。
@@ -8141,6 +8353,7 @@ vi.mock('../lib/store', async () => {
     activeTab: 'files',
     toast: null,
     locale: 'zh-Hans',
+    search: '',
   };
   return {
     ...actual,
@@ -8247,10 +8460,10 @@ AI-Tool: TophantAI"
 ```tsx
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
-import { Card, DataTable, Kicker, SearchField, type Column } from '../components';
+import { Card, DataTable, Kicker, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
-import { pushToast } from '../lib/store';
+import { pushToast, useAppStore } from '../lib/store';
 import type { HistoryRow } from '../lib/types';
 
 /** 剪贴板类型 → 文案 key。后端只给 `text` / `image` / `url` 三种原始值。 */
@@ -8262,9 +8475,12 @@ const KIND_KEYS: Record<string, string> = {
 
 export function Clipboard() {
   const { t } = useI18n();
+  const [state] = useAppStore();
   const [current, setCurrent] = useState('');
   const [history, setHistory] = useState<HistoryRow[]>([]);
-  const [search, setSearch] = useState('');
+
+  // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
+  const search = state.search;
 
   useEffect(() => {
     let disposed = false;
@@ -8368,11 +8584,6 @@ export function Clipboard() {
       <div className="page__head">
         <Kicker index="03">{t('clipboard.title')}</Kicker>
         <div className="page__tools">
-          <SearchField
-            value={search}
-            onChange={setSearch}
-            placeholder={t('clipboard.search.placeholder')}
-          />
           <button
             type="button"
             className="native-button"
@@ -8418,8 +8629,7 @@ function formatTime(seconds: number): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
     date.getMinutes(),
   )}`;
-}
-```
+}```
 
 > **实际落地**：Task 26 接入 `useDeferredValue`，行右键回调改为稳定引用。
 > 上文是当前文件的**完整内容**。
@@ -8488,6 +8698,7 @@ vi.mock('../lib/store', async () => {
     activeTab: 'clipboard',
     toast: null,
     locale: 'zh-Hans',
+    search: '',
   };
   return {
     ...actual,
@@ -8518,8 +8729,7 @@ describe('Clipboard', () => {
     render(<Clipboard />);
     expect(await screen.findByText('清空历史')).toBeInTheDocument();
   });
-});
-```
+});```
 
 ```bash
 cd /Users/lishiguang/aiworkspace/Ki6/.worktrees/tauri-react
@@ -8567,6 +8777,7 @@ const EMPTY: SystemInfoDto = {
   networkDownload: 0,
   cpuHistory: [],
   memoryHistory: [],
+  processCount: 0,
 };
 
 export function Monitor() {
@@ -8601,11 +8812,15 @@ export function Monitor() {
       </div>
 
       <div className="chart-grid">
-        <Card title={t('monitor.cpu.history')}>
-          <Sparkline values={info.cpuHistory} height={72} />
+        <Card title={t('monitor.cpu.history')} className="chart-card">
+          <div className="chart-card__canvas">
+            <Sparkline values={info.cpuHistory} />
+          </div>
         </Card>
-        <Card title={t('monitor.memory.history')}>
-          <Sparkline values={info.memoryHistory} height={72} />
+        <Card title={t('monitor.memory.history')} className="chart-card">
+          <div className="chart-card__canvas">
+            <Sparkline values={info.memoryHistory} />
+          </div>
         </Card>
       </div>
     </div>
@@ -8619,8 +8834,7 @@ function Metric({ label, value }: { label: string; value: string }) {
       <div className="metric__value">{value}</div>
     </div>
   );
-}
-```
+}```
 
 - [ ] **Step 2: 补样式**
 
@@ -8651,8 +8865,9 @@ function Metric({ label, value }: { label: string; value: string }) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-}
-```
+  flex: 1;
+  min-height: 0;
+}```
 
 - [ ] **Step 3: 写测试并提交**
 
@@ -9787,7 +10002,16 @@ const TableRow = memo(function TableRowInner<T>({
 `frontend/src/pages/Processes.tsx`：
 
 ```tsx
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';```
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';```
 
 ```tsx
   // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍，
@@ -9854,8 +10078,8 @@ const ProcessRowView = memo(function ProcessRowView({
 然后把 `VirtualList` 的 `renderRow` 换成：
 
 ```tsx
-            renderRow={(row) => (
-              <ProcessRowView row={row} onSelect={setPendingKill} />```
+              renderRow={(row) => (
+                <ProcessRowView row={row} onSelect={setPendingKill} />```
 
 > `onSelect` 传的是 `setPendingKill`（稳定引用），`row` 是数据引用——
 > `rows` 数组不变时行引用稳定，memo 才能真正生效。
@@ -10031,12 +10255,11 @@ AI-Tool: TophantAI"
 
 ```tsx
       // 支持用 `?page=processes` 直接定位标签页：截图与自动化脚本需要能直达某一页，
-      // 而不必先点侧栏。参数非法时忽略，留在默认页。
+      // 而不必先点标签条。参数非法时忽略，留在默认页。
       const requested = new URLSearchParams(window.location.search).get('page');
       if (requested && requested in PAGES) {
         setState({ activeTab: requested as TabId });
-      }
-```
+      }```
 
 截图三步：
 
@@ -10188,6 +10411,183 @@ ls -la release/             # Ki6.zip 存在
 
 ---
 
+### Task 28: 界面布局重构 —— 对齐 macOS「活动监视器」
+
+**背景**
+
+T27 的视觉验收暴露了一个结构性问题：Ki6 的「左侧栏 + 顶栏」是通用应用范式，
+和 macOS 系统自带工具的观感差距明显 —— 用户最初的痛点第一条就是
+「不像原生 macOS 应用」。用户提出「能不能参考活动监视器的布局进行开发」，
+并在问卷里做了两项裁定：
+
+| 裁定项 | 选择 | 说明 |
+| --- | --- | --- |
+| 导航骨架 | **改成顶部工具栏标签条** | 去掉左侧栏，六个标签页横向排在工具栏里，工具组与系统组之间有一道细分隔 |
+| 数据深度 | **布局先行** | 底栏只用现有系统指标；进程表保持 PID / 名称 / 端口三列，不扩列 |
+
+**设计原则：借布局，不借皮肤**
+
+Ki6 的全部视觉令牌（ink `#0F0E15` / paper `#FAF6EE`、Anton + Geist Mono、卡片体系）
+**一个都没改**，只借鉴活动监视器的**结构**：
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ KI6 · 进程管理        进程  文件  剪贴板  监控 │ 插件  设置      🔍 │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│                            （内容区）                                │
+│                                                                    │
+├────────────────────────────────────────────────────────────────────┤
+│ CPU 12%   内存 63%   磁盘 81%  │ CPU 负载曲线 │ 进程 500            │
+│                                      网络 ↑2.1 ↓0.4               │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Rust 侧改动（3 个文件，只加字段不改语义）**
+
+| 文件 | 改动 |
+| --- | --- |
+| `src-tauri/src/commands/dto.rs` | `SystemInfoDto` 新增 `process_count` 字段 |
+| `src-tauri/src/commands/monitor.rs` | `system_snapshot` 读进程缓存长度填 `process_count` |
+| `src-tauri/src/system/tasks.rs` | 监控循环 DTO 填 `process_count` |
+
+`dto.rs` 里的新增字段：
+
+```rust
+    /// 当前进程总数（取自进程缓存，不额外采集）。
+    pub process_count: usize,
+```
+
+进程总数**直接读 `ProcessManager::processes` 的长度** —— 不新增采集、不额外传
+500 行负载，只在 DTO 上多一个数字。
+
+**前端改动**
+
+| 动作 | 文件 |
+| --- | --- |
+| 新增 | `frontend/src/app/Toolbar.tsx`（品牌块 + 标签条 + 搜索框） |
+| 新增 | `frontend/src/app/BottomBar.tsx`（三栏内嵌面板：指标 / 曲线 / 进程数+网络） |
+| 删除 | `frontend/src/app/Sidebar.tsx`、`frontend/src/app/TopBar.tsx` |
+| 修改 | `AppShell.tsx`（重排为 工具栏 / 内容 / 底栏 / 提示 四段）、`navigation.ts`（去掉 `glyph`）、`store.ts`（新增外壳级 `search`）、`types.ts`（新增 `processCount`）、`base.css` / `tokens.css`（新增 toolbar / tabstrip / bottombar 段）、`Processes.tsx` / `Files.tsx` / `Clipboard.tsx` / `Monitor.tsx`（改读 `state.search`，移除各自的 `SearchField`） |
+| 文案 | `locales/{zh-Hans,en}.lproj/Localizable.strings` 新增 6 个 key：`bottom.cpu` / `bottom.memory` / `bottom.disk` / `bottom.cpuLoad` / `bottom.processes` / `bottom.network`（共 175 条） |
+
+搜索词从「各页自带」上提到**外壳级共享**（`AppState.search`），与活动监视器
+「搜索框在工具栏」一致；切换标签页时清空。
+
+`BottomBar.tsx`：
+
+```tsx
+import { useEffect, useState } from 'react';
+
+import { Sparkline } from '../components';
+import { EVENT, api, onEvent } from '../lib/bridge';
+import { useI18n } from '../lib/i18n';
+import type { SystemInfoDto } from '../lib/types';
+
+const EMPTY: SystemInfoDto = {
+  cpuUsage: 0,
+  memoryUsage: 0,
+  diskUsage: 0,
+  networkUpload: 0,
+  networkDownload: 0,
+  cpuHistory: [],
+  memoryHistory: [],
+  processCount: 0,
+};
+
+/**
+ * 底部汇总栏：参考 macOS「活动监视器」窗口底部的三栏面板。
+ *
+ * 左栏是系统级百分比，中栏是 CPU 负载曲线，右栏是计数与网络速率。
+ * 数据全部来自后端已经在推的 `system-info` 事件 —— 底栏自己订阅一份，
+ * 不用让页面把自己的状态往外传。
+ */
+export function BottomBar() {
+  const { t } = useI18n();
+  const [info, setInfo] = useState<SystemInfoDto>(EMPTY);
+
+  useEffect(() => {
+    let disposed = false;
+
+    void api.systemSnapshot().then((snapshot) => {
+      if (!disposed) {
+        setInfo(snapshot);
+      }
+    });
+
+    void onEvent<SystemInfoDto>(EVENT.systemInfo, (next) => {
+      if (!disposed) {
+        setInfo(next);
+      }
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  return (
+    <div className="bottombar">
+      <div className="bottombar__panel">
+        <div className="bottombar__zone">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.cpu')}</span>
+            <span className="bottombar__value bottombar__value--accent">
+              {info.cpuUsage.toFixed(1)}%
+            </span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.memory')}</span>
+            <span className="bottombar__value">{info.memoryUsage.toFixed(1)}%</span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.disk')}</span>
+            <span className="bottombar__value">{info.diskUsage.toFixed(1)}%</span>
+          </div>
+        </div>
+
+        <div className="bottombar__zone bottombar__zone--chart">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.cpuLoad')}</span>
+          </div>
+          <div className="bottombar__chart">
+            <Sparkline values={info.cpuHistory} height={28} />
+          </div>
+        </div>
+
+        <div className="bottombar__zone">
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.processes')}</span>
+            <span className="bottombar__value">{info.processCount}</span>
+          </div>
+          <div className="bottombar__row">
+            <span className="bottombar__label">{t('bottom.network')}</span>
+            <span className="bottombar__value">
+              ↑ {info.networkUpload.toFixed(1)} · ↓ {info.networkDownload.toFixed(1)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+**本轮修掉的两个真实缺陷**
+
+1. **虚拟列表容器高度滞后** —— 容器高度原本写成 JS 测量值的内联样式，窗口尺寸
+   变化后要等 React 重新提交才生效，中间列表会短一截、底部留白约 85px。
+   改为 `.scrollable { height: 100% }`，测量值只用于算渲染行数（overscan 8
+   足以覆盖低估）。
+2. **曲线量程被压平** —— `Sparkline` 固定 `max=100`，日常 10% 上下的 CPU 负载
+   成一条贴底直线、恒定内存序列成整块红色。改为**以均值为中心的自适应窗口**，
+   显式传 `max` 时才用 `[0, max]`。
+
+**闸门**：`cargo fmt --check` / `cargo clippy --all-targets` / `cargo test` 全绿；
+`tsc --noEmit` 通过；`vitest` 38/38 通过；`npm run build` 成功。
+
+---
+
 ## 计划自检记录
 
 ### 1. 设计文档覆盖对照
@@ -10200,7 +10600,7 @@ ls -la release/             # Ki6.zip 存在
 | §6.1 Commands | Task 8（进程）、Task 9（文件）、Task 10（剪贴板/监控/插件）、Task 15（设置/文案/系统） |
 | §6.2 Events | Task 7（事件常量）、Task 11（menu-action）、Task 25（notice） |
 | §6.3 数据结构 | Task 6（DTO）、Task 16（TS 镜像） |
-| §7 原生感落地清单 | Task 11（应用菜单栏）、Task 12（托盘）、Task 13（⌘L + 激活策略）、Task 14（自启）、Task 17（控件 macOS 化）、Task 20（原生目录对话框）、Task 25（原生右键菜单）、Task 18（首帧直出）、Task 19/26（虚拟列表）、Task 22（Canvas 曲线） |
+| §7 原生感落地清单 | Task 11（应用菜单栏）、Task 12（托盘）、Task 13（⌘L + 激活策略）、Task 14（自启）、Task 17（控件 macOS 化）、Task 20（原生目录对话框）、Task 25（原生右键菜单）、Task 18（首帧直出）、Task 28（活动监视器式外壳）、Task 19/26（虚拟列表）、Task 22（Canvas 曲线） |
 | §8.1 状态 | Task 16（store.ts） |
 | §8.2 样式 | Task 3（tokens/base/native）、Task 18（主题属性） |
 | §8.3 性能 | Task 17（虚拟列表）、Task 26（memo / useDeferredValue） |
@@ -10241,7 +10641,7 @@ Task 1 → Task 4 → Task 5 → Task 6
 Task 5 + 6 → Task 7 → Task 8/9/10 → Task 11/12/13/14 → Task 15
 Task 16 → Task 17 → Task 18 → Task 19/20/21/22/23/24
 Task 8/9/10 + Task 19/20/21 → Task 25
-Task 24 → Task 26 → Task 27
+Task 24 → Task 26 → Task 27 → Task 28
 ```
 
 Task 4–15 可与 Task 16–24 并行（Rust 侧与前端侧文件不重叠），但 Task 25 起需要两侧合并。
@@ -10296,3 +10696,47 @@ T27 为了做视觉验收与打包，动了 6 个前端文件，产生的漂移�
 > 例如 `src-tauri/src/lib.rs` 在 Task 1 时只有 18 行，之后被 Task 7（state/tasks）、
 > Task 11（菜单栏）、Task 12（托盘）、Task 13（快捷键）、Task 25（右键菜单）逐次扩展。
 > **以仓库里的实际文件为准**，不要按计划块去「修正」代码。
+
+### 本轮同步记录（Task 28 执行期间）
+
+Task 28 把外壳改成活动监视器式三段布局，顺带改了 8 个前端文件 + 3 个 Rust 文件。
+所有受影响的计划块**已按实际文件逐字节回写**，扫描后只剩 Task 1 / Task 4 三个
+历史例外片段（见上表）：
+
+| 任务 | 块序号 | 回写来源 | 变更原因 |
+| --- | --- | --- | --- |
+| Task 6 | #0 | `src-tauri/src/commands/dto.rs` | `SystemInfoDto` 新增 `process_count` |
+| Task 7 | #1 | `src-tauri/src/system/tasks.rs` | 监控循环 DTO 填 `process_count` |
+| Task 16 | #0 | `frontend/src/lib/types.ts` | `SystemInfoDto` 新增 `processCount` |
+| Task 16 | #2 | `frontend/src/lib/store.ts` | `AppState` 新增外壳级 `search` |
+| Task 17 | #0 | `frontend/src/components/VirtualList.tsx` | 容器高度改由 CSS 决定（修「测量滞后导致列表短一截」） |
+| Task 17 | #8 | `frontend/src/components/Sparkline.tsx` | 量程改为以均值为中心的自适应窗口（修「曲线被压平」） |
+| Task 18 | #0 | `frontend/src/app/navigation.ts` | 删除 `glyph` 字段，保留 `group` 供标签条分隔 |
+| Task 18 | #1 | `frontend/src/app/Toolbar.tsx` | **原 `Sidebar.tsx` 块 → 工具栏**（品牌块 + 标签条 + 搜索框） |
+| Task 18 | #2 | `frontend/src/app/BottomBar.tsx` | **原 `TopBar.tsx` 块 → 底部汇总栏**（指标 / CPU 负载曲线 / 进程数+网络） |
+| Task 18 | #4 | `frontend/src/app/AppShell.tsx` | 重排为 工具栏 / 内容 / 底栏 / 提示 四段；切页清空 `search` |
+| Task 18 | #7 | `frontend/src/styles/base.css` | 新增 `.toolbar` / `.tabstrip` / `.bottombar` 段，删除 `.sidebar*` / `.topbar*` 段 |
+| Task 18 | #8 | `frontend/src/app/AppShell.test.tsx` | 断言改为 `role="tablist"` / `role="tab"`；新增工具栏搜索框与底栏用例 |
+| Task 19 | #0 | `frontend/src/pages/Processes.tsx` | 搜索改读 `state.search`，移除页内 `SearchField`；新增 `useLayoutEffect` + RO 双重测量 |
+| Task 19 | #2 | `frontend/src/styles/base.css` | 新增 `.vtable__body` / `.scrollable` 段（容器高度交给 CSS） |
+| Task 19 | #3 | `frontend/src/pages/Processes.test.tsx` | store mock 补 `search` |
+| Task 20 | #0 | `frontend/src/pages/Files.tsx` | 搜索改读 `state.search`，移除页内 `SearchField` |
+| Task 20 | #2 | `frontend/src/pages/Files.test.tsx` | store mock 补 `search` |
+| Task 21 | #0 | `frontend/src/pages/Clipboard.tsx` | 搜索改读 `state.search`，移除页内 `SearchField` |
+| Task 21 | #2 | `frontend/src/pages/Clipboard.test.tsx` | store mock 补 `search` |
+| Task 22 | #0 | `frontend/src/pages/Monitor.tsx` | `EMPTY` 补 `processCount`；图表改用 `.chart-card__canvas` + `<Sparkline>` |
+| Task 22 | #1 | `frontend/src/styles/base.css` | 新增 `.chart-card` / `.chart-grid` 段 |
+| Task 26 | #1 | `frontend/src/pages/Processes.tsx` | import 片段同步新增 `useLayoutEffect` |
+| Task 26 | #5 | `frontend/src/pages/Processes.tsx` | `renderRow` 片段缩进同步 |
+| Task 27 | #0 | `frontend/src/app/AppShell.tsx` | 注释措辞：侧栏 → 标签条 |
+
+> Task 18 的**正文**（标题、Files 列表、Step 2 / Step 3 标题、drag-region 说明）
+> 也一并改成工具栏 / 底部汇总栏的表述；`Sidebar.tsx` 与 `TopBar.tsx` 已删除，
+> 计划里不再出现这两个文件。
+
+> **`locales` 新增 6 个 key**：`bottom.cpu` / `bottom.memory` / `bottom.disk` /
+> `bottom.cpuLoad` / `bottom.processes` / `bottom.network`，zh-Hans 与 en 两份
+> `Localizable.strings` 已同步（各 175 条）。
+
+> **Task 28 自身新增两块**：`BottomBar.tsx` 全文与 `dto.rs` 的 `process_count`
+> 字段片段，均与仓库实际文件逐字节一致。

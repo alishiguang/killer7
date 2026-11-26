@@ -229,119 +229,169 @@ figure {
   display: block;
 }
 
-/* 应用外壳 */
+/* 应用外壳：工具栏 / 内容 / 底部汇总栏 三段式（参考 macOS 活动监视器） */
 .app-shell {
   display: flex;
-  height: 100%;
-}
-
-.app-shell__main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
   flex-direction: column;
+  height: 100%;
 }
 
 .app-shell__content {
   flex: 1;
   min-height: 0;
-  padding: 14px 18px 18px;
+  padding: 14px 18px 10px;
   overflow: hidden;
 }
 
-/* 侧栏 */
-.sidebar {
-  width: var(--sidebar-width);
-  flex: 0 0 var(--sidebar-width);
-  border-right: 1px solid var(--border);
-  padding: 14px 10px;
+/* 工具栏 */
+.toolbar {
+  height: var(--toolbar-height);
+  flex: 0 0 var(--toolbar-height);
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px 0 78px; /* 给红绿灯留位 */
   background: var(--surface);
 }
 
-.sidebar__brand-name {
+.toolbar__brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.15;
+  user-select: none;
+}
+
+.toolbar__brand-name {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 14px;
   letter-spacing: 0.08em;
   color: var(--text);
 }
 
-.sidebar__brand-tag {
+.toolbar__brand-tag {
   font-family: var(--font-mono);
   font-size: 9px;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-top: 2px;
 }
 
-.sidebar__group {
+.toolbar__spacer {
+  flex: 1;
+  height: 100%;
+}
+
+.toolbar__search {
+  width: 220px;
+  flex: 0 0 220px;
+}
+
+/* 标签条：工具组与系统组之间有一道细分隔 */
+.tabstrip {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.tabstrip__slot {
+  display: inline-flex;
+  align-items: center;
   gap: 2px;
 }
 
-.sidebar__group-label {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  padding: 4px 8px;
+.tabstrip__divider {
+  width: 1px;
+  height: 14px;
+  margin: 0 6px;
+  background: var(--border);
 }
 
-.sidebar__item {
+.tabstrip__item {
   appearance: none;
   border: 0;
   background: transparent;
   color: var(--text-muted);
   font-family: var(--font-body);
   font-size: 12px;
-  text-align: left;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
   cursor: default;
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  white-space: nowrap;
 }
 
-.sidebar__item:hover {
-  background: var(--surface-alt);
+.tabstrip__item:hover {
   color: var(--text);
 }
 
-.sidebar__item[data-active='true'] {
+.tabstrip__item[aria-selected='true'] {
   background: var(--control);
   color: var(--text);
 }
 
-.sidebar__glyph {
+/* 底部汇总栏：参考活动监视器窗口底部的三栏内嵌面板 */
+.bottombar {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 0 18px 10px;
+}
+
+.bottombar__panel {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.bottombar__zone {
+  padding: 7px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.bottombar__zone + .bottombar__zone {
+  border-left: 1px solid var(--border);
+}
+
+.bottombar__zone--chart {
+  width: 260px;
+}
+
+.bottombar__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 22px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.bottombar__label {
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.bottombar__value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.bottombar__value--accent {
   color: var(--accent);
-  font-size: 8px;
 }
 
-/* 顶栏 */
-.topbar {
-  height: var(--topbar-height);
-  flex: 0 0 var(--topbar-height);
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  padding: 0 12px 0 78px; /* 给红绿灯留位 */
-}
-
-.topbar__spacer {
-  flex: 1;
-  height: 100%;
-}
-
-.topbar__title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.bottombar__chart {
+  height: 28px;
+  margin-top: 2px;
 }
 
 /* 顶部提示 */
@@ -415,6 +465,18 @@ figure {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
+}
+
+/* 表头以下的列表区：虚拟列表按这个盒子量高度，才能正好填满卡片 */
+.vtable__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 虚拟列表的滚动容器：高度交给 CSS，避免测量值滞后导致列表短一截 */
+.scrollable {
   height: 100%;
 }
 
@@ -513,6 +575,26 @@ figure {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 曲线卡片撑满剩余高度，画布再撑满卡片 —— 曲线才有足够的纵向空间 */
+.chart-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chart-card .card__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.chart-card__canvas {
+  flex: 1;
+  min-height: 0;
 }
 
 .plugin-dir {

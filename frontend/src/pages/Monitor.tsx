@@ -14,6 +14,7 @@ const EMPTY: SystemInfoDto = {
   networkDownload: 0,
   cpuHistory: [],
   memoryHistory: [],
+  processCount: 0,
 };
 
 export function Monitor() {
@@ -48,11 +49,15 @@ export function Monitor() {
       </div>
 
       <div className="chart-grid">
-        <Card title={t('monitor.cpu.history')}>
-          <Sparkline values={info.cpuHistory} height={72} />
+        <Card title={t('monitor.cpu.history')} className="chart-card">
+          <div className="chart-card__canvas">
+            <Sparkline values={info.cpuHistory} />
+          </div>
         </Card>
-        <Card title={t('monitor.memory.history')}>
-          <Sparkline values={info.memoryHistory} height={72} />
+        <Card title={t('monitor.memory.history')} className="chart-card">
+          <div className="chart-card__canvas">
+            <Sparkline values={info.memoryHistory} />
+          </div>
         </Card>
       </div>
     </div>

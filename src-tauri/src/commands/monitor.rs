@@ -11,6 +11,8 @@ use crate::state::AppState;
 #[tauri::command]
 pub fn system_snapshot(state: State<'_, Arc<AppState>>) -> SystemInfoDto {
     let monitor = state.monitor.lock().expect("监控锁中毒");
+    // 进程总数直接读进程缓存的长度 —— 不额外采集，也不多付一次 IPC 负载。
+    let process_count = state.processes.lock().expect("进程锁中毒").processes.len();
     SystemInfoDto {
         cpu_usage: monitor.system_info.cpu_usage,
         memory_usage: monitor.system_info.memory_usage,
@@ -19,5 +21,6 @@ pub fn system_snapshot(state: State<'_, Arc<AppState>>) -> SystemInfoDto {
         network_download: monitor.system_info.network_download,
         cpu_history: monitor.cpu_history.clone(),
         memory_history: monitor.memory_history.clone(),
+        process_count,
     }
 }

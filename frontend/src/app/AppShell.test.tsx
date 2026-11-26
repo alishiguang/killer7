@@ -79,10 +79,18 @@ vi.mock('../lib/store', async () => {
       'nav.section.system': '系统',
       'app.brand': 'KI6',
       'app.tagline': 'MACOS 系统工具箱',
+      'common.search': '搜索',
+      'bottom.cpu': 'CPU',
+      'bottom.memory': '内存',
+      'bottom.disk': '磁盘',
+      'bottom.cpuLoad': 'CPU 负载',
+      'bottom.processes': '进程',
+      'bottom.network': '网络',
     },
     activeTab: 'processes',
     toast: null,
     locale: 'zh-Hans',
+    search: '',
   };
   return {
     ...actual,
@@ -102,11 +110,20 @@ describe('AppShell', () => {
     render(<AppShell />);
     expect(await screen.findByText('KI6')).toBeInTheDocument();
 
-    // 当前激活页的标题（Kicker）与侧栏导航项同名，
-    // findByText 会命中多个元素，必须限定在侧栏导航区内断言。
-    const nav = screen.getByRole('navigation');
+    // 六个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
+    const tabs = screen.getByRole('tablist');
     for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控', '插件', '设置']) {
-      expect(await within(nav).findByText(label)).toBeInTheDocument();
+      expect(await within(tabs).findByRole('tab', { name: label })).toBeInTheDocument();
     }
+  });
+
+  it('工具栏上有搜索框，底部有汇总栏', async () => {
+    render(<AppShell />);
+    expect(await screen.findByPlaceholderText('搜索')).toBeInTheDocument();
+
+    // 底部汇总栏的三栏：CPU / 内存 / 磁盘 + CPU 负载 + 进程数 + 网络。
+    expect(await screen.findByText('CPU 负载')).toBeInTheDocument();
+    expect(await screen.findByText('内存')).toBeInTheDocument();
+    expect(await screen.findByText('磁盘')).toBeInTheDocument();
   });
 });

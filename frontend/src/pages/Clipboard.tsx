@@ -1,9 +1,9 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
-import { Card, DataTable, Kicker, SearchField, type Column } from '../components';
+import { Card, DataTable, Kicker, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
-import { pushToast } from '../lib/store';
+import { pushToast, useAppStore } from '../lib/store';
 import type { HistoryRow } from '../lib/types';
 
 /** 剪贴板类型 → 文案 key。后端只给 `text` / `image` / `url` 三种原始值。 */
@@ -15,9 +15,12 @@ const KIND_KEYS: Record<string, string> = {
 
 export function Clipboard() {
   const { t } = useI18n();
+  const [state] = useAppStore();
   const [current, setCurrent] = useState('');
   const [history, setHistory] = useState<HistoryRow[]>([]);
-  const [search, setSearch] = useState('');
+
+  // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
+  const search = state.search;
 
   useEffect(() => {
     let disposed = false;
@@ -121,11 +124,6 @@ export function Clipboard() {
       <div className="page__head">
         <Kicker index="03">{t('clipboard.title')}</Kicker>
         <div className="page__tools">
-          <SearchField
-            value={search}
-            onChange={setSearch}
-            placeholder={t('clipboard.search.placeholder')}
-          />
           <button
             type="button"
             className="native-button"

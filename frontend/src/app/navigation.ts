@@ -2,22 +2,20 @@ import type { TabId } from '../lib/types';
 
 export interface TabDef {
   id: TabId;
-  /** 侧栏文案 key。 */
+  /** 标签文案 key。 */
   labelKey: string;
-  /** 侧栏图标（几何符号，呼应设计语言的 ◆）。 */
-  glyph: string;
-  /** 分组：工具 / 系统。 */
+  /** 分组：工具 / 系统。工具组与系统组之间在标签条上有一道细分隔。 */
   group: 'tools' | 'system';
 }
 
-/** 六个标签页的定义，顺序即侧栏顺序。 */
+/** 六个标签页的定义，顺序即标签条顺序。 */
 export const TABS: TabDef[] = [
-  { id: 'processes', labelKey: 'nav.process', glyph: '◆', group: 'tools' },
-  { id: 'files', labelKey: 'nav.file', glyph: '◆', group: 'tools' },
-  { id: 'clipboard', labelKey: 'nav.clipboard', glyph: '◆', group: 'tools' },
-  { id: 'monitor', labelKey: 'nav.monitor', glyph: '◆', group: 'tools' },
-  { id: 'plugins', labelKey: 'nav.plugins', glyph: '◆', group: 'system' },
-  { id: 'settings', labelKey: 'nav.settings', glyph: '◆', group: 'system' },
+  { id: 'processes', labelKey: 'nav.process', group: 'tools' },
+  { id: 'files', labelKey: 'nav.file', group: 'tools' },
+  { id: 'clipboard', labelKey: 'nav.clipboard', group: 'tools' },
+  { id: 'monitor', labelKey: 'nav.monitor', group: 'tools' },
+  { id: 'plugins', labelKey: 'nav.plugins', group: 'system' },
+  { id: 'settings', labelKey: 'nav.settings', group: 'system' },
 ];
 
 /** 标签页 id 列表。 */

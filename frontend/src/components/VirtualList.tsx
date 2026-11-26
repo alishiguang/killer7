@@ -22,6 +22,12 @@ export interface VirtualListProps<T> {
  *
  * 500 行只渲染约 30 个 DOM 节点（26px 行高 + overscan 8），
  * 保证滚动不掉帧。
+ *
+ * **容器高度由 CSS 决定**（`.scrollable { height: 100% }`），`height` prop
+ * 只用来算「要渲染多少行」。反过来做（把测得的高度写成容器内联高度）会出问题：
+ * 窗口尺寸变化后测量值要等 React 重新提交才生效，这中间容器高度是旧值 ——
+ * 列表会突然短一截，底部留出空白。容器交给 CSS、测量值只管行数，就没这个窗口期：
+ * 就算测量值落后，overscan 多渲染的行数也足以把视口填满。
  */
 export function VirtualList<T>({
   items,
@@ -68,7 +74,7 @@ export function VirtualList<T>({
 
   if (items.length === 0) {
     return (
-      <div className="scrollable" style={{ height, overflowY: 'auto' }}>
+      <div className="scrollable" style={{ overflowY: 'auto' }}>
         <div className="empty-state">{empty ?? '暂无数据'}</div>
       </div>
     );
@@ -77,7 +83,7 @@ export function VirtualList<T>({
   const slice = items.slice(start, end);
 
   return (
-    <div className="scrollable" style={{ height, overflowY: 'auto' }} onScroll={onScroll}>
+    <div className="scrollable" style={{ overflowY: 'auto' }} onScroll={onScroll}>
       <div style={{ height: totalHeight, position: 'relative' }}>
         <div style={{ position: 'absolute', top: offsetY, left: 0, right: 0 }}>
           {slice.map((item, index) => {

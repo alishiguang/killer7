@@ -4,9 +4,9 @@ import { EVENT, api, onEvent } from '../lib/bridge';
 import { applyTheme } from '../lib/theme';
 import { pushToast, setState, useAppStore } from '../lib/store';
 import type { TabId } from '../lib/types';
-import { Sidebar } from './Sidebar';
+import { BottomBar } from './BottomBar';
 import { Toast } from './Toast';
-import { TopBar } from './TopBar';
+import { Toolbar } from './Toolbar';
 import { Clipboard } from '../pages/Clipboard';
 import { Files } from '../pages/Files';
 import { Monitor } from '../pages/Monitor';
@@ -40,7 +40,7 @@ export function AppShell() {
       setState({ settings, strings, locale: settings.locale });
 
       // 支持用 `?page=processes` 直接定位标签页：截图与自动化脚本需要能直达某一页，
-      // 而不必先点侧栏。参数非法时忽略，留在默认页。
+      // 而不必先点标签条。参数非法时忽略，留在默认页。
       const requested = new URLSearchParams(window.location.search).get('page');
       if (requested && requested in PAGES) {
         setState({ activeTab: requested as TabId });
@@ -51,6 +51,12 @@ export function AppShell() {
       disposed = true;
     };
   }, []);
+
+  // 切页时清空搜索词：搜索框是外壳级的共享状态，跨页沿用会让上一个页面的
+  // 过滤条件莫名其妙地作用到下一个页面（活动监视器切标签也是清空的）。
+  useEffect(() => {
+    setState({ search: '' });
+  }, [state.activeTab]);
 
   // 订阅后端事件。onEvent 返回 Promise<UnlistenFn>，把取消函数收集起来在卸载时统一调用。
   useEffect(() => {
@@ -87,13 +93,11 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
-      <Sidebar />
-      <div className="app-shell__main">
-        <TopBar />
-        <main className="app-shell__content">
-          <Page />
-        </main>
-      </div>
+      <Toolbar />
+      <main className="app-shell__content">
+        <Page />
+      </main>
+      <BottomBar />
       <Toast />
     </div>
   );

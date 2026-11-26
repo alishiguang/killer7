@@ -151,6 +151,13 @@
 "common.back" = "Back";
 "common.done" = "Done";
 
+"bottom.cpu" = "CPU";
+"bottom.memory" = "Memory";
+"bottom.disk" = "Disk";
+"bottom.cpuLoad" = "CPU Load";
+"bottom.processes" = "Processes";
+"bottom.network" = "Network";
+
 "process.empty" = "No matching processes";
 "process.count" = "%@ processes";
 "process.kill.done" = "Terminated %@";

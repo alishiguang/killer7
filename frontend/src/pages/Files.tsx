@@ -1,22 +1,25 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
-import { Card, DataTable, Kicker, Modal, SearchField, type Column } from '../components';
+import { Card, DataTable, Kicker, Modal, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
-import { pushToast } from '../lib/store';
+import { pushToast, useAppStore } from '../lib/store';
 import type { FileRow } from '../lib/types';
 
 export function Files() {
   const { t } = useI18n();
+  const [state] = useAppStore();
   const [cwd, setCwd] = useState<string>('');
   const [rows, setRows] = useState<FileRow[]>([]);
-  const [search, setSearch] = useState('');
   const [renaming, setRenaming] = useState<FileRow | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [creating, setCreating] = useState<'folder' | 'file' | null>(null);
   const [createValue, setCreateValue] = useState('');
   /** 原生右键菜单当前对应的行（「重命名 / 删除」需要它才能继续）。 */
   const [contextRow, setContextRow] = useState<FileRow | null>(null);
+
+  // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
+  const search = state.search;
 
   const load = useCallback(async (path: string) => {
     const list = await api.listDir(path);
@@ -303,7 +306,6 @@ export function Files() {
           >
             {t('file.newFolder')}
           </button>
-          <SearchField value={search} onChange={setSearch} placeholder={t('file.search.placeholder')} />
         </div>
       </div>
 

@@ -85,6 +85,8 @@ pub struct SystemInfoDto {
     pub cpu_history: Vec<f64>,
     /// 内存采样历史。
     pub memory_history: Vec<f64>,
+    /// 当前进程总数（取自进程缓存，不额外采集）。
+    pub process_count: usize,
 }
 
 /// 插件列表的一行。
@@ -222,6 +224,7 @@ impl From<&SystemInfo> for SystemInfoDto {
             network_download: value.network_download,
             cpu_history: Vec::new(),
             memory_history: Vec::new(),
+            process_count: 0,
         }
     }
 }

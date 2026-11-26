@@ -1,9 +1,18 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
-import { Card, Kicker, Modal, SearchField, Segmented, VirtualList } from '../components';
+import { Card, Kicker, Modal, Segmented, VirtualList } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
-import { pushToast } from '../lib/store';
+import { pushToast, useAppStore } from '../lib/store';
 import type { ProcessRow } from '../lib/types';
 
 type SortKey = 'pid' | 'name' | 'port';
@@ -49,12 +58,15 @@ const ProcessRowView = memo(function ProcessRowView({
 
 export function Processes() {
   const { t } = useI18n();
+  const [state] = useAppStore();
   const [rows, setRows] = useState<ProcessRow[]>([]);
-  const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('pid');
   const [pendingKill, setPendingKill] = useState<ProcessRow | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [viewportHeight, setViewportHeight] = useState(420);
+
+  // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
+  const search = state.search;
 
   // 首次拉取 + 订阅后端推送。
   useEffect(() => {
@@ -71,20 +83,36 @@ export function Processes() {
   }, []);
 
   // 列表视口高度随窗口变化，虚拟列表按实际高度计算可见行数。
+  //
+  // 测量要可靠，不能只靠 ResizeObserver：它的首次回调可能早于外层布局定稿，
+  // 拿到的是中间态高度；而列表自身的内联高度又不影响 `.vtable__body` 的尺寸，
+  // 于是「尺寸不再变化 → 观察器不再回调 → 高度永远停在中间值」。
+  // 所以用 useLayoutEffect 在每次布局提交后同步量一次（getBoundingClientRect
+  // 会强制刷新布局，读到的是定稿值），再用 ResizeObserver 兜住后续的窗口变化。
+  const measure = useCallback(() => {
+    const element = listRef.current;
+    if (!element) {
+      return;
+    }
+    const next = Math.floor(element.getBoundingClientRect().height);
+    if (next > 0) {
+      setViewportHeight(next);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [measure]);
+
   useEffect(() => {
     const element = listRef.current;
     if (!element) {
       return;
     }
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry && entry.contentRect.height > 0) {
-        setViewportHeight(entry.contentRect.height);
-      }
-    });
+    const observer = new ResizeObserver(() => measure());
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [measure]);
 
   // 搜索词走 useDeferredValue：打字时先更新输入框，筛选结果滞后一拍，
   // 长列表下不会因为每个按键都重算 500 行的过滤而掉帧。
@@ -145,11 +173,6 @@ export function Processes() {
       <div className="page__head">
         <Kicker index="01">{t('process.title')}</Kicker>
         <div className="page__tools">
-          <SearchField
-            value={search}
-            onChange={setSearch}
-            placeholder={t('process.search.placeholder')}
-          />
           <button type="button" className="native-button" onClick={() => void onRefresh()}>
             {t('process.refresh')}
           </button>
@@ -173,23 +196,25 @@ export function Processes() {
           </div>
         }
       >
-        <div className="vtable" ref={listRef}>
+        <div className="vtable">
           <div className="vrow vrow--head">
             <span className="vrow__pid">{t('process.pid')}</span>
             <span className="vrow__name">{t('process.name')}</span>
             <span className="vrow__port">{t('process.port')}</span>
           </div>
-          <VirtualList
-            items={sorted}
-            height={viewportHeight}
-            rowHeight={26}
-            overscan={8}
-            getKey={(row) => String(row.pid)}
-            renderRow={(row) => (
-              <ProcessRowView row={row} onSelect={setPendingKill} />
-            )}
-            empty={t('process.empty')}
-          />
+          <div className="vtable__body" ref={listRef}>
+            <VirtualList
+              items={sorted}
+              height={viewportHeight}
+              rowHeight={26}
+              overscan={8}
+              getKey={(row) => String(row.pid)}
+              renderRow={(row) => (
+                <ProcessRowView row={row} onSelect={setPendingKill} />
+              )}
+              empty={t('process.empty')}
+            />
+          </div>
         </div>
       </Card>
 

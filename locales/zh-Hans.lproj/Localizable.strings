@@ -151,6 +151,13 @@
 "common.back" = "返回";
 "common.done" = "完成";
 
+"bottom.cpu" = "CPU";
+"bottom.memory" = "内存";
+"bottom.disk" = "磁盘";
+"bottom.cpuLoad" = "CPU 负载";
+"bottom.processes" = "进程";
+"bottom.network" = "网络";
+
 "process.empty" = "没有匹配的进程";
 "process.count" = "共 %@ 个进程";
 "process.kill.done" = "已结束进程 %@";
