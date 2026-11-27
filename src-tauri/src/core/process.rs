@@ -294,6 +294,22 @@ mod tests {
         );
     }
 
+    /// `collect_and_store` 必须把采集结果写回缓存。
+    ///
+    /// 右键「结束进程」走的就是这条路径：它只调用 `collect` 时，
+    /// 被杀掉的进程会继续留在缓存里，底栏进程总数与 `list_processes`
+    /// 都停在杀之前的快照。
+    #[test]
+    fn collect_and_store_fills_cache() {
+        let mut manager = ProcessManager::default();
+        manager.collect_and_store(4);
+        assert!(
+            !manager.processes.is_empty(),
+            "collect_and_store() 应把采集结果写回缓存"
+        );
+        assert!(manager.processes.len() <= 4);
+    }
+
     #[test]
     fn kill_process_rejects_non_positive_pid() {
         assert!(!ProcessManager::kill_process(0));

@@ -12,13 +12,24 @@ const ZH_HANS: &str = include_str!("../../../locales/zh-Hans.lproj/Localizable.s
 const EN: &str = include_str!("../../../locales/en.lproj/Localizable.strings");
 
 /// 支持的语言。
+///
+/// 规范写法是 kebab-case（`zh-hans` / `en`），但历史上出现过三种写法：
+/// - `zh-Hans`：Swift 版 `@AppStorage` 用的 BCP-47 风格；
+/// - `ZhHans`：egui 版 Rust 枚举的默认变体名；
+/// - `zh-hans`：当前规范写法。
+///
+/// 三者都要能反序列化 —— `Settings::load()` 解析失败会**整份配置退回默认值**，
+/// 旧用户换个版本就丢掉全部设置；`update_settings` 解析失败则会让整个设置补丁
+/// 被丢弃，语言切回中文直接失效。
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Locale {
     /// 简体中文
     #[default]
+    #[serde(alias = "zh-Hans", alias = "ZhHans")]
     ZhHans,
     /// 英文
+    #[serde(alias = "En")]
     En,
 }
 
@@ -194,6 +205,37 @@ fn read_quoted(chars: &[char], start: usize) -> Option<(String, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 三种历史写法都必须能反序列化。
+    ///
+    /// 写错的后果不只是这一个字段失效：
+    /// - `Settings::load()` 解析失败 → **整份配置退回默认值**（旧用户设置全丢）；
+    /// - `update_settings` 解析失败 → **整个设置补丁被丢弃**，切语言直接不生效，
+    ///   而且前端 `void patch(...)` 把异常吞掉，界面毫无反馈。
+    #[test]
+    fn accepts_every_historical_locale_spelling() {
+        for raw in ["zh-hans", "zh-Hans", "ZhHans"] {
+            let parsed: Locale = serde_json::from_str(&format!("\"{raw}\""))
+                .unwrap_or_else(|err| panic!("`{raw}` 应可反序列化: {err}"));
+            assert_eq!(parsed, Locale::ZhHans);
+        }
+
+        for raw in ["en", "En"] {
+            let parsed: Locale = serde_json::from_str(&format!("\"{raw}\""))
+                .unwrap_or_else(|err| panic!("`{raw}` 应可反序列化: {err}"));
+            assert_eq!(parsed, Locale::En);
+        }
+    }
+
+    /// 规范写法必须保持不变：前端按这个值比对选中态，落盘也按这个值写。
+    #[test]
+    fn serializes_to_the_canonical_kebab_case_form() {
+        assert_eq!(
+            serde_json::to_string(&Locale::ZhHans).unwrap(),
+            "\"zh-hans\""
+        );
+        assert_eq!(serde_json::to_string(&Locale::En).unwrap(), "\"en\"");
+    }
 
     #[test]
     fn parses_keys_and_values() {

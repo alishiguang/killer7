@@ -41,7 +41,7 @@ export interface SystemInfoDto {
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type Accent = 'signal' | 'haze' | 'moss' | 'amber';
-export type Locale = 'zh-Hans' | 'en';
+export type Locale = 'zh-hans' | 'en';
 
 export interface Settings {
   showMenuBar: boolean;

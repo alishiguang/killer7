@@ -22,7 +22,7 @@ vi.mock('../lib/bridge', () => ({
       accent: 'signal',
       launchAtLogin: false,
       globalShortcutEnabled: true,
-      locale: 'zh-Hans',
+      locale: 'zh-hans',
     }),
     getStrings: vi.fn().mockResolvedValue({
       'nav.process': '进程管理',
@@ -80,7 +80,7 @@ vi.mock('../lib/store', async () => {
     activeTab: 'processes',
     settingsOpen: false,
     toast: null,
-    locale: 'zh-Hans',
+    locale: 'zh-hans',
     search: '',
   };
   return {

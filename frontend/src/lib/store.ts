@@ -16,7 +16,7 @@ export interface AppState {
   /** 顶部提示。 */
   toast: (Notice & { id: number }) | null;
   /** 界面语言。 */
-  locale: 'zh-Hans' | 'en';
+  locale: 'zh-hans' | 'en';
   /** 工具栏搜索词。搜索框在工具栏上（与活动监视器一致），因此提到外壳级共享。 */
   search: string;
 }
@@ -27,7 +27,7 @@ const initialState: AppState = {
   activeTab: 'processes',
   settingsOpen: false,
   toast: null,
-  locale: 'zh-Hans',
+  locale: 'zh-hans',
   search: '',
 };
 

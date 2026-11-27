@@ -27,42 +27,6 @@ pub fn show_main_window(app: AppHandle) {
     }
 }
 
-/// 切换菜单栏模式（隐藏 Dock 图标）。
-#[tauri::command]
-pub fn set_menu_bar_mode(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: bool) {
-    {
-        let mut settings = state.settings.lock().expect("设置锁中毒");
-        settings.show_menu_bar = enabled;
-    }
-    // 落盘放在锁外：`mutex.lock().unwrap().save()` 这条语句里的 MutexGuard
-    // 会活到语句结束，`save()` 执行期间锁**仍然被持有**（Task 15 评审实测确认）。
-    // 要真的锁外，得先把设置克隆出来再写盘。
-    let snapshot = state.settings.lock().expect("设置锁中毒").clone();
-    snapshot.save();
-
-    crate::system::activation::set_accessory_mode(enabled, &app);
-
-    if enabled {
-        let _ = app.get_webview_window("main").map(|w| w.hide());
-    } else {
-        let _ = app.get_webview_window("main").map(|w| w.show());
-    }
-}
-
-/// 启用或停用全局快捷键。
-#[tauri::command]
-pub fn set_shortcut_enabled(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: bool) {
-    {
-        let mut settings = state.settings.lock().expect("设置锁中毒");
-        settings.global_shortcut_enabled = enabled;
-    }
-    // 落盘放在锁外，理由同 `set_menu_bar_mode`。
-    let snapshot = state.settings.lock().expect("设置锁中毒").clone();
-    snapshot.save();
-
-    crate::system::shortcut::set_enabled(&app, enabled);
-}
-
 /// 启用或停用开机自启。
 ///
 /// 设置项 `launch_at_login` 与 LaunchAgent 的真实状态必须是**同一个真相源**：

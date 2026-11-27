@@ -86,7 +86,7 @@
 "settings.bundleId" = "Bundle ID";
 "settings.copyright" = "Copyright";
 "settings.enableMenuBar" = "Enable Menu Bar Mode";
-"settings.menuBar.hint" = "When enabled, app icon appears in menu bar";
+"settings.menuBar.hint" = "When enabled, the app no longer takes a Dock slot and lives in the menu bar";
 "settings.autoLaunch" = "Launch at Login";
 "settings.autoLaunch.hint" = "When enabled, app starts automatically when you log in";
 "settings.startup" = "Startup";

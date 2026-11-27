@@ -53,8 +53,6 @@ export const api = {
 
   hideMainWindow: () => invoke<void>('hide_main_window'),
   showMainWindow: () => invoke<void>('show_main_window'),
-  setMenuBarMode: (enabled: boolean) => invoke<void>('set_menu_bar_mode', { enabled }),
-  setShortcutEnabled: (enabled: boolean) => invoke<void>('set_shortcut_enabled', { enabled }),
   setAutoLaunch: (enabled: boolean) => invoke<void>('set_auto_launch', { enabled }),
   popupContextMenu: (kind: string, payload: unknown) =>
     invoke<void>('popup_context_menu', { kind, payload }),

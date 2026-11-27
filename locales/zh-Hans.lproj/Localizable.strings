@@ -86,7 +86,7 @@
 "settings.bundleId" = "Bundle ID";
 "settings.copyright" = "版权";
 "settings.enableMenuBar" = "启用菜单栏模式";
-"settings.menuBar.hint" = "启用后，应用将在菜单栏显示图标";
+"settings.menuBar.hint" = "启用后应用不再占用 Dock 图标位置，只在菜单栏常驻";
 "settings.autoLaunch" = "开机自启动";
 "settings.autoLaunch.hint" = "启用后，应用将在登录时自动启动";
 "settings.startup" = "启动项";

@@ -11,6 +11,34 @@ use objc2::MainThreadMarker;
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
 use tauri::{AppHandle, Manager, Runtime};
 
+/// 应用「菜单栏模式」：切换 Dock 占用 + 主窗口显隐。
+///
+/// 这是菜单栏模式的**唯一入口**，启动路径（`lib.rs`）与设置热更新路径
+/// （`commands::settings::update_settings`）都必须走这里。
+///
+/// 以前两条路径各写一半：启动时会隐藏主窗口，运行期切换却只改激活策略，
+/// 于是「勾上开关窗口还留在桌面上、重启后窗口又不见了」——
+/// 同一个设置项在运行中与重启后表现相反。
+///
+/// 语义（README「Dock / 菜单栏模式」）：
+/// - `true`：不占 Dock 位置，主窗口隐藏，应用只在菜单栏常驻；
+/// - `false`：恢复常规 Dock 模式，主窗口显示。
+///
+/// 同样**必须在主线程调用**（`MainThreadMarker::new()`）。
+pub fn apply_menu_bar_mode<R: Runtime>(enabled: bool, app: &AppHandle<R>) {
+    set_accessory_mode(enabled, app);
+
+    // 激活策略切换失败时 `set_accessory_mode` 已经做过降级（隐藏窗口）；
+    // 这里仍按目标状态统一处理显隐，保证「不占 Dock ⇒ 窗口不在桌面上」。
+    if let Some(window) = app.get_webview_window("main") {
+        if enabled {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+        }
+    }
+}
+
 /// 设置激活策略：`true` 为仅菜单栏（不占 Dock），`false` 为常规（占 Dock）。
 ///
 /// 切换失败时**真正执行**降级：隐藏主窗口，让应用退回「只在菜单栏可见」的效果。
@@ -34,5 +62,37 @@ pub fn set_accessory_mode<R: Runtime>(enabled: bool, app: &AppHandle<R>) {
         if enabled && let Some(window) = app.get_webview_window("main") {
             let _ = window.hide();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// 菜单栏模式的**所有**路径必须走 `apply_menu_bar_mode`。
+    ///
+    /// 这条不变量曾经被破坏过：启动路径自己藏窗口，运行期热更新只切激活策略，
+    /// 两者行为相反。单元测试没法拉起 `AppHandle` 去观察窗口显隐，
+    /// 所以用源码级断言守住「只有一条入口」这条结构性约束
+    /// （与 `autolaunch::enable` 不许调 `launchctl load` 的守门方式一致）。
+    #[test]
+    fn menu_bar_mode_has_a_single_entry_point() {
+        let settings_cmd = include_str!("../commands/settings.rs");
+        assert!(
+            settings_cmd.contains("apply_menu_bar_mode"),
+            "设置热更新必须走 activation::apply_menu_bar_mode"
+        );
+        assert!(
+            !settings_cmd.contains("set_accessory_mode"),
+            "设置热更新不得绕过 apply_menu_bar_mode 直接切激活策略"
+        );
+
+        let lib = include_str!("../lib.rs");
+        assert!(
+            lib.contains("apply_menu_bar_mode"),
+            "启动路径必须走 activation::apply_menu_bar_mode"
+        );
+        assert!(
+            !lib.contains("set_accessory_mode"),
+            "启动路径不得绕过 apply_menu_bar_mode 直接切激活策略"
+        );
     }
 }

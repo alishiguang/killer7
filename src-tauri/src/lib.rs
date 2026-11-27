@@ -69,15 +69,16 @@ pub fn run() {
             }
 
             // Dock / 菜单栏模式必须在启动时按已保存的设置复现一次。
-            // 只在 `update_settings` / `set_menu_bar_mode` 里应用是不够的：
-            // 那两条路径只覆盖「本次运行中切换」的情况，用户开启菜单栏模式后
+            // 只在 `update_settings` 里应用是不够的：
+            // 那条路径只覆盖「本次运行中切换」的情况，用户开启菜单栏模式后
             // 重启应用会重新变回常规 Dock 模式，设置形同虚设。
-            // 这里的顺序与 `commands::system::set_menu_bar_mode` 保持一致。
+            //
+            // 这里与设置热更新走同一个入口 `activation::apply_menu_bar_mode`，
+            // 保证「运行中切换」与「重启后生效」表现一致。
             {
                 let show_menu_bar = state.settings.lock().expect("设置锁中毒").show_menu_bar;
                 if show_menu_bar {
-                    crate::system::activation::set_accessory_mode(true, &handle);
-                    let _ = app.get_webview_window("main").map(|w| w.hide());
+                    crate::system::activation::apply_menu_bar_mode(true, &handle);
                 }
             }
 

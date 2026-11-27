@@ -33,13 +33,11 @@ pub fn is_content_change(kind: &notify::EventKind) -> bool {
 pub fn spawn_process_loop(app: AppHandle, state: Arc<AppState>) {
     std::thread::spawn(move || {
         loop {
-            let (limit, interval_ms) = {
-                let settings = state.settings.lock().expect("设置锁中毒");
-                (
-                    settings.process_list_limit,
-                    state.sample_interval_ms.load(Ordering::Relaxed),
-                )
-            };
+            let limit = state
+                .settings
+                .lock()
+                .expect("设置锁中毒")
+                .process_list_limit;
 
             let rows = {
                 let mut processes = state.processes.lock().expect("进程锁中毒");
@@ -55,6 +53,9 @@ pub fn spawn_process_loop(app: AppHandle, state: Arc<AppState>) {
 
             let _ = app.emit(EV_PROCESSES, rows);
 
+            // 间隔在**睡之前**读：设置里改完刷新频率，下一轮立刻按新周期走，
+            // 不用再多等一个旧间隔。
+            let interval_ms = state.sample_interval_ms.load(Ordering::Relaxed);
             std::thread::sleep(Duration::from_millis(interval_ms.max(500)));
         }
     });
@@ -116,6 +117,11 @@ pub fn spawn_monitor_loop(
         // 算出来的上传 / 下载速度永远是 0。
         let mut networks = sysinfo::Networks::new_with_refreshed_list();
 
+        // 采样器记住「上次刷新网络计数器」的时刻：
+        // 关闭网络监控期间不刷新，重新打开时增量覆盖整个停用区间，
+        // 除数必须用真实间隔而不是标称采样间隔。
+        let mut sampler = monitor::NetworkSampler::new();
+
         let mut first = true;
         loop {
             let interval = (interval_ms.load(Ordering::Relaxed) as f64 / 1000.0).max(0.5);
@@ -125,7 +131,7 @@ pub fn spawn_monitor_loop(
             }
             first = false;
 
-            let info = monitor::sample(
+            let info = sampler.sample(
                 &mut system,
                 &mut networks,
                 interval,

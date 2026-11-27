@@ -19,9 +19,15 @@ export function Settings() {
   }, [settings]);
 
   const patch = useCallback(async (delta: Partial<SettingsDto>) => {
-    const next = await api.updateSettings(delta);
-    applyTheme(next.themeMode, next.accent);
-    setState({ settings: next });
+    try {
+      const next = await api.updateSettings(delta);
+      applyTheme(next.themeMode, next.accent);
+      setState({ settings: next });
+    } catch (error) {
+      // 设置写入失败必须让用户看见：静默失败会表现为「开关点了没反应」，
+      // 而后端已经把原因写进 stderr，界面上一个字都没有。
+      pushToast('error', String(error));
+    }
   }, []);
 
   if (!settings) {
@@ -85,7 +91,7 @@ export function Settings() {
               value={settings.locale}
               onChange={(value) => void patch({ locale: value })}
               options={[
-                { value: 'zh-Hans', label: '简体中文' },
+                { value: 'zh-hans', label: '简体中文' },
                 { value: 'en', label: 'English' },
               ]}
             />
@@ -124,6 +130,7 @@ export function Settings() {
             <span className="setting-label">{t('settings.networkMonitor')}</span>
             <Checkbox
               checked={settings.enableNetworkMonitor}
+              ariaLabel={t('settings.networkMonitor')}
               onChange={(checked) => void patch({ enableNetworkMonitor: checked })}
             />
           </div>
@@ -135,6 +142,7 @@ export function Settings() {
             <span className="setting-label">{t('settings.enableMenuBar')}</span>
             <Checkbox
               checked={settings.showMenuBar}
+              ariaLabel={t('settings.enableMenuBar')}
               onChange={(checked) => void patch({ showMenuBar: checked })}
             />
           </div>
@@ -144,6 +152,7 @@ export function Settings() {
             <span className="setting-label">{t('settings.autoLaunch')}</span>
             <Checkbox
               checked={settings.launchAtLogin}
+              ariaLabel={t('settings.autoLaunch')}
               onChange={async (checked) => {
                 try {
                   await api.setAutoLaunch(checked);
@@ -160,6 +169,7 @@ export function Settings() {
             <span className="setting-label">{t('settings.globalShortcut')}</span>
             <Checkbox
               checked={settings.globalShortcutEnabled}
+              ariaLabel={t('settings.globalShortcut')}
               onChange={(checked) => void patch({ globalShortcutEnabled: checked })}
             />
           </div>

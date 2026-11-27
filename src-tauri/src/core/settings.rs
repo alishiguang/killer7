@@ -247,6 +247,29 @@ mod tests {
         assert!(text.contains("\"autoRefreshInterval\""));
     }
 
+    /// egui 版写下的配置里 `locale` 是枚举变体名 `ZhHans`。
+    ///
+    /// 这份文件必须能**整份**解析：任何一个字段解析失败，
+    /// `Settings::load()` 都会退回默认值，旧用户的设置全丢。
+    #[test]
+    fn reads_legacy_egui_config_with_variant_name_locale() {
+        let legacy = r#"{
+            "show_menu_bar": false,
+            "auto_refresh_interval": 5.0,
+            "process_list_limit": 500,
+            "enable_network_monitor": true,
+            "theme_mode": "dark",
+            "accent": "signal",
+            "launch_at_login": false,
+            "global_shortcut_enabled": true,
+            "locale": "ZhHans"
+        }"#;
+        let parsed: Settings = serde_json::from_str(legacy).expect("旧配置应可解析");
+        assert_eq!(parsed.locale, Locale::ZhHans);
+        assert_eq!(parsed.theme_mode, ThemeMode::Dark);
+        assert_eq!(parsed.process_list_limit, 500);
+    }
+
     #[test]
     fn migrates_legacy_data_dir_only_once() {
         let base = std::env::temp_dir().join(format!(

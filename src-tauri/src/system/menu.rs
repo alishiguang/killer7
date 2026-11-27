@@ -176,8 +176,13 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
                         .expect("设置锁中毒")
                         .process_list_limit;
                     let mut processes = state.processes.lock().expect("进程锁中毒");
+                    // 必须用 `collect_and_store` 而不是 `collect`：
+                    // `collect` 只更新端口缓存、不写 `processes`，
+                    // 被杀掉的进程会继续留在缓存里 —— 底栏的进程总数
+                    // 与 `list_processes` 的结果都会停留在杀之前的快照。
+                    processes.collect_and_store(limit);
                     processes
-                        .collect(limit)
+                        .processes
                         .iter()
                         .map(crate::commands::dto::ProcessRow::from)
                         .collect::<Vec<_>>()

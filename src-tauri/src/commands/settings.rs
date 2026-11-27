@@ -82,7 +82,7 @@ pub fn update_settings(
 
     // 菜单栏模式与全局快捷键的变化需要立即作用到原生层。
     if previous.show_menu_bar != next.show_menu_bar {
-        crate::system::activation::set_accessory_mode(next.show_menu_bar, &app);
+        crate::system::activation::apply_menu_bar_mode(next.show_menu_bar, &app);
     }
 
     if previous.global_shortcut_enabled != next.global_shortcut_enabled {
