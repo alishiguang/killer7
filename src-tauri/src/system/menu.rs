@@ -99,13 +99,6 @@ pub fn build(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
                 true,
                 Some("CmdOrCtrl+3"),
             )?,
-            &MenuItem::with_id(
-                app,
-                "nav:monitor",
-                i18n.t("nav.monitor"),
-                true,
-                Some("CmdOrCtrl+4"),
-            )?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, Some(&i18n.t("view.fullscreen")))?,
         ],

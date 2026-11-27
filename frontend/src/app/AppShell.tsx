@@ -5,11 +5,11 @@ import { applyTheme } from '../lib/theme';
 import { pushToast, setState, useAppStore } from '../lib/store';
 import type { TabId } from '../lib/types';
 import { BottomBar } from './BottomBar';
+import { SearchBar } from './SearchBar';
 import { Toast } from './Toast';
 import { Toolbar } from './Toolbar';
 import { Clipboard } from '../pages/Clipboard';
 import { Files } from '../pages/Files';
-import { Monitor } from '../pages/Monitor';
 import { Processes } from '../pages/Processes';
 import { Settings } from '../pages/Settings';
 
@@ -17,7 +17,6 @@ const PAGES = {
   processes: Processes,
   files: Files,
   clipboard: Clipboard,
-  monitor: Monitor,
 } as const;
 
 export function AppShell() {
@@ -90,13 +89,13 @@ export function AppShell() {
 
   const Page = PAGES[state.activeTab] ?? Processes;
 
-  // 底部汇总栏是「工具页的全局资源摘要」。系统监控页顶部已经有 CPU/内存/磁盘的
-  // KPI 卡与两张采样曲线，底栏与之重复；设置页也不需要它。两处都隐藏。
-  const showBottomBar = !state.settingsOpen && state.activeTab !== 'monitor';
+  // 底部汇总栏是「工具页的全局资源摘要」。设置页不需要它 —— 那里没有列表可看。
+  const showBottomBar = !state.settingsOpen;
 
   return (
     <div className="app-shell">
       <Toolbar />
+      {state.settingsOpen ? null : <SearchBar />}
       <main className="app-shell__content">
         {state.settingsOpen ? <Settings /> : <Page />}
       </main>

@@ -3,6 +3,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'rea
 import { Card, DataTable, Icon, Kicker, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
+import { nextSort, type SortState } from '../lib/sort';
 import { pushToast, useAppStore } from '../lib/store';
 import type { HistoryRow } from '../lib/types';
 
@@ -18,6 +19,8 @@ export function Clipboard() {
   const [state] = useAppStore();
   const [current, setCurrent] = useState('');
   const [history, setHistory] = useState<HistoryRow[]>([]);
+  /** 排序：默认按时间倒序（新的在前），点表头切换方向。 */
+  const [sort, setSort] = useState<SortState>({ key: 'time', dir: 'desc' });
 
   // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
   const search = state.search;
@@ -66,61 +69,25 @@ export function Clipboard() {
         key: 'content',
         title: t('clipboard.history'),
         width: 'remainder',
+        sortValue: (row) => row.content,
         render: (row) => <span title={row.content}>{row.content}</span>,
       },
       {
         key: 'kind',
         title: t('clipboard.column.type'),
         width: 90,
+        sortValue: (row) => row.kind,
         render: (row) => <span className="text-muted">{t(KIND_KEYS[row.kind] ?? 'clipboard.type.text')}</span>,
       },
       {
         key: 'time',
         title: t('clipboard.column.time'),
         width: 130,
+        sortValue: (row) => row.timestamp,
         render: (row) => <span className="mono">{formatTime(row.timestamp)}</span>,
       },
-      {
-        key: 'action',
-        title: t('file.column.action'),
-        width: 140,
-        render: (row) => (
-          <div className="row-actions">
-            <button
-              type="button"
-              className="native-button native-button--icon"
-              title={t('clipboard.copy')}
-              aria-label={t('clipboard.copy')}
-              onClick={async (event) => {
-                event.stopPropagation();
-                await api.copyText(row.content);
-                pushToast('info', t('clipboard.copied'));
-              }}
-            >
-              <Icon name="copy" />
-            </button>
-            <button
-              type="button"
-              className="native-button native-button--icon"
-              title={t('clipboard.delete')}
-              aria-label={t('clipboard.delete')}
-              onClick={async (event) => {
-                event.stopPropagation();
-                try {
-                  await api.removeHistoryItem(row.id);
-                  await reload();
-                } catch (error) {
-                  pushToast('error', String(error));
-                }
-              }}
-            >
-              <Icon name="trash" />
-            </button>
-          </div>
-        ),
-      },
     ],
-    [reload, t],
+    [t],
   );
 
   return (
@@ -160,6 +127,9 @@ export function Clipboard() {
           getKey={(row) => String(row.id)}
           onRowContextMenu={handleRowContextMenu}
           empty={t('clipboard.empty')}
+          sortKey={sort.key}
+          sortDir={sort.dir}
+          onSort={(key) => setSort((prev) => nextSort(prev, key))}
         />
       </Card>
     </div>

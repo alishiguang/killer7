@@ -1,13 +1,13 @@
-import { Icon, SearchField } from '../components';
+import { Icon } from '../components';
 import { useI18n } from '../lib/i18n';
 import { useAppStore } from '../lib/store';
 import { TABS } from './navigation';
 
 /**
- * 工具栏：左侧品牌与当前页，中间横向标签条，右侧搜索框与设置按钮。
+ * 工具栏：左侧品牌，中间**居中**的标签条，右侧设置齿轮。
  *
- * 结构参考 macOS「活动监视器」——它没有左侧栏，用工具栏里的分段标签切换视图，
- * 搜索框也放在工具栏右侧。搜索词因此是外壳级共享状态（见 `store.ts` 的 `search`）。
+ * 标签条用绝对定位居中（见 base.css 的 `.tabstrip`），左右两侧宽度不一样时
+ * 也不会把标签推偏 —— 这是 macOS 应用（如 Safari）居中标签栏的标准做法。
  *
  * 设置不占标签位：它只是一个角落里的齿轮按钮，避免为一个低频视图在主导航上
  * 占一个长期位置（见 `navigation.ts` 的说明）。
@@ -33,7 +33,7 @@ export function Toolbar() {
               type="button"
               role="tab"
               className="tabstrip__item"
-              aria-selected={state.activeTab === tab.id}
+              aria-selected={!state.settingsOpen && state.activeTab === tab.id}
               onClick={() => setState({ activeTab: tab.id, settingsOpen: false })}
             >
               {t(tab.labelKey)}
@@ -43,16 +43,6 @@ export function Toolbar() {
       </nav>
 
       <div className="toolbar__spacer" data-tauri-drag-region />
-
-      {state.settingsOpen ? null : (
-        <div className="toolbar__search">
-          <SearchField
-            value={state.search}
-            onChange={(value) => setState({ search: value })}
-            placeholder={t('common.search')}
-          />
-        </div>
-      )}
 
       <button
         type="button"

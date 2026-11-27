@@ -18,7 +18,6 @@ vi.mock('../lib/bridge', () => ({
     homeDir: vi.fn().mockResolvedValue('/tmp'),
     pickDirectory: vi.fn().mockResolvedValue(null),
     parentDir: vi.fn().mockResolvedValue('/tmp'),
-    revealInFinder: vi.fn().mockResolvedValue(undefined),
     renamePath: vi.fn().mockResolvedValue(undefined),
     deleteToTrash,
     createFolder: vi.fn().mockResolvedValue(undefined),
@@ -42,7 +41,6 @@ vi.mock('../lib/store', async () => {
       'file.column.name': '名称',
       'file.column.size': '大小',
       'file.column.modified': '修改时间',
-      'file.column.action': '操作',
       'file.newFile': '新建文件',
       'file.newFolder': '新建文件夹',
       'file.openFolder': '进入文件夹',
@@ -87,6 +85,19 @@ describe('Files', () => {
     render(<Files />);
     expect(await screen.findByText('名称')).toBeInTheDocument();
     expect(await screen.findByText('大小')).toBeInTheDocument();
+  });
+
+  it('表头可点击排序，且没有行内操作列', async () => {
+    render(<Files />);
+    await screen.findByText('a.txt');
+
+    // 行内按钮与「操作」列已下线，动作全部走原生右键菜单。
+    expect(screen.queryByText('操作')).not.toBeInTheDocument();
+
+    // 点「大小」表头按大小排序：sub 是目录（0），a.txt 是 12 字节。
+    fireEvent.click(screen.getByRole('button', { name: '大小' }));
+    const names = screen.getAllByRole('row').slice(1).map((row) => row.textContent ?? '');
+    expect(names[0]).toContain('sub');
   });
 
   it('显示新建文件夹与新建文件按钮', async () => {

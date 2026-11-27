@@ -6,5 +6,6 @@ export { Kicker } from './Kicker';
 export { Modal } from './Modal';
 export { SearchField } from './SearchField';
 export { Segmented } from './Segmented';
+export { SortButton } from './SortButton';
 export { Sparkline } from './Sparkline';
 export { VirtualList } from './VirtualList';

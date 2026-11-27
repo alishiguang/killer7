@@ -35,7 +35,6 @@ export interface SystemInfoDto {
   networkUpload: number;
   networkDownload: number;
   cpuHistory: number[];
-  memoryHistory: number[];
   /** 当前进程总数（取自进程缓存）。 */
   processCount: number;
 }
@@ -63,4 +62,4 @@ export interface Notice {
   message: string;
 }
 
-export type TabId = 'processes' | 'files' | 'clipboard' | 'monitor';
+export type TabId = 'processes' | 'files' | 'clipboard';

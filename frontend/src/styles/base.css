@@ -129,6 +129,39 @@ figure {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
+/* 可排序表头：全应用唯一的排序入口 */
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: default;
+}
+
+.th-sort--right {
+  justify-content: flex-end;
+}
+
+.th-sort__arrow {
+  flex: 0 0 auto;
+  opacity: 0;
+}
+
+.th-sort:hover .th-sort__arrow {
+  opacity: 0.4;
+}
+
+.th-sort[data-active='true'] .th-sort__arrow {
+  opacity: 1;
+}
+
 /* 搜索框 */
 .search-field {
   display: flex;
@@ -245,6 +278,7 @@ figure {
 
 /* 工具栏 */
 .toolbar {
+  position: relative;
   height: var(--toolbar-height);
   flex: 0 0 var(--toolbar-height);
   display: flex;
@@ -283,23 +317,31 @@ figure {
   height: 100%;
 }
 
-.toolbar__search {
-  width: 220px;
-  flex: 0 0 220px;
-}
-
 /* 工具栏右上角的设置按钮：角落里的一个齿轮，不占主导航的位置 */
 .toolbar__settings {
   flex: 0 0 auto;
   margin-left: 10px;
 }
 
-/* 标签条：工具组与系统组之间有一道细分隔 */
+/* 标签条：绝对定位居中，左右两侧宽度不同时也不会被推偏 */
 .tabstrip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+/* 搜索条：工具栏下面独占一行 */
+.searchbar {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 18px;
+  background: var(--bg);
 }
 
 .tabstrip__slot {
@@ -523,6 +565,7 @@ figure {
 .vrow__pid {
   text-align: right;
   padding-right: 10px;
+  justify-content: flex-end;
 }
 
 .vrow__name,
@@ -541,11 +584,6 @@ figure {
 .file-name__glyph {
   color: var(--accent);
   font-size: 9px;
-}
-
-.row-actions {
-  display: flex;
-  gap: 4px;
 }
 
 .clipboard-current {

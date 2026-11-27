@@ -32,8 +32,6 @@ pub struct SystemMonitor {
     pub system_info: SystemInfo,
     /// CPU 使用率采样历史，用于绘制曲线。
     pub cpu_history: Vec<f64>,
-    /// 内存使用率采样历史。
-    pub memory_history: Vec<f64>,
 }
 
 impl SystemMonitor {
@@ -41,15 +39,11 @@ impl SystemMonitor {
     pub fn push_sample(&mut self, info: SystemInfo) {
         self.system_info = info;
         self.cpu_history.push(info.cpu_usage);
-        self.memory_history.push(info.memory_usage);
 
         // 只保留最近 120 个采样点，避免内存无限增长。
         const MAX_SAMPLES: usize = 120;
         if self.cpu_history.len() > MAX_SAMPLES {
             self.cpu_history.remove(0);
-        }
-        if self.memory_history.len() > MAX_SAMPLES {
-            self.memory_history.remove(0);
         }
     }
 }

@@ -6,7 +6,6 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::commands::dto::FileRow;
-use crate::core::platform;
 use crate::events::EV_FILES_CHANGED;
 use crate::state::AppState;
 
@@ -109,12 +108,6 @@ pub fn delete_to_trash(
     }
 }
 
-/// 在 Finder 中定位。
-#[tauri::command]
-pub fn reveal_in_finder(path: String) {
-    platform::reveal_in_finder(Path::new(&path));
-}
-
 /// 返回上级目录，根目录返回 None。
 #[tauri::command]
 pub fn parent_dir(path: String) -> Option<String> {
@@ -124,12 +117,6 @@ pub fn parent_dir(path: String) -> Option<String> {
         // 相对路径的 parent 是空串，空串不是有效目录，要一并挡掉。
         .filter(|parent| !parent.as_os_str().is_empty())
         .map(|parent| parent.to_string_lossy().to_string())
-}
-
-/// 复制文本到系统剪贴板。
-#[tauri::command]
-pub fn copy_text(text: String) {
-    platform::copy_to_clipboard(&text);
 }
 
 /// 用户主目录（文件页的初始目录）。

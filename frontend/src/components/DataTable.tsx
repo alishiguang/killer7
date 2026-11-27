@@ -1,4 +1,7 @@
-import { memo, type ReactElement, type ReactNode } from 'react';
+import { memo, useMemo, type ReactElement, type ReactNode } from 'react';
+
+import { compareValues, type SortDir } from '../lib/sort';
+import { SortButton } from './SortButton';
 
 export interface Column<T> {
   /** 列 key。 */
@@ -11,6 +14,8 @@ export interface Column<T> {
   render: (item: T, index: number) => ReactNode;
   /** 右对齐。 */
   align?: 'left' | 'right';
+  /** 排序取值。给了这一列，表头才能点。 */
+  sortValue?: (item: T) => string | number;
 }
 
 export interface DataTableProps<T> {
@@ -28,6 +33,12 @@ export interface DataTableProps<T> {
   selectedKey?: string | null;
   /** 空态内容。 */
   empty?: ReactNode;
+  /** 当前排序列的 key（对应 Column.key）。 */
+  sortKey?: string | null;
+  /** 当前排序方向。 */
+  sortDir?: SortDir;
+  /** 点击表头切换排序。 */
+  onSort?: (key: string) => void;
 }
 
 /** 表格行的 props。 */
@@ -91,7 +102,24 @@ export function DataTable<T>({
   onRowContextMenu,
   selectedKey,
   empty,
+  sortKey,
+  sortDir = 'asc',
+  onSort,
 }: DataTableProps<T>) {
+  // 排序放在组件内部：页面只管给 sortKey / sortDir / onSort，
+  // 少一处「忘了排序」的可能。
+  const sorted = useMemo(() => {
+    if (!sortKey) {
+      return items;
+    }
+    const column = columns.find((item) => item.key === sortKey);
+    if (!column?.sortValue) {
+      return items;
+    }
+    const factor = sortDir === 'desc' ? -1 : 1;
+    return [...items].sort((a, b) => factor * compareValues(column.sortValue!(a), column.sortValue!(b)));
+  }, [columns, items, sortDir, sortKey]);
+
   return (
     <table className="data-table">
       <colgroup>
@@ -110,20 +138,30 @@ export function DataTable<T>({
         <tr>
           {columns.map((column) => (
             <th key={column.key} style={{ textAlign: column.align ?? 'left' }}>
-              {column.title}
+              {column.sortValue && onSort ? (
+                <SortButton
+                  label={column.title}
+                  className={column.align === 'right' ? 'th-sort--right' : undefined}
+                  active={sortKey === column.key}
+                  dir={sortDir}
+                  onClick={() => onSort(column.key)}
+                />
+              ) : (
+                column.title
+              )}
             </th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {items.length === 0 ? (
+        {sorted.length === 0 ? (
           <tr>
             <td colSpan={columns.length} className="empty-state">
               {empty ?? '暂无数据'}
             </td>
           </tr>
         ) : (
-          items.map((item, index) => {
+          sorted.map((item, index) => {
             const key = getKey(item, index);
             return (
               <TableRow

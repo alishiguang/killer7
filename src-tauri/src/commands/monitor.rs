@@ -20,7 +20,6 @@ pub fn system_snapshot(state: State<'_, Arc<AppState>>) -> SystemInfoDto {
         network_upload: monitor.system_info.network_upload,
         network_download: monitor.system_info.network_download,
         cpu_history: monitor.cpu_history.clone(),
-        memory_history: monitor.memory_history.clone(),
         process_count,
     }
 }

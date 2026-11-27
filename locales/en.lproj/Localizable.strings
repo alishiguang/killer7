@@ -36,7 +36,6 @@
 "file.column.name" = "Name";
 "file.column.size" = "Size";
 "file.column.modified" = "Modified";
-"file.column.action" = "Actions";
 "file.open" = "Open";
 "file.openFolder" = "Enter Folder";
 "file.rename" = "Rename";
@@ -66,13 +65,6 @@
 "clipboard.empty" = "(Empty)";
 
 // MARK: - System Monitor
-"monitor.title" = "System Monitor";
-"monitor.cpu" = "CPU Usage";
-"monitor.memory" = "Memory Usage";
-"monitor.disk" = "Disk Usage";
-"monitor.network" = "Network Speed";
-"monitor.upload" = "Upload";
-"monitor.download" = "Download";
 
 // MARK: - Menu Bar
 "menubar.title" = "Ki6";
@@ -133,7 +125,6 @@
 "nav.process" = "Processes";
 "nav.file" = "Files";
 "nav.clipboard" = "Clipboard";
-"nav.monitor" = "Monitor";
 
 "common.search" = "Search";
 "common.all" = "All";
@@ -174,9 +165,6 @@
 "clipboard.history.count" = "%@ items";
 "clipboard.type.text" = "Text";
 
-"monitor.cpu.history" = "CPU samples";
-"monitor.memory.history" = "Memory samples";
-"monitor.last" = "Last %@ seconds";
 
 "settings.accent" = "Accent";
 "settings.accent.signal" = "Signal Red";

@@ -16,6 +16,8 @@ export type IconName =
   | 'arrow-up'
   | 'arrow-left'
   | 'gear'
+  | 'sort-asc'
+  | 'sort-desc'
   | 'pencil'
   | 'trash'
   | 'copy'
@@ -83,6 +85,10 @@ const PATHS: Record<IconName, ReactNode> = {
       <line x1="7.1" y1="16.9" x2="5.3" y2="18.7" />
     </>
   ),
+  // 升序三角：表头当前列的排序方向指示
+  'sort-asc': <path d="M12 7l5 6H7z" />,
+  // 降序三角
+  'sort-desc': <path d="M12 17l-5-6h10z" />,
   // 铅笔：重命名
   pencil: <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />,
   // 垃圾桶：删除

@@ -8,9 +8,7 @@ vi.mock('../lib/bridge', () => ({
     clipboardHistory: vi.fn().mockResolvedValue([
       { id: 1, content: '第一条历史', timestamp: 1700000000, kind: 'text' },
     ]),
-    removeHistoryItem: vi.fn().mockResolvedValue(undefined),
     clearHistory: vi.fn().mockResolvedValue(undefined),
-    copyText: vi.fn().mockResolvedValue(undefined),
   },
   onEvent: vi.fn().mockResolvedValue(() => {}),
 }));
@@ -30,7 +28,6 @@ vi.mock('../lib/store', async () => {
       'clipboard.delete': '删除',
       'clipboard.empty': '（空）',
       'clipboard.copied': '已复制到剪贴板',
-      'file.column.action': '操作',
       'common.more': '更多',
     },
     activeTab: 'clipboard',

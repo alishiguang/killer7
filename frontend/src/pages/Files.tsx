@@ -3,6 +3,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'rea
 import { Card, DataTable, Icon, Kicker, Modal, type Column } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
+import { nextSort, type SortState } from '../lib/sort';
 import { pushToast, useAppStore } from '../lib/store';
 import type { FileRow } from '../lib/types';
 
@@ -17,6 +18,8 @@ export function Files() {
   const [createValue, setCreateValue] = useState('');
   /** 原生右键菜单当前对应的行（「重命名 / 删除」需要它才能继续）。 */
   const [contextRow, setContextRow] = useState<FileRow | null>(null);
+  /** 排序：默认按名称升序，点表头切换方向。 */
+  const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' });
 
   // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
   const search = state.search;
@@ -68,6 +71,7 @@ export function Files() {
         key: 'name',
         title: t('file.column.name'),
         width: 'remainder',
+        sortValue: (row) => row.name,
         render: (row) => (
           <span className="file-name">
             <span className="file-name__glyph" aria-hidden="true">
@@ -82,76 +86,15 @@ export function Files() {
         title: t('file.column.size'),
         width: 100,
         align: 'right',
+        sortValue: (row) => row.size,
         render: (row) => <span className="mono">{row.sizeText}</span>,
       },
       {
         key: 'modified',
         title: t('file.column.modified'),
         width: 130,
+        sortValue: (row) => row.modified,
         render: (row) => <span className="mono">{formatTime(row.modified)}</span>,
-      },
-      {
-        key: 'action',
-        title: t('file.column.action'),
-        // 三个操作按钮（进入文件夹 / 重命名 / 删除）改成图标后，
-        // 原来为文字按钮准备的 230px 就富余了，收窄到 96px。
-        width: 96,
-        render: (row) => (
-          <div className="row-actions">
-            {row.isDir ? (
-              <button
-                type="button"
-                className="native-button native-button--icon"
-                title={t('file.openFolder')}
-                aria-label={t('file.openFolder')}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void enter(row);
-                }}
-              >
-                <Icon name="folder-open" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="native-button native-button--icon"
-                title={t('file.reveal')}
-                aria-label={t('file.reveal')}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void api.revealInFinder(row.path);
-                }}
-              >
-                <Icon name="external-link" />
-              </button>
-            )}
-            <button
-              type="button"
-              className="native-button native-button--icon"
-              title={t('file.rename')}
-              aria-label={t('file.rename')}
-              onClick={(event) => {
-                event.stopPropagation();
-                setRenaming(row);
-                setRenameValue(row.name);
-              }}
-            >
-              <Icon name="pencil" />
-            </button>
-            <button
-              type="button"
-              className="native-button native-button--icon"
-              title={t('file.delete')}
-              aria-label={t('file.delete')}
-              onClick={(event) => {
-                event.stopPropagation();
-                void remove(row);
-              }}
-            >
-              <Icon name="trash" />
-            </button>
-          </div>
-        ),
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -338,6 +281,9 @@ export function Files() {
           onRowClick={handleRowClick}
           onRowContextMenu={handleRowContextMenu}
           empty={t('common.empty')}
+          sortKey={sort.key}
+          sortDir={sort.dir}
+          onSort={(key) => setSort((prev) => nextSort(prev, key))}
         />
       </Card>
 

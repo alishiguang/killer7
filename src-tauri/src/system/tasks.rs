@@ -142,7 +142,6 @@ pub fn spawn_monitor_loop(
                     network_upload: mon.system_info.network_upload,
                     network_download: mon.system_info.network_download,
                     cpu_history: mon.cpu_history.clone(),
-                    memory_history: mon.memory_history.clone(),
                     // 进程总数直接读进程缓存的长度，不额外采集。
                     process_count: state.processes.lock().expect("进程锁中毒").processes.len(),
                 }

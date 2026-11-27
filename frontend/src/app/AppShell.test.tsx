@@ -28,7 +28,6 @@ vi.mock('../lib/bridge', () => ({
       'nav.process': '进程管理',
       'nav.file': '文件管理',
       'nav.clipboard': '剪贴板',
-      'nav.monitor': '系统监控',
       'settings.title': '设置',
       'app.brand': 'KI6',
       'app.tagline': 'MACOS 系统工具箱',
@@ -67,7 +66,6 @@ vi.mock('../lib/store', async () => {
       'nav.process': '进程管理',
       'nav.file': '文件管理',
       'nav.clipboard': '剪贴板',
-      'nav.monitor': '系统监控',
       'settings.title': '设置',
       'app.brand': 'KI6',
       'app.tagline': 'MACOS 系统工具箱',
@@ -99,20 +97,21 @@ describe('AppShell', () => {
     vi.clearAllMocks();
   });
 
-  it('渲染品牌与四个标签页', async () => {
+  it('渲染品牌与三个标签页', async () => {
     render(<AppShell />);
     expect(await screen.findByText('KI6')).toBeInTheDocument();
 
-    // 四个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
-    // 设置不占标签位，它由工具栏角落的齿轮按钮进入。
+    // 三个标签在工具栏的标签条里（活动监视器式布局，没有左侧栏）。
+    // 设置不占标签位，它由工具栏角落的齿轮按钮进入；系统监控页已整体下线。
     const tabs = screen.getByRole('tablist');
-    for (const label of ['进程管理', '文件管理', '剪贴板', '系统监控']) {
+    for (const label of ['进程管理', '文件管理', '剪贴板']) {
       expect(await within(tabs).findByRole('tab', { name: label })).toBeInTheDocument();
     }
     expect(within(tabs).queryByRole('tab', { name: '设置' })).not.toBeInTheDocument();
+    expect(within(tabs).queryByRole('tab', { name: '系统监控' })).not.toBeInTheDocument();
   });
 
-  it('工具栏上有搜索框、设置按钮，底部有汇总栏', async () => {
+  it('搜索框在工具栏下面单独一行，右侧有设置按钮，底部有汇总栏', async () => {
     render(<AppShell />);
     expect(await screen.findByPlaceholderText('搜索')).toBeInTheDocument();
 

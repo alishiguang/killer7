@@ -37,15 +37,12 @@ export const api = {
   renamePath: (path: string, newName: string) =>
     invoke<void>('rename_path', { path, newName }),
   deleteToTrash: (path: string) => invoke<void>('delete_to_trash', { path }),
-  revealInFinder: (path: string) => invoke<void>('reveal_in_finder', { path }),
   parentDir: (path: string) => invoke<string | null>('parent_dir', { path }),
-  copyText: (text: string) => invoke<void>('copy_text', { text }),
   homeDir: () => invoke<string>('home_dir'),
   watchDir: (path: string) => invoke<void>('watch_dir', { path }),
 
   clipboardCurrent: () => invoke<string>('clipboard_current'),
   clipboardHistory: () => invoke<HistoryRow[]>('clipboard_history'),
-  removeHistoryItem: (id: number) => invoke<void>('remove_history_item', { id }),
   clearHistory: () => invoke<void>('clear_history'),
 
   systemSnapshot: () => invoke<SystemInfoDto>('system_snapshot'),

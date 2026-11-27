@@ -9,13 +9,12 @@ import {
   useState,
 } from 'react';
 
-import { Card, Icon, Kicker, Modal, Segmented, VirtualList } from '../components';
+import { Card, Icon, Kicker, Modal, SortButton, VirtualList } from '../components';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
+import { nextSort, type SortState } from '../lib/sort';
 import { pushToast, useAppStore } from '../lib/store';
 import type { ProcessRow } from '../lib/types';
-
-type SortKey = 'pid' | 'name' | 'port';
 
 /**
  * 进程列表的一行。
@@ -60,7 +59,7 @@ export function Processes() {
   const { t } = useI18n();
   const [state] = useAppStore();
   const [rows, setRows] = useState<ProcessRow[]>([]);
-  const [sortKey, setSortKey] = useState<SortKey>('pid');
+  const [sort, setSort] = useState<SortState>({ key: 'pid', dir: 'asc' });
   const [pendingKill, setPendingKill] = useState<ProcessRow | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [viewportHeight, setViewportHeight] = useState(420);
@@ -136,17 +135,18 @@ export function Processes() {
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
+    const factor = sort.dir === 'desc' ? -1 : 1;
     copy.sort((a, b) => {
-      if (sortKey === 'name') {
-        return a.displayName.localeCompare(b.displayName);
+      if (sort.key === 'name') {
+        return factor * a.displayName.localeCompare(b.displayName);
       }
-      if (sortKey === 'port') {
-        return (a.ports[0]?.port ?? 65535) - (b.ports[0]?.port ?? 65535);
+      if (sort.key === 'port') {
+        return factor * ((a.ports[0]?.port ?? 65535) - (b.ports[0]?.port ?? 65535));
       }
-      return a.pid - b.pid;
+      return factor * (a.pid - b.pid);
     });
     return copy;
-  }, [filtered, sortKey]);
+  }, [filtered, sort]);
 
   const onRefresh = useCallback(async () => {
     const list = await api.refreshProcesses();
@@ -185,28 +185,30 @@ export function Processes() {
         </div>
       </div>
 
-      <Card
-        title={t('process.count', [String(sorted.length)])}
-        className="page__card"
-        actions={
-          <div className="page__tools">
-            <Segmented<SortKey>
-              value={sortKey}
-              onChange={setSortKey}
-              options={[
-                { value: 'pid', label: t('process.pid') },
-                { value: 'name', label: t('process.name') },
-                { value: 'port', label: t('process.port') },
-              ]}
-            />
-          </div>
-        }
-      >
+      <Card title={t('process.count', [String(sorted.length)])} className="page__card">
         <div className="vtable">
           <div className="vrow vrow--head">
-            <span className="vrow__pid">{t('process.pid')}</span>
-            <span className="vrow__name">{t('process.name')}</span>
-            <span className="vrow__port">{t('process.port')}</span>
+            <SortButton
+              className="vrow__pid"
+              label={t('process.pid')}
+              active={sort.key === 'pid'}
+              dir={sort.dir}
+              onClick={() => setSort((prev) => nextSort(prev, 'pid'))}
+            />
+            <SortButton
+              className="vrow__name"
+              label={t('process.name')}
+              active={sort.key === 'name'}
+              dir={sort.dir}
+              onClick={() => setSort((prev) => nextSort(prev, 'name'))}
+            />
+            <SortButton
+              className="vrow__port"
+              label={t('process.port')}
+              active={sort.key === 'port'}
+              dir={sort.dir}
+              onClick={() => setSort((prev) => nextSort(prev, 'port'))}
+            />
           </div>
           <div className="vtable__body" ref={listRef}>
             <VirtualList

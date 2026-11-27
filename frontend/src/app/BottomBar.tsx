@@ -12,7 +12,6 @@ const EMPTY: SystemInfoDto = {
   networkUpload: 0,
   networkDownload: 0,
   cpuHistory: [],
-  memoryHistory: [],
   processCount: 0,
 };
 
