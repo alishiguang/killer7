@@ -9,21 +9,20 @@ import { TABS } from './navigation';
  * 标签条用绝对定位居中（见 base.css 的 `.tabstrip`），左右两侧宽度不一样时
  * 也不会把标签推偏 —— 这是 macOS 应用（如 Safari）居中标签栏的标准做法。
  *
+ * 品牌块只留一个 wordmark：当前页名已经有两处出处（标签条的高亮项、页面自己的
+ * 编号标题），再在角上写一遍只是挤占红绿灯旁边的空间。
+ *
  * 设置不占标签位：它只是一个角落里的齿轮按钮，避免为一个低频视图在主导航上
  * 占一个长期位置（见 `navigation.ts` 的说明）。
  */
 export function Toolbar() {
   const { t } = useI18n();
   const [state, setState] = useAppStore();
-  const current = TABS.find((tab) => tab.id === state.activeTab);
-  // 品牌副标题跟着当前视图走：设置是覆盖视图，打开时副标题显示「设置」。
-  const brandTag = state.settingsOpen ? t('settings.title') : current ? t(current.labelKey) : '';
 
   return (
     <header className="toolbar">
       <div className="toolbar__brand" data-tauri-drag-region>
         <span className="toolbar__brand-name">{t('app.brand')}</span>
-        <span className="toolbar__brand-tag">{brandTag}</span>
       </div>
 
       <nav className="tabstrip" role="tablist" aria-label={t('app.brand')}>

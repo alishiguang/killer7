@@ -42,9 +42,8 @@ Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保�
 | --- |
 | ![设置](docs/screenshots/tauri-settings.png) |
 
-> 截图取自真实运行数据（真实进程、真实目录、真实剪贴板内容）。
-> 截图在 Chromium headless 里渲染 —— CSS、字体、布局与 WKWebView 同源，
-> 但不是 WKWebView 实拍。
+> 截图取自**正在运行的 Ki6 应用本身**（真实 WKWebView 渲染，真实进程、
+> 真实目录、真实剪贴板内容），窗口尺寸 960×620。
 
 ### 布局
 

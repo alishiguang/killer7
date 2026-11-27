@@ -285,14 +285,13 @@ figure {
   align-items: center;
   gap: 16px;
   border-bottom: 1px solid var(--border);
-  padding: 0 12px 0 78px; /* 给红绿灯留位 */
+  padding: 0 12px 0 96px; /* 给红绿灯留位：绿灯到 x≈77，wordmark 从 96 起 */
   background: var(--surface);
 }
 
 .toolbar__brand {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
+  align-items: center;
   line-height: 1.15;
   user-select: none;
 }
@@ -302,14 +301,6 @@ figure {
   font-size: 14px;
   letter-spacing: 0.08em;
   color: var(--text);
-}
-
-.toolbar__brand-tag {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-muted);
 }
 
 .toolbar__spacer {
