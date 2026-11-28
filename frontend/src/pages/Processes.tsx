@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import { Card, Icon, Kicker, Modal, SortButton, VirtualList } from '../components';
+import { PageSearch } from '../app/PageSearch';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
 import { nextSort, type SortState } from '../lib/sort';
@@ -172,16 +173,19 @@ export function Processes() {
     <div className="page">
       <div className="page__head">
         <Kicker index="01">{t('process.title')}</Kicker>
-        <div className="page__tools">
-          <button
-            type="button"
-            className="native-button native-button--icon"
-            title={t('process.refresh')}
-            aria-label={t('process.refresh')}
-            onClick={() => void onRefresh()}
-          >
-            <Icon name="refresh" />
-          </button>
+        <div className="page__head-actions">
+          <PageSearch />
+          <div className="page__tools">
+            <button
+              type="button"
+              className="native-button native-button--icon"
+              title={t('process.refresh')}
+              aria-label={t('process.refresh')}
+              onClick={() => void onRefresh()}
+            >
+              <Icon name="refresh" />
+            </button>
+          </div>
         </div>
       </div>
 

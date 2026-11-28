@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
 import { Card, DataTable, Icon, Kicker, type Column } from '../components';
+import { PageSearch } from '../app/PageSearch';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
 import { nextSort, type SortState } from '../lib/sort';
@@ -94,23 +95,26 @@ export function Clipboard() {
     <div className="page">
       <div className="page__head">
         <Kicker index="03">{t('clipboard.title')}</Kicker>
-        <div className="page__tools">
-          <button
-            type="button"
-            className="native-button native-button--icon"
-            title={t('clipboard.clearHistory')}
-            aria-label={t('clipboard.clearHistory')}
-            onClick={async () => {
-              try {
-                await api.clearHistory();
-                await reload();
-              } catch (error) {
-                pushToast('error', String(error));
-              }
-            }}
-          >
-            <Icon name="x-circle" />
-          </button>
+        <div className="page__head-actions">
+          <PageSearch />
+          <div className="page__tools">
+            <button
+              type="button"
+              className="native-button native-button--icon"
+              title={t('clipboard.clearHistory')}
+              aria-label={t('clipboard.clearHistory')}
+              onClick={async () => {
+                try {
+                  await api.clearHistory();
+                  await reload();
+                } catch (error) {
+                  pushToast('error', String(error));
+                }
+              }}
+            >
+              <Icon name="x-circle" />
+            </button>
+          </div>
         </div>
       </div>
 

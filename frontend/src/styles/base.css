@@ -326,15 +326,6 @@ figure {
 }
 
 /* 搜索条：工具栏下面独占一行 */
-.searchbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 6px 18px;
-  background: var(--bg);
-}
-
 .tabstrip__slot {
   display: inline-flex;
   align-items: center;
@@ -474,6 +465,13 @@ figure {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 页头右侧：搜索框 + 该页的操作按钮 */
+.page__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .page__tools {

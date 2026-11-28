@@ -5,7 +5,6 @@ import { applyTheme } from '../lib/theme';
 import { pushToast, setState, useAppStore } from '../lib/store';
 import type { TabId } from '../lib/types';
 import { BottomBar } from './BottomBar';
-import { SearchBar } from './SearchBar';
 import { Toast } from './Toast';
 import { Toolbar } from './Toolbar';
 import { Clipboard } from '../pages/Clipboard';
@@ -95,7 +94,6 @@ export function AppShell() {
   return (
     <div className="app-shell">
       <Toolbar />
-      {state.settingsOpen ? null : <SearchBar />}
       <main className="app-shell__content">
         {state.settingsOpen ? <Settings /> : <Page />}
       </main>

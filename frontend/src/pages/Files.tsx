@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 
 import { Card, DataTable, Icon, Kicker, Modal, type Column } from '../components';
+import { PageSearch } from '../app/PageSearch';
 import { EVENT, api, onEvent } from '../lib/bridge';
 import { useI18n } from '../lib/i18n';
 import { nextSort, type SortState } from '../lib/sort';
@@ -219,57 +220,60 @@ export function Files() {
     <div className="page">
       <div className="page__head">
         <Kicker index="02">{t('file.title')}</Kicker>
-        <div className="page__tools">
-          <button
-            type="button"
-            className="native-button native-button--icon"
-            title={t('file.openFolder')}
-            aria-label={t('file.openFolder')}
-            onClick={async () => {
-              const picked = await api.pickDirectory();
-              if (!picked) {
-                return;
-              }
-              setCwd(picked);
-              await load(picked);
-              await api.watchDir(picked);
-            }}
-          >
-            <Icon name="folder" />
-          </button>
-          <button
-            type="button"
-            className="native-button native-button--icon"
-            title={t('common.back')}
-            aria-label={t('common.back')}
-            onClick={() => void goUp()}
-          >
-            <Icon name="arrow-up" />
-          </button>
-          <button
-            type="button"
-            className="native-button native-button--icon"
-            title={t('file.newFile')}
-            aria-label={t('file.newFile')}
-            onClick={() => {
-              setCreating('file');
-              setCreateValue('');
-            }}
-          >
-            <Icon name="file-plus" />
-          </button>
-          <button
-            type="button"
-            className="native-button native-button--icon"
-            title={t('file.newFolder')}
-            aria-label={t('file.newFolder')}
-            onClick={() => {
-              setCreating('folder');
-              setCreateValue('');
-            }}
-          >
-            <Icon name="folder-plus" />
-          </button>
+        <div className="page__head-actions">
+          <PageSearch />
+          <div className="page__tools">
+            <button
+              type="button"
+              className="native-button native-button--icon"
+              title={t('file.openFolder')}
+              aria-label={t('file.openFolder')}
+              onClick={async () => {
+                const picked = await api.pickDirectory();
+                if (!picked) {
+                  return;
+                }
+                setCwd(picked);
+                await load(picked);
+                await api.watchDir(picked);
+              }}
+            >
+              <Icon name="folder" />
+            </button>
+            <button
+              type="button"
+              className="native-button native-button--icon"
+              title={t('common.back')}
+              aria-label={t('common.back')}
+              onClick={() => void goUp()}
+            >
+              <Icon name="arrow-up" />
+            </button>
+            <button
+              type="button"
+              className="native-button native-button--icon"
+              title={t('file.newFile')}
+              aria-label={t('file.newFile')}
+              onClick={() => {
+                setCreating('file');
+                setCreateValue('');
+              }}
+            >
+              <Icon name="file-plus" />
+            </button>
+            <button
+              type="button"
+              className="native-button native-button--icon"
+              title={t('file.newFolder')}
+              aria-label={t('file.newFolder')}
+              onClick={() => {
+                setCreating('folder');
+                setCreateValue('');
+              }}
+            >
+              <Icon name="folder-plus" />
+            </button>
+          </div>
         </div>
       </div>
 
