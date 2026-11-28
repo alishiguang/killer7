@@ -373,4 +373,34 @@ mod tests {
             }
         }
     }
+
+    /// 托盘模式的说法必须与当前平台一致。
+    ///
+    /// macOS 说「菜单栏」、Windows 说「托盘」/「任务栏」——
+    /// 在 Windows 上显示「Dock 图标位置」是错的。
+    #[test]
+    fn tray_mode_wording_matches_the_platform() {
+        for locale in [Locale::ZhHans, Locale::En] {
+            let i18n = I18n::new(locale);
+            let label = i18n.t("settings.enableMenuBar");
+            let hint = i18n.t("settings.menuBar.hint");
+            assert!(!label.is_empty() && !hint.is_empty());
+
+            if cfg!(target_os = "windows") {
+                assert!(
+                    !hint.contains("Dock"),
+                    "Windows 的提示文案不应提到 Dock，实际是：{hint}"
+                );
+                assert!(
+                    !label.contains("菜单栏") && !label.contains("Menu Bar"),
+                    "Windows 的开关名不应叫「菜单栏模式」，实际是：{label}"
+                );
+            } else {
+                assert!(
+                    !hint.contains("任务栏"),
+                    "非 Windows 平台的提示文案不应提到任务栏，实际是：{hint}"
+                );
+            }
+        }
+    }
 }

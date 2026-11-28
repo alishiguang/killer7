@@ -86,7 +86,9 @@
 "settings.bundleId" = "Bundle ID";
 "settings.copyright" = "Copyright";
 "settings.enableMenuBar" = "Enable Menu Bar Mode";
+"settings.enableMenuBar.windows" = "Enable Tray Mode";
 "settings.menuBar.hint" = "When enabled, the app no longer takes a Dock slot and lives in the menu bar";
+"settings.menuBar.hint.windows" = "When enabled, the app no longer takes a taskbar slot and lives in the tray";
 "settings.autoLaunch" = "Launch at Login";
 "settings.autoLaunch.hint" = "When enabled, app starts automatically when you log in";
 "settings.startup" = "Startup";
@@ -116,7 +118,6 @@
 
 // MARK: - View Menu
 "view.menu" = "View";
-"view.menuBar.mode" = "Menu Bar Mode";
 
 // MARK: - Ki6 branding
 "app.brand" = "KI6";

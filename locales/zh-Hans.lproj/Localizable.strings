@@ -86,7 +86,9 @@
 "settings.bundleId" = "Bundle ID";
 "settings.copyright" = "版权";
 "settings.enableMenuBar" = "启用菜单栏模式";
+"settings.enableMenuBar.windows" = "启用托盘模式";
 "settings.menuBar.hint" = "启用后应用不再占用 Dock 图标位置，只在菜单栏常驻";
+"settings.menuBar.hint.windows" = "启用后应用不再占用任务栏图标位置，只在托盘常驻";
 "settings.autoLaunch" = "开机自启动";
 "settings.autoLaunch.hint" = "启用后，应用将在登录时自动启动";
 "settings.startup" = "启动项";
@@ -116,7 +118,6 @@
 
 // MARK: - View Menu
 "view.menu" = "视图";
-"view.menuBar.mode" = "菜单栏模式";
 
 // MARK: - Ki6 品牌
 "app.brand" = "KI6";
