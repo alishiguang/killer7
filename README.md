@@ -1,34 +1,39 @@
 # Ki6
 
-> 鸬鹚工具箱 —— macOS 系统工具箱 · **Tauri v2 + React + TypeScript 重写版**
->
-> 进程管理 · 文件管理 · 剪贴板管理 · 原生菜单栏 · 托盘 · 全局快捷键
+> 鸬鹚工具箱 —— 进程管理 · 文件管理 · 剪贴板管理 · 系统监控 · 全局快捷键
 
-Ki6 是 [LuciBox](https://github.com/hagenmagpie/LuciBox)（SwiftUI + AppKit）的 **Rust +
-Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保持一致，界面语言换成更克制的
-「ink / paper」暗色系，交互层则换成 macOS 原生能力。
+Ki6 是一个常驻托盘的桌面工具箱：把每天都要看的**进程、文件、剪贴板、系统指标**
+收进同一个窗口，做成一张可以一直开着的列表。
 
-> 界面风格参考 [cindy.cn](https://cindy.cn)：近黑底色、奶油色文字、单一强调色，
-> 发丝级描边、等宽全大写小标题，以及宽字距的展示字体。
+界面是克制的 ink / paper 暗色语言（近黑底、奶油色文字、单一强调色），
+交互模型只有一条，跨页一致：
+
+> **单击 = 选中变色 · 双击 = 主操作 · 右键 = 全部功能**
 
 ---
 
 ## 下载
 
-最新版本 **[Ki6 1.2.0](https://github.com/chuaker7/Ki6/releases/tag/v1.2.0)**（Apple Silicon）：
+### macOS（Apple Silicon）
 
 | 文件 | 说明 |
 | --- | --- |
 | [`Ki6_1.2.0_aarch64.dmg`](release/Ki6_1.2.0_aarch64.dmg) | 磁盘映像，双击后拖进「应用程序」 |
 | [`Ki6.zip`](release/Ki6.zip) | `Ki6.app` 的压缩包，解压即用 |
 
-两个文件同时挂在 [Releases 页面](https://github.com/chuaker7/Ki6/releases/tag/v1.2.0) 上作为附件，
+最低系统版本 macOS 12.0。首次运行未签名（ad-hoc 签名），Gatekeeper 会拦一下 ——
+在「系统设置 → 隐私与安全性」里点「仍要打开」，或右键点「打开」。
+
+### Windows（x64）
+
+| 文件 | 说明 |
+| --- | --- |
+| `Ki6_1.2.0_x64-setup.exe` | NSIS 安装包，安装界面简体中文 / English |
+
+安装包同样未做代码签名，SmartScreen 会提示未知发布者 —— 点「更多信息 → 仍要运行」。
+
+两个平台的文件都挂在 [Releases 页面](https://github.com/chuaker7/Ki6/releases/tag/v1.2.0) 上，
 仓库里的 `release/` 目录也各存了一份。
-
-首次运行是未签名的（ad-hoc 签名），Gatekeeper 会拦截 —— 在「系统设置 → 隐私与安全性」
-里点「仍要打开」，或右键点「打开」。
-
-> 最低系统版本 macOS 12.0。
 
 ---
 
@@ -42,18 +47,16 @@ Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保�
 | --- |
 | ![设置](docs/screenshots/tauri-settings.png) |
 
-> 截图取自**正在运行的 Ki6 应用本身**（真实 WKWebView 渲染，真实进程、
-> 真实目录、真实剪贴板内容），窗口尺寸 960×620。
+> 截图取自**正在运行的 Ki6 应用本身**（真实渲染、真实进程、真实目录、真实剪贴板内容），
+> 窗口尺寸 960×620。
 
 ### 布局
 
-界面结构参考 macOS「活动监视器」：
-
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ ●●●   KI6            进程 文件 剪贴板                  ⚙    │ ← 工具栏
+│  KI6             进程 文件 剪贴板                      ⚙    │ ← 工具栏
 ├──────────────────────────────────────────────────────────────┤
-│                                                 [⌕ 搜索]    │ ← 搜索条
+│  PROCESSES                              [⌕ 搜索]  [按钮…]    │ ← 页头行
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │                        当前页内容                              │
@@ -65,26 +68,12 @@ Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保�
 ```
 
 - **没有左侧栏**：工具栏里的标签条居中，点击切换视图
-- **搜索独占一行**：工具栏下面一行右侧，不再挤在标签条旁边
+- **搜索贴着操作按钮**：页头行右侧，搜索框在左、操作按钮在右，同属「作用于当前页」的一组
 - **设置不进标签条**：工具栏右上角一个齿轮按钮，低频入口不占主导航位置
 - **排序靠表头箭头**：点列头切换升/降序，没有额外的排序开关
 - **行内没有按钮**：复制、重命名、删除等动作都在原生右键菜单里
 - **底部汇总栏**：系统级指标 + CPU 负载曲线 + 进程数与网络速率
-- 配色与排版仍是 cindy.cn 的 ink / paper 暗色语言 —— 借的是**布局**，不是皮肤
-
----
-
-## 技术栈
-
-| 层 | 选型 | 版本 |
-| --- | --- | --- |
-| 桌面框架 | [Tauri v2](https://tauri.app) | 2.12.7 |
-| 前端 | React / React DOM | 19.3.1 |
-| 语言 | TypeScript | 5.9.3 |
-| 构建 | Vite | 7.1.5 |
-| 运行时 | Rust | 1.90 |
-| 原生能力 | `global-hotkey` · `objc2-app-kit` · `arboard` · `sysinfo` · `notify` · `trash` | 0.10 / 0.3 / 3.7 / 0.38 / 8.2 / 5.4 |
-| 测试 | `vitest` · `cargo test` | 3.2.7 |
+- 配色与排版是 ink / paper 暗色语言 —— 借的是**布局**，不是皮肤
 
 ---
 
@@ -92,92 +81,102 @@ Tauri v2 + React 19** 重写版。业务逻辑、数据来源与交互语义保�
 
 | 模块 | 能力 |
 | --- | --- |
-| **进程管理** | 列出全部系统进程（PID / 名称 / 监听端口）、实时搜索、点列头排序、右键查看与复制路径、结束进程（二次确认） |
-| **文件管理** | 目录浏览、新建文件与文件夹、重命名、删除到废纸篓、Finder 定位、复制路径、搜索、点列头排序、目录变更自动刷新 |
-| **剪贴板** | 查看当前剪贴板、最近 100 条历史、搜索、点列头排序、右键复制与单条删除、清空、本地持久化 |
-| **原生菜单栏** | 真正的 macOS 应用菜单（关于 / 设置 / 隐藏 / 退出 + 编辑 / 视图 / 窗口），⌘1–⌘3 切换页面，⌘, 打开设置 |
-| **原生右键菜单** | 进程 / 文件 / 剪贴板列表行的动作全部收在 macOS 原生右键菜单里（列表内没有按钮），菜单文案跟随应用语言 |
-| **托盘** | 菜单栏常驻小鸟图标，左键唤起主窗口，右键菜单显示实时指标 |
-| **全局快捷键** | `⌘ + L` 快速激活应用 |
-| **Dock / 菜单栏模式** | 可切换是否占用 Dock 图标位置 |
-| **开机自启** | LaunchAgent 方式，登录后自动拉起 |
+| **进程管理** | 列出全部系统进程（PID / 名称 / 监听端口）、实时搜索、点列头排序、复制可执行路径、结束进程（二次确认） |
+| **文件管理** | 目录浏览、新建文件与文件夹、重命名、删除到回收站、在文件管理器中定位、复制路径、搜索、点列头排序、目录变更自动刷新 |
+| **剪贴板** | 查看当前剪贴板、最近 100 条历史、搜索、点列头排序、复制与单条删除、清空、本地持久化 |
+| **应用菜单** | 一套完整的原生菜单（关于 / 设置 / 编辑 / 视图 / 窗口），⌘1–⌘3 切换页面，⌘, 打开设置 |
+| **原生右键菜单** | 进程 / 文件 / 剪贴板列表行的动作全部收在右键菜单里（列表内没有按钮），菜单文案跟随应用语言 |
+| **托盘** | 托盘常驻小鸟图标，左键唤起主窗口，右键菜单显示实时指标 |
+| **托盘模式** | 可切换是否占用 Dock / 任务栏图标位置，只在托盘常驻 |
+| **全局快捷键** | 一键快速激活应用（macOS `⌘+L`，Windows `Ctrl+Alt+L`） |
+| **开机自启** | 登录后自动拉起 |
 | **单实例** | 开机自启与手动打开撞车时只保留一个进程，第二次启动会把已有实例的窗口唤出来 |
 | **主题** | 跟随系统 / 浅色 / 深色，四种强调色，实时切换 |
-| **国际化** | 简体中文 / English，原生菜单栏与界面文案全部跟随应用语言 |
+| **国际化** | 简体中文 / English，应用菜单与界面文案全部跟随应用语言 |
+
+### 行交互模型
+
+三页共用一套模型，行为完全一致：
+
+| 操作 | 进程 | 文件 | 剪贴板 |
+| --- | --- | --- | --- |
+| **单击** | 选中高亮 | 选中高亮 | 选中高亮 |
+| **双击** | 结束进程（弹确认框） | 目录进入 / 文件用默认程序打开 | 复制到系统剪贴板 |
+| **右键** | 复制路径 · 结束进程 | 打开/进入 · 在文件管理器中显示 · 复制路径 · 重命名 · 删除 | 复制 · 删除 |
+
+右键时会把选中态先挪到目标行 —— 不会出现「高亮 A、菜单却操作 B」。
 
 ---
 
-## 快速开始
+## 技术架构
 
-需要 **Node ≥ 22.12** 与 **Rust 1.88+**（本仓库在 rustc 1.90 上开发）。
-
-```bash
-# 1. 前端依赖
-npm install
-
-# 2. 产出 frontend/dist —— Tauri 的 generate_context! 在编译期会校验它存在
-npm run build
-
-# 3. 编译 Rust 侧（这是 cargo 工作区，产物在仓库根的 target/ 下）
-cargo build --release -p chuaker7
-
-# 4. 运行
-./target/release/chuaker7
-```
-
-### 打包成 `.app`
-
-裸二进制在 Dock 与菜单栏行为上与 `.app` 包不同（菜单栏标题会继承宿主应用名），
-交付请打包后再使用：
-
-```bash
-npm run tauri build
-```
-
-产物位置（注意：这是 **cargo 工作区**，产物落在**仓库根**的 `target/` 下，
-不在 `src-tauri/target/`）：
+### 分层
 
 ```
-target/release/bundle/macos/Ki6.app          # 应用包
-target/release/bundle/dmg/Ki6_1.2.0_*.dmg   # 磁盘映像
+前端（React + TypeScript）
+  │  Tauri 命令 / 事件
+  ▼
+commands/        Tauri 命令门面：只做 DTO 转换与状态读写
+  │
+  ▼
+core/            纯业务逻辑：不依赖 tauri crate，全部可单测
+  │
+  ▼
+system/          原生集成与线程调度：菜单、托盘、快捷键、自启、激活策略
 ```
 
-验证：
+一条铁律：**`core/` 不依赖 `tauri` crate**。业务规则因此可以脱离窗口与事件循环单测，
+平台差异也不会渗进业务层。
 
-```bash
-open target/release/bundle/macos/Ki6.app
+### 状态模型
+
+**Rust 侧是唯一权威状态源。** 前端不是数据的所有者，它通过 `useSyncExternalStore`
+订阅 Rust 发出的事件来同步：
+
+```
+Rust AppState  ──emit──▶  前端 store  ──▶  组件
+      ▲                                          │
+      └──────────── invoke（命令）◀───────────────┘
 ```
 
-应用默认以**常规 Dock 模式**启动；在「设置 → 启动项」里可切换成**菜单栏模式**
-（不占 Dock 位置，只在菜单栏常驻）。该选择会被记住，重启后依然生效。
+后台采样（进程列表、剪贴板、系统指标）与文件监听各自跑在独立线程上，
+把结果写回 `AppState` 再广播给前端；前端只负责展示与发起动作。
 
-> 切到菜单栏模式时主窗口会一并隐藏（应用只在菜单栏里活着），
-> 按 `⌘+L` 或点菜单栏图标即可唤回窗口。
+### 平台适配
 
-> 标识符说明：应用**展示名**是 `Ki6`，但 crate 名、bundle identifier、数据目录
-> （`~/Library/Application Support/chuaker7`）一律是 `chuaker7` —— 它们是技术标识，
-> 改了会丢用户已有的设置与剪贴板历史。
+跨平台差异集中在一个 `backend` 子模块里收口，业务层看到的接口完全一致：
 
----
+| 能力 | macOS / Linux | Windows |
+| --- | --- | --- |
+| 进程列表 | `ps -eo pid=,comm=` | `sysinfo` |
+| 监听端口 | `lsof -nP -iTCP -sTCP:LISTEN` | `netstat -ano -p TCP` |
+| 结束进程 | `kill -9` | `taskkill /PID <pid> /F` |
+| 开机自启 | LaunchAgent plist | 注册表 Run 键 |
+| 托盘模式 | 切换激活策略 + 隐藏窗口 | 隐藏窗口 |
+| 全局快捷键 | `⌘+L` | `Ctrl+Alt+L` |
+| 文件定位 | 在文件管理器中选中 | 在资源管理器中选中 |
 
-## 架构
+依赖也按目标平台挂载：只服务于单一平台的库放在
+`[target.'cfg(target_os = "macos")'.dependencies]` 下，不进通用依赖表。
+
+### 目录结构
 
 ```
 Ki6/
-├── frontend/                  # React 19 + TypeScript 前端（Vite）
+├── frontend/                  # React + TypeScript 前端（Vite）
 │   ├── src/
 │   │   ├── main.tsx           # 入口
 │   │   ├── App.tsx            # 根组件（挂载 AppShell）
 │   │   ├── lib/               # Tauri 桥接层、store、类型
 │   │   ├── app/               # 应用外壳：AppShell / Toolbar / BottomBar / Toast / 导航
 │   │   ├── components/        # 通用组件（含 VirtualList / DataTable / Sparkline）
-│   │   ├── pages/             # 六个功能页
+│   │   ├── pages/             # 三个功能页 + 设置
 │   │   ├── styles/            # 设计令牌与基础样式
 │   │   └── test/setup.ts      # vitest 环境
 │   └── index.html
 ├── src-tauri/
 │   ├── src/
-│   │   ├── lib.rs             # Tauri Builder、Tauri 插件注册、命令注册
+│   │   ├── lib.rs             # Tauri Builder、插件注册、命令注册
 │   │   ├── main.rs            # 二进制入口
 │   │   ├── state.rs           # AppState（唯一权威状态源）
 │   │   ├── events.rs          # 前后端事件常量
@@ -187,62 +186,23 @@ Ki6/
 │   │   │   └── platform.rs  icon.rs
 │   │   ├── commands/          # Tauri command 门面 + DTO
 │   │   └── system/            # 原生集成
-│   │       ├── menu.rs        # 应用菜单栏
+│   │       ├── menu.rs        # 应用菜单
 │   │       ├── tray.rs        # 托盘图标与托盘菜单
 │   │       ├── shortcut.rs    # 全局快捷键
-│   │       ├── activation.rs  # Dock / 菜单栏模式
+│   │       ├── activation.rs  # 托盘模式
 │   │       ├── autolaunch.rs  # 开机自启
 │   │       ├── single_instance.rs # 单实例仲裁与唤起请求
 │   │       └── tasks.rs       # 后台采样与监听循环
 │   ├── Cargo.toml
-│   └── tauri.conf.json
+│   ├── tauri.conf.json
+│   ├── tauri.windows.conf.json
+│   └── icons/
 ├── locales/                   # 简体中文 / English 文案表
 ├── assets/fonts/              # Anton（展示体）+ Geist Mono（等宽），均为 SIL OFL
 ├── docs/
-└── scripts/
+├── scripts/
+└── .github/workflows/         # CI：Windows 构建
 ```
-
-**分层原则**：
-
-- `core/` 是**纯逻辑层**，不依赖 `tauri` crate，所有业务规则都可单测。
-- `system/` 负责线程调度与原生集成（菜单、托盘、快捷键、自启、激活策略）。
-- `commands/` 是薄门面，只做 DTO 转换与状态读写。
-- 前端**不是**权威状态源 —— Rust 侧是，前端通过 `useSyncExternalStore` 订阅事件同步。
-
----
-
-## 与 Swift 原版的对应关系
-
-| Swift 原版 | Rust + React 重写 |
-| --- | --- |
-| `LuciBoxApp.swift` | `src-tauri/src/lib.rs` + `src-tauri/src/state.rs` |
-| `ContentView.swift` | `frontend/src/App.tsx` + `frontend/src/app/AppShell.tsx` |
-| `ProcessManager.swift` | `src-tauri/src/core/process.rs` |
-| `FileManagerView.swift` | `src-tauri/src/core/files.rs` |
-| `ClipboardManager.swift` | `src-tauri/src/core/clipboard.rs` |
-| `SystemMonitor.swift` | `src-tauri/src/core/monitor.rs` |
-| `ThemeManager.swift` | `src-tauri/src/core/theme.rs` |
-| `MenuBarManager.swift` | `src-tauri/src/system/menu.rs` + `src-tauri/src/system/tray.rs` |
-| `GlobalShortcutManager.swift` | `src-tauri/src/system/shortcut.rs` |
-| `AutoLaunchManager.swift` | `src-tauri/src/system/autolaunch.rs` |
-| `Info.plist` / `@AppStorage` | `src-tauri/src/core/settings.rs`（`settings.json`） |
-| `Localizable.strings` | `locales/*/Localizable.strings`（原样复用） |
-
-### 实现差异
-
-| 方面 | Swift 版 | Rust + React 版 |
-| --- | --- | --- |
-| GUI | SwiftUI / AppKit | Tauri v2（WKWebView）+ React 19 |
-| 状态管理 | `@StateObject` / `ObservableObject` | Rust 为唯一权威状态源，前端 `useSyncExternalStore` 订阅事件 |
-| 进程列表 | `/bin/ps -eo pid,comm` | 同样调用 `ps`，解析在 Rust 侧完成 |
-| 监听端口 | `lsof` + `awk` 预处理 | `lsof` + Rust 侧解析（可显示真实绑定地址） |
-| 系统指标 | `host_processor_info` / `host_statistics64` / `getifaddrs` | `sysinfo` crate |
-| 剪贴板 | `NSPasteboard.changeCount` 轮询 | `arboard` crate 每秒读取比对 |
-| 目录监听 | `DispatchSource` | `notify` crate |
-| 全局快捷键 | `NSEvent.addGlobalMonitor` | `global-hotkey` crate（系统级注册，无需辅助功能权限） |
-| 开机自启 | `SMAppService`（macOS 13+） | LaunchAgent plist + `launchctl` |
-| Dock 模式 | `NSApplication.activationPolicy` | `objc2-app-kit` 直调 AppKit |
-| 设置存储 | `UserDefaults` | `~/Library/Application Support/chuaker7/settings.json` |
 
 ---
 
@@ -270,19 +230,40 @@ Ki6/
 ## 开发
 
 ```bash
+npm install
+npm run build       # tsc --noEmit && vite build
+cargo build --release -p chuaker7
+```
+
+> **构建顺序**：Tauri 的 `generate_context!` 在编译期会校验 `frontend/dist` 存在，
+> 所以任何 Rust 构建之前必须先跑一次 `npm run build`。
+
+日常检查：
+
+```bash
 npm run typecheck   # tsc --noEmit
 npm run test        # vitest
-npm run build       # tsc --noEmit && vite build
 cargo fmt           # 格式化
 cargo clippy -p chuaker7 --all-targets
 cargo test -p chuaker7
 ```
 
-前端开发服务器监听 1420 端口，`npm run tauri dev` 会拉起 Vite 与 Tauri 一起跑。
-字体是可选增强：若 `assets/fonts/` 下的字体文件缺失，构建会回退到系统字体。
+跨平台编译检查（不需要 Windows 机器，只查不链接）：
 
-> **构建顺序**：Tauri 的 `generate_context!` 在编译期会校验 `frontend/dist` 存在，
-> 所以任何 Rust 构建之前必须先跑一次 `npm run build`。
+```bash
+rustup target add x86_64-pc-windows-msvc
+cargo check --target x86_64-pc-windows-msvc --all-targets
+```
+
+打包：
+
+```bash
+npm run tauri build                      # 当前平台
+npm run tauri build -- --bundles nsis     # Windows 安装包（需在 Windows 上跑）
+```
+
+Windows 安装包由 CI 的 `windows-latest` 任务产出（`.github/workflows/release-windows.yml`），
+产物作为 workflow artifact 上传。
 
 ### 性能
 
@@ -307,5 +288,3 @@ cargo test -p chuaker7
   见 `assets/fonts/LICENSE-Anton.txt`
 - `assets/fonts/GeistMono-Variable.ttf` —— Geist Mono，SIL Open Font License 1.1，
   见 `assets/fonts/LICENSE-GeistMono.txt`
-
-原版 LuciBox 亦为 MIT 许可证，版权归 Igigi 所有。
