@@ -39,8 +39,8 @@
       "icons/icon.ico"
     ],
     "category": "Utility",
-    "shortDescription": "macOS 系统工具箱",
-    "longDescription": "Ki6 —— 进程管理、文件管理、剪贴板、系统监控、插件与设置。",
+    "shortDescription": "进程、文件、剪贴板与系统监控工具箱",
+    "longDescription": "Ki6 —— 进程管理、文件管理、剪贴板管理与系统监控。",
     "macOS": { "minimumSystemVersion": "12.0" }
   },
   "plugins": {}

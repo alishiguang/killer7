@@ -3,12 +3,12 @@ name = "chuaker7"
 version = "1.2.0"
 edition = "2024"
 rust-version = "1.89"  # File::try_lock（单实例保护）自 1.89 稳定
-description = "Ki6 — macOS 系统工具箱（Tauri v2 + React 重写版）"
+description = "Ki6 — 进程、文件、剪贴板与系统监控工具箱"
 authors = ["chuaker7 <chuaker7@users.noreply.github.com>"]
 license = "MIT"
 repository = "https://github.com/chuaker7/Ki6"
-keywords = ["macos", "toolbox", "tauri", "system-monitor"]
-categories = ["gui", "os::macos-apis"]
+keywords = ["toolbox", "tauri", "system-monitor", "process-manager"]
+categories = ["gui"]
 
 [lib]
 name = "chuaker7_lib"
@@ -32,6 +32,11 @@ notify = "8.2"
 trash = "5.4"
 open = "5.4"
 global-hotkey = "0.10"
+
+# objc2 系列只在 Apple 平台存在 —— `objc2` 在非 Apple 目标上会直接 compile_error!，
+# 所以必须按目标平台挂载，不能放进通用的 [dependencies]。
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri = { version = "2.12", features = ["macos-private-api"] }
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 

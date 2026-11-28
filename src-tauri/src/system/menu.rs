@@ -201,7 +201,7 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
             platform::open_path(std::path::Path::new(path));
         }
         ("ctx.file.reveal", ContextTarget::File { path, .. }) => {
-            platform::reveal_in_finder(std::path::Path::new(path));
+            platform::reveal_in_file_manager(std::path::Path::new(path));
         }
         ("ctx.file.copyPath", ContextTarget::File { path, .. }) => {
             platform::copy_to_clipboard(path);

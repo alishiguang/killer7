@@ -33,6 +33,22 @@ pub enum Locale {
     En,
 }
 
+/// 当前平台的文案后缀。
+///
+/// 带这个后缀的 key 会覆盖同名的基础 key：
+/// `settings.globalShortcut.hint.windows` 覆盖 `settings.globalShortcut.hint`。
+///
+/// 需要它是因为有些文案天然与平台绑定 —— 比如全局快捷键，
+/// macOS 是 ⌘+L，而 Windows 的 `Win+L` 是系统保留的「锁定屏幕」，
+/// 只能换成 Ctrl+Alt+L，提示文案也要跟着变。
+const PLATFORM_SUFFIX: &str = if cfg!(target_os = "windows") {
+    ".windows"
+} else if cfg!(target_os = "macos") {
+    ".macos"
+} else {
+    ""
+};
+
 impl Locale {
     /// 根据系统语言环境变量推断语言，未识别时回退到简体中文。
     pub fn detect() -> Self {
@@ -72,10 +88,9 @@ impl I18n {
             Locale::ZhHans => ZH_HANS,
             Locale::En => EN,
         };
-        Self {
-            locale,
-            table: parse_strings(source),
-        }
+        let mut table = parse_strings(source);
+        apply_platform_overrides(&mut table);
+        Self { locale, table }
     }
 
     /// 当前语言。
@@ -106,6 +121,35 @@ impl I18n {
     /// 导出整张文案表（供前端 `get_strings` 使用）。
     pub fn table(&self) -> HashMap<String, String> {
         self.table.clone()
+    }
+}
+
+/// 把平台专属文案覆盖到基础 key 上。
+///
+/// 基础 key 始终保留 —— 平台后缀的 key 只是「在当前平台上换一种说法」，
+/// 找不到专属版本时用基础文案兜底。
+fn apply_platform_overrides(table: &mut HashMap<String, String>) {
+    apply_overrides_with_suffix(table, PLATFORM_SUFFIX);
+}
+
+/// 用指定后缀做覆盖。
+///
+/// 后缀为空表示当前平台没有专属文案 —— 此时什么都不做。
+fn apply_overrides_with_suffix(table: &mut HashMap<String, String>, suffix: &str) {
+    if suffix.is_empty() {
+        return;
+    }
+
+    let overrides: Vec<(String, String)> = table
+        .iter()
+        .filter_map(|(key, value)| {
+            key.strip_suffix(suffix)
+                .map(|base| (base.to_string(), value.clone()))
+        })
+        .collect();
+
+    for (base, value) in overrides {
+        table.insert(base, value);
     }
 }
 
@@ -269,6 +313,64 @@ mod tests {
             let i18n = I18n::new(locale);
             assert!(!i18n.t("tab.process").is_empty());
             assert!(!i18n.t("settings.about").is_empty());
+        }
+    }
+
+    /// 平台专属文案必须真的覆盖到基础 key 上。
+    ///
+    /// 覆盖没生效意味着界面会显示别的平台的快捷键 —— 比如在 Windows 上
+    /// 提示「按 ⌘+L」，而实际注册的是 Ctrl+Alt+L。
+    #[test]
+    fn platform_variant_overrides_the_base_key() {
+        let mut table = HashMap::new();
+        table.insert("a.b".to_string(), "base".to_string());
+        table.insert("a.b.windows".to_string(), "override".to_string());
+        table.insert("c.d".to_string(), "base2".to_string());
+
+        apply_overrides_with_suffix(&mut table, ".windows");
+
+        assert_eq!(table.get("a.b").map(String::as_str), Some("override"));
+        assert_eq!(
+            table.get("c.d").map(String::as_str),
+            Some("base2"),
+            "没有平台专属版本的 key 必须保留基础文案"
+        );
+    }
+
+    /// 后缀为空（当前平台没有专属文案）时不得动基础文案。
+    #[test]
+    fn empty_suffix_leaves_the_table_untouched() {
+        let mut table = HashMap::new();
+        table.insert("a.b".to_string(), "base".to_string());
+        table.insert("a.b.windows".to_string(), "override".to_string());
+
+        apply_overrides_with_suffix(&mut table, "");
+
+        assert_eq!(table.get("a.b").map(String::as_str), Some("base"));
+    }
+
+    /// 快捷键提示文案必须与当前平台一致。
+    ///
+    /// macOS 提示 ⌘+L，Windows 提示 Ctrl+Alt+L —— 两边必须都存在专属文案，
+    /// 否则 Windows 上会出现「提示 ⌘+L、实际注册 Ctrl+Alt+L」的错位。
+    #[test]
+    fn shortcut_hint_matches_the_platform() {
+        for locale in [Locale::ZhHans, Locale::En] {
+            let i18n = I18n::new(locale);
+            let hint = i18n.t("settings.globalShortcut.hint");
+            assert!(!hint.is_empty(), "快捷键提示文案不能为空");
+
+            if cfg!(target_os = "windows") {
+                assert!(
+                    hint.contains("Ctrl+Alt+L"),
+                    "Windows 的快捷键提示应为 Ctrl+Alt+L，实际是：{hint}"
+                );
+            } else {
+                assert!(
+                    !hint.contains("Ctrl+Alt+L"),
+                    "非 Windows 平台的快捷键提示不应出现 Ctrl+Alt+L，实际是：{hint}"
+                );
+            }
         }
     }
 }

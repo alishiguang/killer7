@@ -40,7 +40,7 @@
 "file.openFolder" = "Enter Folder";
 "file.rename" = "Rename";
 "file.delete" = "Delete";
-"file.reveal" = "Show in Finder";
+"file.reveal" = "Show in File Manager";
 "file.delete.confirm" = "Are you sure you want to delete %@? The file will be moved to Trash.";
 "file.delete.title" = "Confirm Deletion";
 "file.newFolder.title" = "New Folder";
@@ -92,6 +92,7 @@
 "settings.startup" = "Startup";
 "settings.globalShortcut" = "Global Shortcut";
 "settings.globalShortcut.hint" = "Press Cmd+L to activate app quickly";
+"settings.globalShortcut.hint.windows" = "Press Ctrl+Alt+L to activate app quickly";
 "settings.processLimit" = "Process List Limit";
 "settings.noLimit" = "No Limit";
 "settings.networkMonitor" = "Network Monitor";

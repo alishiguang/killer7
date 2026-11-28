@@ -1,7 +1,7 @@
-//! macOS 平台相关的辅助函数。
+//! 平台相关的辅助函数。
 //!
-//! 对应 Swift 版里直接调用 AppKit 的地方（`NSWorkspace`、`NSPasteboard`）。
-//! `open` 与 `arboard` 均为跨平台 crate，无需 objc2 即可完成。
+//! `open` 与 `arboard` 均为跨平台 crate，无需平台分支即可完成；
+//! 只有「在文件管理器中定位」需要按平台分派。
 
 use std::path::Path;
 
@@ -10,12 +10,31 @@ pub fn open_path(path: &Path) {
     let _ = open::that(path);
 }
 
-/// 在 Finder 中定位（选中）文件。
-pub fn reveal_in_finder(path: &Path) {
+/// 在文件管理器中定位（选中）文件。
+#[cfg(target_os = "macos")]
+pub fn reveal_in_file_manager(path: &Path) {
     let _ = std::process::Command::new("open")
         .arg("-R")
         .arg(path)
         .spawn();
+}
+
+/// 在资源管理器中定位（选中）文件。
+#[cfg(target_os = "windows")]
+pub fn reveal_in_file_manager(path: &Path) {
+    // explorer 的 `/select,` 与路径必须连成一个参数；路径里有空格时还要自己带引号，
+    // 否则 explorer 会把路径截断在第一个空格处。
+    let arg = format!("/select,\"{}\"", path.display());
+    let _ = std::process::Command::new("explorer").arg(arg).spawn();
+}
+
+/// 在文件管理器中定位（选中）文件。
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub fn reveal_in_file_manager(path: &Path) {
+    // 其余 Unix 系统没有统一的「在文件管理器中选中」接口，退化成打开所在目录。
+    if let Some(parent) = path.parent() {
+        let _ = open::that(parent);
+    }
 }
 
 /// 复制文本到系统剪贴板。

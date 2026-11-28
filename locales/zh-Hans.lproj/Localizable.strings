@@ -40,7 +40,7 @@
 "file.openFolder" = "进入文件夹";
 "file.rename" = "重命名";
 "file.delete" = "删除";
-"file.reveal" = "在 Finder 中显示";
+"file.reveal" = "在文件管理器中显示";
 "file.delete.confirm" = "确定要删除 %@ 吗？文件将被移到废纸篓。";
 "file.delete.title" = "确认删除";
 "file.newFolder.title" = "新建文件夹";
@@ -92,6 +92,7 @@
 "settings.startup" = "启动项";
 "settings.globalShortcut" = "全局快捷键";
 "settings.globalShortcut.hint" = "启用后按 ⌘+L 可快速呼出应用";
+"settings.globalShortcut.hint.windows" = "启用后按 Ctrl+Alt+L 可快速呼出应用";
 "settings.processLimit" = "进程列表上限";
 "settings.noLimit" = "无限制";
 "settings.networkMonitor" = "网络监控";

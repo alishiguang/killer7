@@ -1,0 +1,58 @@
+name: Build Windows
+
+# Windows 版没有本地构建环境（Tauri 的 NSIS 打包器只能在 Windows 上跑），
+# 所以走 GitHub Actions 的 windows-latest 跑构建，产物作为 workflow artifact 上传，
+# 再由维护者挂到 Release 上。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows x64 (NSIS)
+    runs-on: windows-latest
+    env:
+      # 与仓库根的 Cargo.toml 一致：产物落在仓库根的 target/ 下。
+      BUNDLE_DIR: target/release/bundle/nsis
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Setup Rust
+        # 固定版本与本地开发环境一致，避免 CI 上出现「本地过、CI 挂」。
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal --no-self-update
+          rustup default 1.90.0
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        # 提前跑一次，类型错误在 CI 日志里单独成一步，比混在打包日志里好查。
+        run: npm run build
+
+      - name: Build NSIS installer
+        run: npm run tauri build -- --bundles nsis
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ki6-windows-x64
+          path: ${{ env.BUNDLE_DIR }}/*.exe
+          if-no-files-found: error
+          retention-days: 30
