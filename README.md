@@ -28,7 +28,7 @@ Ki6 是一个常驻托盘的桌面工具箱：把每天都要看的**进程、�
 
 | 文件 | 说明 |
 | --- | --- |
-| `Ki6_1.2.0_x64-setup.exe` | NSIS 安装包，安装界面简体中文 / English |
+| [`Ki6_1.2.0_x64-setup.exe`](release/Ki6_1.2.0_x64-setup.exe) | NSIS 安装包，安装界面简体中文 / English |
 
 安装包同样未做代码签名，SmartScreen 会提示未知发布者 —— 点「更多信息 → 仍要运行」。
 
