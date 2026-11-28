@@ -6,6 +6,19 @@ name: Build Windows
 on:
   push:
     branches: [main]
+    paths:
+      # 只在**会影响 Windows 构建**的文件变化时跑。
+      # 改文档、换发布产物这类提交不需要重跑 —— 一次 Windows release
+      # 构建要 4 分钟左右，不该被无关提交反复触发。
+      - 'frontend/**'
+      - 'src-tauri/**'
+      - 'locales/**'
+      - 'assets/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/release-windows.yml'
   workflow_dispatch:
 
 permissions:
