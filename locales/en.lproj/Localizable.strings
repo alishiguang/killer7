@@ -161,6 +161,7 @@
 "file.failed" = "Operation failed";
 
 "clipboard.copied" = "Copied to clipboard";
+"clipboard.copy.failed" = "Failed to copy to clipboard";
 "clipboard.deleted" = "Deleted";
 "clipboard.history.count" = "%@ items";
 "clipboard.type.text" = "Text";

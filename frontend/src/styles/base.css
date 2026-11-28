@@ -538,6 +538,11 @@ figure {
   background: var(--surface-alt);
 }
 
+/* 选中态：与表格行同一套配色，单击选中后一眼能看出选中的是哪一行 */
+.vrow[data-selected='true'] {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 .vrow--head {
   position: sticky;
   top: 0;

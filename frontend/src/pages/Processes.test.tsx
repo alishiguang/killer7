@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/bridge', () => ({
@@ -68,5 +68,43 @@ describe('Processes', () => {
   it('显示进程总数', async () => {
     render(<Processes />);
     expect(await screen.findByText('共 2 个进程')).toBeInTheDocument();
+  });
+
+  /// 交互契约：单击=选中（变色），双击=结束进程（弹确认框）。
+  ///
+  /// 改之前单击就会直接弹「确认结束进程」—— 点一下列表就可能误杀进程。
+  it('单击一行只选中，不弹结束确认框', async () => {
+    const { container } = render(<Processes />);
+    await screen.findByText('Finder');
+    const row = container.querySelector('.vrow:not(.vrow--head)');
+    if (!row) {
+      throw new Error('找不到进程行');
+    }
+    fireEvent.click(row);
+    expect(row).toHaveAttribute('data-selected', 'true');
+    expect(screen.queryByText('确认结束进程')).not.toBeInTheDocument();
+  });
+
+  it('双击一行弹出结束进程确认框', async () => {
+    const { container } = render(<Processes />);
+    await screen.findByText('Finder');
+    const row = container.querySelector('.vrow:not(.vrow--head)');
+    if (!row) {
+      throw new Error('找不到进程行');
+    }
+    fireEvent.doubleClick(row);
+    expect(await screen.findByText('确认结束进程')).toBeInTheDocument();
+    expect(screen.getByText('确定要结束进程 Finder (PID: 12) 吗？')).toBeInTheDocument();
+  });
+
+  it('右键一行时把选中态挪到该行', async () => {
+    const { container } = render(<Processes />);
+    await screen.findByText('Finder');
+    const row = container.querySelector('.vrow:not(.vrow--head)');
+    if (!row) {
+      throw new Error('找不到进程行');
+    }
+    fireEvent.contextMenu(row);
+    expect(row).toHaveAttribute('data-selected', 'true');
   });
 });

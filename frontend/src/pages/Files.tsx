@@ -21,6 +21,8 @@ export function Files() {
   const [contextRow, setContextRow] = useState<FileRow | null>(null);
   /** 排序：默认按名称升序，点表头切换方向。 */
   const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' });
+  /** 当前选中的行（单击选中、双击/右键作用于它）。 */
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
   // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
   const search = state.search;
@@ -102,27 +104,45 @@ export function Files() {
     [t, cwd],
   );
 
-  const enter = useCallback(
-    async (row: FileRow) => {
-      setCwd(row.path);
-      await load(row.path);
-      await api.watchDir(row.path);
+  /** 进入指定目录：切换 cwd、加载内容、重新挂监听。 */
+  const openDir = useCallback(
+    async (path: string) => {
+      setCwd(path);
+      // 换目录后旧目录里的选中行不再存在，选中态要清掉。
+      setSelectedPath(null);
+      await load(path);
+      await api.watchDir(path);
     },
     [load],
   );
 
   // 行点击与行右键的回调保持稳定引用，否则 DataTable 里的 memo 行组件
   // 每次渲染都会因为 props 变了而全部重绘。
-  const handleRowClick = useCallback(
-    (row: FileRow) => {
+  //
+  // 单击只选中：选中态要和右键菜单的目标行是同一行，否则会出现
+  // 「高亮 A、菜单却操作 B」。
+  const handleRowClick = useCallback((row: FileRow) => {
+    setSelectedPath(row.path);
+  }, []);
+
+  /** 双击：主操作 —— 目录进入，文件用系统默认程序打开。 */
+  const handleRowDoubleClick = useCallback(
+    async (row: FileRow) => {
       if (row.isDir) {
-        void enter(row);
+        await openDir(row.path);
+        return;
+      }
+      try {
+        await api.openPath(row.path);
+      } catch (error) {
+        pushToast('error', String(error));
       }
     },
-    [enter],
+    [openDir],
   );
 
   const handleRowContextMenu = useCallback((row: FileRow) => {
+    setSelectedPath(row.path);
     setContextRow(row);
     void api.popupContextMenu('file', {
       path: row.path,
@@ -136,10 +156,8 @@ export function Files() {
     if (!parent) {
       return;
     }
-    setCwd(parent);
-    await load(parent);
-    await api.watchDir(parent);
-  }, [cwd, load]);
+    await openDir(parent);
+  }, [cwd, openDir]);
 
   const remove = useCallback(
     async (row: FileRow) => {
@@ -161,6 +179,11 @@ export function Files() {
     let disposed = false;
     let unlisten: (() => void) | undefined;
     void onEvent<string>(EVENT.menuAction, (action) => {
+      // 右键菜单里的「进入文件夹」：路径直接带在事件里。
+      if (action.startsWith('file:open:')) {
+        void openDir(action.slice('file:open:'.length));
+        return;
+      }
       if (!contextRow) {
         return;
       }
@@ -181,7 +204,7 @@ export function Files() {
       disposed = true;
       unlisten?.();
     };
-  }, [contextRow, remove]);
+  }, [contextRow, openDir, remove]);
 
   const submitRename = useCallback(async () => {
     if (!renaming || !renameValue.trim()) {
@@ -233,9 +256,7 @@ export function Files() {
                 if (!picked) {
                   return;
                 }
-                setCwd(picked);
-                await load(picked);
-                await api.watchDir(picked);
+                await openDir(picked);
               }}
             >
               <Icon name="folder" />
@@ -282,7 +303,9 @@ export function Files() {
           columns={columns}
           items={filtered}
           getKey={(row) => row.path}
+          selectedKey={selectedPath}
           onRowClick={handleRowClick}
+          onRowDoubleClick={handleRowDoubleClick}
           onRowContextMenu={handleRowContextMenu}
           empty={t('common.empty')}
           sortKey={sort.key}

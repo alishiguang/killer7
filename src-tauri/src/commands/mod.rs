@@ -34,6 +34,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         settings::get_strings,
         system::hide_main_window,
         system::show_main_window,
+        system::copy_to_clipboard,
+        system::open_path,
         system::set_auto_launch,
         system::popup_context_menu,
     ]

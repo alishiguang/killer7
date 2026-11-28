@@ -25,8 +25,10 @@ export interface DataTableProps<T> {
   items: T[];
   /** 行 key。 */
   getKey: (item: T, index: number) => string;
-  /** 行点击（可选）。 */
+  /** 行点击（可选）：选中该行。 */
   onRowClick?: (item: T, index: number) => void;
+  /** 行双击（可选）：执行该行的主操作。 */
+  onRowDoubleClick?: (item: T, index: number) => void;
   /** 行右键（可选，Task 25 接入原生菜单）。 */
   onRowContextMenu?: (item: T, index: number, event: React.MouseEvent) => void;
   /** 选中行的 key。 */
@@ -48,6 +50,7 @@ interface TableRowProps<T> {
   index: number;
   selected: boolean;
   onRowClick?: (item: T, index: number) => void;
+  onRowDoubleClick?: (item: T, index: number) => void;
   onRowContextMenu?: (item: T, index: number, event: React.MouseEvent) => void;
 }
 
@@ -69,12 +72,16 @@ const TableRow = memo(function TableRowInner<T>({
   index,
   selected,
   onRowClick,
+  onRowDoubleClick,
   onRowContextMenu,
 }: TableRowProps<T>) {
   return (
     <tr
       data-selected={selected ? 'true' : undefined}
       onClick={onRowClick ? () => onRowClick(item, index) : undefined}
+      onDoubleClick={
+        onRowDoubleClick ? () => onRowDoubleClick(item, index) : undefined
+      }
       onContextMenu={
         onRowContextMenu
           ? (event) => {
@@ -99,6 +106,7 @@ export function DataTable<T>({
   items,
   getKey,
   onRowClick,
+  onRowDoubleClick,
   onRowContextMenu,
   selectedKey,
   empty,
@@ -171,6 +179,7 @@ export function DataTable<T>({
                 index={index}
                 selected={selectedKey === key}
                 onRowClick={onRowClick}
+                onRowDoubleClick={onRowDoubleClick}
                 onRowContextMenu={onRowContextMenu}
               />
             );

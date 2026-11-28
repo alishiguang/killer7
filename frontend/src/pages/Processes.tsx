@@ -25,17 +25,26 @@ import type { ProcessRow } from '../lib/types';
  */
 const ProcessRowView = memo(function ProcessRowView({
   row,
+  selected,
   onSelect,
+  onActivate,
 }: {
   row: ProcessRow;
+  selected: boolean;
   onSelect: (row: ProcessRow) => void;
+  onActivate: (row: ProcessRow) => void;
 }) {
   return (
     <div
       className="vrow"
+      data-selected={selected ? 'true' : undefined}
       onClick={() => onSelect(row)}
+      onDoubleClick={() => onActivate(row)}
       onContextMenu={(event) => {
         event.preventDefault();
+        // 右键也把选中态挪到这一行：菜单动作作用在「当前选中行」上，
+        // 选中态与菜单目标必须一致，否则会出现「高亮 A、菜单操作 B」。
+        onSelect(row);
         void api.popupContextMenu('process', {
           pid: row.pid,
           displayName: row.displayName,
@@ -61,6 +70,8 @@ export function Processes() {
   const [state] = useAppStore();
   const [rows, setRows] = useState<ProcessRow[]>([]);
   const [sort, setSort] = useState<SortState>({ key: 'pid', dir: 'asc' });
+  /** 当前选中的进程（单击选中、双击/右键作用于它）。 */
+  const [selectedPid, setSelectedPid] = useState<number | null>(null);
   const [pendingKill, setPendingKill] = useState<ProcessRow | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const [viewportHeight, setViewportHeight] = useState(420);
@@ -154,6 +165,16 @@ export function Processes() {
     setRows(list);
   }, []);
 
+  /** 单击：只选中，不做任何破坏性动作。 */
+  const handleSelect = useCallback((row: ProcessRow) => {
+    setSelectedPid(row.pid);
+  }, []);
+
+  /** 双击：主操作 —— 结束进程（弹确认框）。 */
+  const handleActivate = useCallback((row: ProcessRow) => {
+    setPendingKill(row);
+  }, []);
+
   const confirmKill = useCallback(async () => {
     if (!pendingKill) {
       return;
@@ -222,7 +243,12 @@ export function Processes() {
               overscan={8}
               getKey={(row) => String(row.pid)}
               renderRow={(row) => (
-                <ProcessRowView row={row} onSelect={setPendingKill} />
+                <ProcessRowView
+                  row={row}
+                  selected={selectedPid === row.pid}
+                  onSelect={handleSelect}
+                  onActivate={handleActivate}
+                />
               )}
               empty={t('process.empty')}
             />

@@ -192,6 +192,14 @@ pub fn on_context_menu_event(app: &AppHandle, id: &str) {
                 notify(app, &i18n, "error", &i18n.t("process.kill.failed"));
             }
         }
+        ("ctx.file.openDir", ContextTarget::File { path, .. }) => {
+            // 目录：在 Ki6 内部进入 —— 跟双击目录是同一个动作。
+            let _ = app.emit(EV_MENU_ACTION, format!("file:open:{path}"));
+        }
+        ("ctx.file.open", ContextTarget::File { path, .. }) => {
+            // 文件：用系统默认程序打开。
+            platform::open_path(std::path::Path::new(path));
+        }
         ("ctx.file.reveal", ContextTarget::File { path, .. }) => {
             platform::reveal_in_finder(std::path::Path::new(path));
         }

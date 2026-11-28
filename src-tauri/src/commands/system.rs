@@ -51,6 +51,24 @@ pub fn set_auto_launch(state: State<'_, Arc<AppState>>, enabled: bool) -> Result
     Ok(())
 }
 
+/// 把文本复制到系统剪贴板。
+///
+/// 双击剪贴板历史行 = 复制到系统剪贴板，与右键菜单里的「复制」走同一条路径
+/// （都用 arboard 写系统剪贴板，而不是浏览器的剪贴板 API —— 后者在 WKWebView
+/// 里受用户手势与权限限制，不可靠）。
+#[tauri::command]
+pub fn copy_to_clipboard(text: String) -> bool {
+    crate::core::platform::copy_to_clipboard(&text)
+}
+
+/// 用系统默认程序打开文件或目录。
+///
+/// 双击文件行的主操作；目录不走这里（目录是在 Ki6 内部进入）。
+#[tauri::command]
+pub fn open_path(path: String) {
+    crate::core::platform::open_path(std::path::Path::new(&path));
+}
+
 /// 弹出原生右键菜单。
 ///
 /// 菜单项点击由 `system::menu::on_context_menu_event` 统一处理，
@@ -126,7 +144,27 @@ fn build_context_menu(
                 None::<&str>,
             )?)?;
         }
-        ContextTarget::File { .. } => {
+        ContextTarget::File { is_dir, .. } => {
+            // 「打开」是这一行的主操作（双击也走它）：目录是在 Ki6 内部进入，
+            // 文件交给系统默认程序。右键菜单必须把它列出来 ——
+            // 「所有功能都能在右键里找到」是整套交互模型的前提。
+            let open_id = if *is_dir {
+                "ctx.file.openDir"
+            } else {
+                "ctx.file.open"
+            };
+            let open_label = if *is_dir {
+                i18n.t("file.enterFolder")
+            } else {
+                i18n.t("file.open")
+            };
+            menu.append(&MenuItem::with_id(
+                app,
+                open_id,
+                open_label,
+                true,
+                None::<&str>,
+            )?)?;
             menu.append(&MenuItem::with_id(
                 app,
                 "ctx.file.reveal",

@@ -22,6 +22,8 @@ export function Clipboard() {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   /** 排序：默认按时间倒序（新的在前），点表头切换方向。 */
   const [sort, setSort] = useState<SortState>({ key: 'time', dir: 'desc' });
+  /** 当前选中的历史条目（单击选中、双击/右键作用于它）。 */
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   // 搜索框在工具栏上（与活动监视器一致），搜索词是外壳级的共享状态。
   const search = state.search;
@@ -59,8 +61,26 @@ export function Clipboard() {
     setHistory(await api.clipboardHistory());
   }, []);
 
-  // 行右键回调保持稳定引用，否则 DataTable 里的 memo 行组件每次渲染都重绘。
+  // 行点击与行右键的回调保持稳定引用，否则 DataTable 里的 memo 行组件每次渲染都重绘。
+  //
+  // 单击只选中；右键同时把选中态挪到目标行 —— 菜单动作作用在「当前选中行」上，
+  // 选中态与菜单目标必须一致。
+  const handleRowClick = useCallback((row: HistoryRow) => {
+    setSelectedId(row.id);
+  }, []);
+
+  /** 双击：主操作 —— 复制到系统剪贴板（与右键菜单里的「复制」同一条路径）。 */
+  const handleRowDoubleClick = useCallback(async (row: HistoryRow) => {
+    try {
+      const ok = await api.copyToClipboard(row.content);
+      pushToast(ok ? 'info' : 'error', t(ok ? 'clipboard.copied' : 'clipboard.copy.failed'));
+    } catch (error) {
+      pushToast('error', String(error));
+    }
+  }, [t]);
+
   const handleRowContextMenu = useCallback((row: HistoryRow) => {
+    setSelectedId(row.id);
     void api.popupContextMenu('clipboard', { id: row.id, content: row.content });
   }, []);
 
@@ -129,6 +149,9 @@ export function Clipboard() {
           columns={columns}
           items={filtered}
           getKey={(row) => String(row.id)}
+          selectedKey={selectedId === null ? null : String(selectedId)}
+          onRowClick={handleRowClick}
+          onRowDoubleClick={handleRowDoubleClick}
           onRowContextMenu={handleRowContextMenu}
           empty={t('clipboard.empty')}
           sortKey={sort.key}

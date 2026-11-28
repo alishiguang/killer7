@@ -53,6 +53,8 @@ export const api = {
 
   hideMainWindow: () => invoke<void>('hide_main_window'),
   showMainWindow: () => invoke<void>('show_main_window'),
+  copyToClipboard: (text: string) => invoke<boolean>('copy_to_clipboard', { text }),
+  openPath: (path: string) => invoke<void>('open_path', { path }),
   setAutoLaunch: (enabled: boolean) => invoke<void>('set_auto_launch', { enabled }),
   popupContextMenu: (kind: string, payload: unknown) =>
     invoke<void>('popup_context_menu', { kind, payload }),

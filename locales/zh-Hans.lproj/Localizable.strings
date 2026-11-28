@@ -161,6 +161,7 @@
 "file.failed" = "操作失败";
 
 "clipboard.copied" = "已复制到剪贴板";
+"clipboard.copy.failed" = "复制到剪贴板失败";
 "clipboard.deleted" = "已删除";
 "clipboard.history.count" = "共 %@ 条历史";
 "clipboard.type.text" = "文本";
